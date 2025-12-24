@@ -13,20 +13,20 @@ const DEEP_RESEARCH_AGENT = "deep-research-pro-preview-12-2025";
 
 // Deep Research rate limiting is now handled by shared module (deep-research.ts)
 
-// Build STEP2 prompt with file references for Deep Research
+// Build STEP2 prompt with data directly embedded (same as internal engineer's approach)
 function buildStep2Prompt(
   hypothesisCount: number,
-  targetSpecFile: string,
-  technicalAssetsFile: string,
-  previousHypothesesFile?: string
+  targetSpec: string,
+  technicalAssets: string,
+  previousHypotheses?: string
 ): string {
   let prompt = STEP2_PROMPT
     .replace(/\{HYPOTHESIS_COUNT\}/g, hypothesisCount.toString())
-    .replace("{TARGET_SPEC}", `添付ファイル「${targetSpecFile}」の内容を参照してください。`)
-    .replace("{TECHNICAL_ASSETS}", `添付ファイル「${technicalAssetsFile}」の内容を参照してください。`);
+    .replace("{TARGET_SPEC}", targetSpec)
+    .replace("{TECHNICAL_ASSETS}", technicalAssets);
   
-  if (previousHypothesesFile) {
-    prompt = prompt.replace("{PREVIOUS_HYPOTHESES}", `添付ファイル「${previousHypothesesFile}」の内容を参照してください。`);
+  if (previousHypotheses) {
+    prompt = prompt.replace("{PREVIOUS_HYPOTHESES}", previousHypotheses);
   } else {
     prompt = prompt.replace("{PREVIOUS_HYPOTHESES}", "なし（初回実行）");
   }
