@@ -36,6 +36,8 @@ const phaseLabels: { [key: string]: string } = {
   synthesizing: "統合中",
   validating: "検証中",
   completed: "完了",
+  deep_research_starting: "Deep Research 起動中",
+  deep_research_running: "Deep Research 実行中",
 };
 
 const stepLabels: { [key: number]: string } = {
@@ -85,8 +87,9 @@ export function RunProgressDisplay({
   
   if (status !== "running") return null;
 
+  const phases = ["deep_research_starting", "deep_research_running", "validating", "completed"];
   const phaseProgress = progressInfo?.currentPhase ? 
-    (["planning", "exploring", "reasoning", "synthesizing", "validating", "completed"].indexOf(progressInfo.currentPhase) + 1) / 6 * 100 
+    (phases.indexOf(progressInfo.currentPhase) + 1) / phases.length * 100 
     : 0;
 
   return (
@@ -169,6 +172,7 @@ export function RunProgressDisplay({
                         {phase === "planning" ? "計画" :
                          phase === "synthesizing" ? "統合" :
                          phase === "validating" ? "検証" :
+                         phase === "deep_research" ? "Deep Research" :
                          phase.startsWith("exploring_") ? `探索${phase.split("_")[1]}` :
                          phase.startsWith("reasoning_") ? `推論${phase.split("_")[1]}` : phase}
                       </span>

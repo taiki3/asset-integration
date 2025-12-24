@@ -5,10 +5,13 @@ import type { InsertHypothesis } from "@shared/schema";
 
 const MODEL_PRO = "gemini-3-pro-preview";
 const MODEL_FLASH = "gemini-3-flash-preview";
+const DEEP_RESEARCH_AGENT = "deep-research-pro-preview-12-2025";
 
 function checkAIConfiguration(): boolean {
   return !!process.env.GEMINI_API_KEY;
 }
+
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 let ai: GoogleGenAI | null = null;
 
@@ -216,170 +219,133 @@ async function updateProgress(runId: number, progressInfo: ProgressInfo): Promis
 }
 
 async function executeDeepResearchStep2(context: PipelineContext, runId: number): Promise<DeepResearchResult> {
-  const searchQueries: string[] = [];
-  let searchResults = "";
-  let iterationCount = 0;
-  const maxIterations = 3;
   const stepTimings: { [key: string]: number } = {};
+  const startTime = Date.now();
 
-  const planningStartTime = Date.now();
   await updateProgress(runId, { 
-    currentPhase: "planning", 
+    currentPhase: "deep_research_starting", 
     currentIteration: 0, 
-    maxIterations,
+    maxIterations: 1,
     stepTimings,
-    stepStartTime: planningStartTime,
+    stepStartTime: startTime,
   });
 
-  console.log(`[Run ${runId}] Phase 1: Planning...`);
-  const planningPrompt = PLANNING_PROMPT
-    .replace("{TARGET_SPEC}", context.targetSpec)
-    .replace("{TECHNICAL_ASSETS}", context.technicalAssets)
-    .replace("{PREVIOUS_HYPOTHESES}", context.previousHypotheses || "なし（初回実行）");
+  console.log(`[Run ${runId}] Starting Deep Research API...`);
+
+  const researchPrompt = `あなたは事業仮説を生成するための専門リサーチャーです。
+
+【ターゲット指定】
+${context.targetSpec}
+
+【技術資産】
+${context.technicalAssets}
+
+【過去に生成した仮説（重複回避用）】
+${context.previousHypotheses || "なし（初回実行）"}
+
+【タスク】
+上記の「技術資産」を分析し、現在の市場トレンドと照らし合わせて、${context.hypothesisCount}件の新しい事業仮説を生成してください。
+
+【各仮説に必要な要素】
+1. 仮説タイトル: 具体的で分かりやすいタイトル
+2. 業界・分野: 対象となる業界と分野
+3. 事業仮説概要: 事業の概要説明
+4. 顧客の解決不能な課題: 顧客が従来技術では解決できなかった物理的トレードオフ
+5. 素材が活躍する舞台: 技術がどのような場面で活用されるか
+6. 素材の役割: 技術がどのようにトレードオフを解決するか
+
+【条件】
+1. 技術的な実現可能性が高いこと
+2. 成長市場であること
+3. 競合他社がまだ参入していないニッチ領域であること
+4. 過去に生成した仮説と重複しないこと
+
+【重要】
+- 調査した情報源と根拠を明記してください
+- 具体的な市場規模や成長率などの数値データがあれば含めてください
+- 各仮説について、なぜその技術資産が競争優位性を持つのか説明してください`;
+
+  const client = getAIClient();
   
-  const planningResult = await generateWithFlash(planningPrompt);
-  stepTimings["planning"] = Date.now() - planningStartTime;
-  
-  let queries: string[] = [];
-  let planningAnalysis = "";
+  let interaction: any;
   try {
-    const jsonMatch = planningResult.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      const parsed = JSON.parse(jsonMatch[0]);
-      queries = parsed.queries || [];
-      planningAnalysis = parsed.analysis || "";
-    }
-  } catch (e) {
-    console.log(`[Run ${runId}] Planning JSON parse failed, using fallback queries`);
-    queries = [
-      `${context.targetSpec.slice(0, 100)} 市場動向`,
-      `${context.technicalAssets.slice(0, 100)} 応用`,
-    ];
+    interaction = await (client as any).interactions.create({
+      agent: DEEP_RESEARCH_AGENT,
+      userContent: researchPrompt,
+      background: true,
+    });
+    console.log(`[Run ${runId}] Deep Research Task Started. Interaction: ${interaction.name || interaction.id}`);
+  } catch (error) {
+    console.error(`[Run ${runId}] Failed to create Deep Research interaction:`, error);
+    throw new Error(`Deep Research APIの起動に失敗しました: ${error instanceof Error ? error.message : "Unknown error"}`);
   }
-  searchQueries.push(...queries);
-  
+
   await updateProgress(runId, { 
-    currentPhase: "exploring", 
-    currentIteration: 1, 
-    maxIterations,
-    planningAnalysis,
-    planningQueries: queries,
+    currentPhase: "deep_research_running", 
+    currentIteration: 0, 
+    maxIterations: 1,
+    planningAnalysis: "Deep Research エージェントが調査中です...",
     stepTimings,
-    stepStartTime: planningStartTime,
+    stepStartTime: startTime,
   });
 
-  while (iterationCount < maxIterations) {
-    iterationCount++;
-    const iterationStartTime = Date.now();
-    
-    await updateProgress(runId, { 
-      currentPhase: "exploring", 
-      currentIteration: iterationCount, 
-      maxIterations,
-      planningAnalysis,
-      planningQueries: searchQueries,
-      stepTimings,
-      stepStartTime: planningStartTime,
-    });
-    
-    console.log(`[Run ${runId}] Phase 2: Exploring (iteration ${iterationCount}/${maxIterations})...`);
-    
-    const explorationPrompt = EXPLORATION_PROMPT
-      .replace("{QUERIES}", queries.join("\n"))
-      .replace("{TARGET_SPEC}", context.targetSpec)
-      .replace("{TECHNICAL_ASSETS}", context.technicalAssets);
-    
-    const explorationResult = await generateWithFlashAndSearch(explorationPrompt);
-    searchResults += `\n\n【探索結果 ${iterationCount}】\n${explorationResult}`;
-    stepTimings[`exploring_${iterationCount}`] = Date.now() - iterationStartTime;
+  let report = "";
+  let pollCount = 0;
+  const maxPollTime = 30 * 60 * 1000;
+  const pollInterval = 15000;
 
-    const reasoningStartTime = Date.now();
-    await updateProgress(runId, { 
-      currentPhase: "reasoning", 
-      currentIteration: iterationCount, 
-      maxIterations,
-      planningAnalysis,
-      planningQueries: searchQueries,
-      stepTimings,
-      stepStartTime: planningStartTime,
-    });
-    
-    console.log(`[Run ${runId}] Phase 3: Reasoning (iteration ${iterationCount}/${maxIterations})...`);
-    const reasoningPrompt = REASONING_PROMPT
-      .replace("{SEARCH_RESULTS}", searchResults)
-      .replace("{TARGET_SPEC}", context.targetSpec)
-      .replace("{TECHNICAL_ASSETS}", context.technicalAssets)
-      .replace("{HYPOTHESIS_COUNT}", context.hypothesisCount.toString());
-    
-    const reasoningResult = await generateWithFlash(reasoningPrompt);
-    stepTimings[`reasoning_${iterationCount}`] = Date.now() - reasoningStartTime;
-    
+  while (Date.now() - startTime < maxPollTime) {
+    pollCount++;
+    await sleep(pollInterval);
+
     try {
-      const jsonMatch = reasoningResult.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
-        if (parsed.isSufficient || parsed.confidence >= 0.8) {
-          console.log(`[Run ${runId}] Sufficient information gathered (confidence: ${parsed.confidence})`);
-          break;
-        }
-        if (parsed.additionalQueries && parsed.additionalQueries.length > 0) {
-          queries = parsed.additionalQueries;
-          searchQueries.push(...queries);
-        } else {
-          break;
-        }
-      } else {
+      const currentStatus = await (client as any).interactions.get({
+        name: interaction.name || interaction.id
+      });
+
+      const status = currentStatus.status;
+      console.log(`[Run ${runId}] Deep Research Status: ${status} (poll ${pollCount})`);
+
+      await updateProgress(runId, { 
+        currentPhase: "deep_research_running", 
+        currentIteration: pollCount, 
+        maxIterations: Math.ceil(maxPollTime / pollInterval),
+        planningAnalysis: `Deep Research 実行中... (${Math.floor((Date.now() - startTime) / 1000)}秒経過)`,
+        stepTimings,
+        stepStartTime: startTime,
+      });
+
+      if (status === "COMPLETED") {
+        console.log(`[Run ${runId}] Deep Research Completed!`);
+        const outputs = currentStatus.outputs || [];
+        const finalOutput = outputs[outputs.length - 1];
+        report = finalOutput?.text || "";
+        stepTimings["deep_research"] = Date.now() - startTime;
         break;
+      } else if (status === "FAILED") {
+        console.error(`[Run ${runId}] Deep Research Failed:`, currentStatus.error);
+        throw new Error(`Deep Research が失敗しました: ${currentStatus.error || "Unknown error"}`);
       }
-    } catch (e) {
-      console.log(`[Run ${runId}] Reasoning JSON parse failed, proceeding to synthesis`);
-      break;
+    } catch (pollError: any) {
+      if (pollError.message?.includes("Deep Research が失敗")) {
+        throw pollError;
+      }
+      console.warn(`[Run ${runId}] Poll error (continuing):`, pollError.message);
     }
   }
 
-  const synthesisStartTime = Date.now();
-  await updateProgress(runId, { 
-    currentPhase: "synthesizing", 
-    currentIteration: iterationCount, 
-    maxIterations,
-    planningAnalysis,
-    planningQueries: searchQueries,
-    stepTimings,
-    stepStartTime: planningStartTime,
-  });
-  
-  console.log(`[Run ${runId}] Phase 4: Synthesizing with Pro model...`);
-  
-  let synthesisPrompt = STEP2_PROMPT
-    .replace(/{HYPOTHESIS_COUNT}/g, context.hypothesisCount.toString())
-    .replace("{TARGET_SPEC}", context.targetSpec)
-    .replace("{TECHNICAL_ASSETS}", context.technicalAssets)
-    .replace("{PREVIOUS_HYPOTHESES}", context.previousHypotheses || "なし（初回実行）");
-  
-  synthesisPrompt = `【収集した調査情報】
-${searchResults}
-
----
-
-${synthesisPrompt}
-
-【重要な追加指示】
-- 上記の調査情報を活用して、より具体的で根拠のある仮説を生成してください。
-- リサーチ計画の承認を待つ必要はありません。一回で完全なレポートを出力してください。
-- 対話的なやり取りは不要です。最終的なレポートのみを出力してください。`;
-
-  const report = await generateWithPro(synthesisPrompt);
-  stepTimings["synthesizing"] = Date.now() - synthesisStartTime;
+  if (!report) {
+    throw new Error("Deep Research がタイムアウトしました（30分経過）");
+  }
 
   const validationStartTime = Date.now();
   await updateProgress(runId, { 
     currentPhase: "validating", 
-    currentIteration: iterationCount, 
-    maxIterations,
-    planningAnalysis,
-    planningQueries: searchQueries,
+    currentIteration: 1, 
+    maxIterations: 1,
+    planningAnalysis: "仮説の検証中...",
     stepTimings,
-    stepStartTime: planningStartTime,
+    stepStartTime: startTime,
   });
   
   console.log(`[Run ${runId}] Post-process: Validating hypotheses...`);
@@ -388,18 +354,17 @@ ${synthesisPrompt}
 
   await updateProgress(runId, { 
     currentPhase: "completed", 
-    currentIteration: iterationCount, 
-    maxIterations,
-    planningAnalysis,
-    planningQueries: searchQueries,
+    currentIteration: 1, 
+    maxIterations: 1,
+    planningAnalysis: "Deep Research 完了",
     stepTimings,
-    stepStartTime: planningStartTime,
+    stepStartTime: startTime,
   });
 
   return {
     report,
-    searchQueries,
-    iterationCount,
+    searchQueries: [],
+    iterationCount: 1,
     validationResult,
   };
 }
