@@ -25,10 +25,10 @@ interface HistoryPanelProps {
 }
 
 const statusConfig = {
-  pending: { label: "Pending", icon: Clock, variant: "secondary" as const },
-  running: { label: "Processing", icon: Loader2, variant: "default" as const, animate: true },
-  completed: { label: "Completed", icon: CheckCircle, variant: "default" as const },
-  error: { label: "Error", icon: XCircle, variant: "destructive" as const },
+  pending: { label: "待機中", icon: Clock, variant: "secondary" as const, animate: false },
+  running: { label: "処理中", icon: Loader2, variant: "default" as const, animate: true },
+  completed: { label: "完了", icon: CheckCircle, variant: "default" as const, animate: false },
+  error: { label: "エラー", icon: XCircle, variant: "destructive" as const, animate: false },
 };
 
 export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel }: HistoryPanelProps) {
@@ -36,7 +36,7 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel }
   const [detailsOpen, setDetailsOpen] = useState(false);
 
   const getResourceName = (id: number) => {
-    return resources.find((r) => r.id === id)?.name || "Unknown";
+    return resources.find((r) => r.id === id)?.name || "不明";
   };
 
   const handleRunClick = (run: HypothesisRun) => {
@@ -45,10 +45,10 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel }
   };
 
   const stepLabels = [
-    { key: "step2Output", label: "Step 2: Proposal", step: 2 },
-    { key: "step3Output", label: "Step 3: Scientific Evaluation", step: 3 },
-    { key: "step4Output", label: "Step 4: Strategic Audit", step: 4 },
-    { key: "step5Output", label: "Step 5: Integration", step: 5 },
+    { key: "step2Output", label: "ステップ2: 提案", step: 2 },
+    { key: "step3Output", label: "ステップ3: 科学的評価", step: 3 },
+    { key: "step4Output", label: "ステップ4: 戦略的監査", step: 4 },
+    { key: "step5Output", label: "ステップ5: 統合", step: 5 },
   ] as const;
 
   return (
@@ -57,7 +57,7 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel }
         <CardHeader className="pb-3 shrink-0">
           <CardTitle className="text-lg font-medium flex items-center gap-2">
             <History className="h-5 w-5" />
-            Execution History
+            実行履歴
           </CardTitle>
         </CardHeader>
         <CardContent className="flex-1 overflow-hidden">
@@ -66,10 +66,10 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel }
               <div className="flex flex-col items-center justify-center py-12 text-center">
                 <History className="h-12 w-12 text-muted-foreground/30 mb-4" />
                 <p className="text-sm text-muted-foreground">
-                  No executions yet
+                  実行履歴がありません
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Run the G-Method to generate hypotheses
+                  G-Methodを実行して仮説を生成してください
                 </p>
               </div>
             ) : (
@@ -86,18 +86,18 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel }
                     >
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 mb-1">
-                          <Badge size="sm" variant={status.variant} className="gap-1">
+                          <Badge variant={status.variant} className="gap-1 text-xs">
                             <StatusIcon className={`h-3 w-3 ${status.animate ? "animate-spin" : ""}`} />
                             {status.label}
                           </Badge>
                           {run.currentStep && run.currentStep > 0 && run.status === "running" && (
                             <span className="text-xs text-muted-foreground">
-                              Step {run.currentStep}/5
+                              ステップ {run.currentStep}/5
                             </span>
                           )}
                         </div>
                         <p className="text-xs text-muted-foreground truncate">
-                          {getResourceName(run.targetSpecId)} × {getResourceName(run.technicalAssetsId)}
+                          {getResourceName(run.targetSpecId)} x {getResourceName(run.technicalAssetsId)}
                         </p>
                         <p className="text-xs text-muted-foreground mt-0.5">
                           {format(new Date(run.createdAt), "yyyy/MM/dd HH:mm")}
@@ -118,12 +118,12 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel }
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FileSpreadsheet className="h-5 w-5" />
-              Execution Details
+              実行詳細
             </DialogTitle>
             <DialogDescription>
               {selectedRun && (
                 <>
-                  {getResourceName(selectedRun.targetSpecId)} × {getResourceName(selectedRun.technicalAssetsId)} •{" "}
+                  {getResourceName(selectedRun.targetSpecId)} x {getResourceName(selectedRun.technicalAssetsId)} ・{" "}
                   {format(new Date(selectedRun.createdAt), "yyyy/MM/dd HH:mm")}
                 </>
               )}
@@ -151,9 +151,9 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel }
               {selectedRun.status === "completed" && (
                 <Tabs defaultValue="step5Output" className="flex-1">
                   <TabsList className="grid w-full grid-cols-4">
-                    {stepLabels.map(({ key, label, step }) => (
+                    {stepLabels.map(({ key, step }) => (
                       <TabsTrigger key={key} value={key} disabled={!selectedRun[key]}>
-                        Step {step}
+                        ステップ {step}
                       </TabsTrigger>
                     ))}
                   </TabsList>
@@ -161,7 +161,7 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel }
                     <TabsContent key={key} value={key} className="mt-4">
                       <ScrollArea className="h-[45vh] rounded-md border bg-muted/30 p-4">
                         <pre className="text-sm font-mono whitespace-pre-wrap break-words">
-                          {selectedRun[key] || "No output available"}
+                          {selectedRun[key] || "出力がありません"}
                         </pre>
                       </ScrollArea>
                     </TabsContent>
@@ -173,7 +173,7 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel }
                 <div className="flex flex-col items-center justify-center py-12">
                   <Loader2 className="h-12 w-12 text-primary animate-spin mb-4" />
                   <p className="text-sm text-muted-foreground">
-                    Processing Step {selectedRun.currentStep || 2} of 5...
+                    ステップ {selectedRun.currentStep || 2} / 5 を処理中...
                   </p>
                 </div>
               )}
@@ -182,7 +182,7 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel }
                 <div className="flex flex-col items-center justify-center py-12">
                   <XCircle className="h-12 w-12 text-destructive mb-4" />
                   <p className="text-sm text-destructive">
-                    {selectedRun.errorMessage || "An error occurred during processing"}
+                    {selectedRun.errorMessage || "処理中にエラーが発生しました"}
                   </p>
                 </div>
               )}
@@ -200,7 +200,7 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel }
                   data-testid="button-download-tsv"
                 >
                   <Download className="h-4 w-4" />
-                  Download TSV
+                  TSVをダウンロード
                 </Button>
                 <Button
                   variant="outline"
@@ -209,12 +209,12 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel }
                   data-testid="button-download-excel"
                 >
                   <Download className="h-4 w-4" />
-                  Download Excel
+                  Excelをダウンロード
                 </Button>
               </>
             )}
             <Button variant="outline" onClick={() => setDetailsOpen(false)}>
-              Close
+              閉じる
             </Button>
           </DialogFooter>
         </DialogContent>

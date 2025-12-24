@@ -53,14 +53,14 @@ export default function ProjectWorkspace({ projectId }: ProjectWorkspaceProps) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/projects", id, "resources"] });
       toast({
-        title: "Resource added",
-        description: "The resource has been added successfully.",
+        title: "リソースを追加しました",
+        description: "リソースが正常に追加されました。",
       });
     },
     onError: () => {
       toast({
-        title: "Error",
-        description: "Failed to add resource. Please try again.",
+        title: "エラー",
+        description: "リソースの追加に失敗しました。もう一度お試しください。",
         variant: "destructive",
       });
     },
@@ -73,14 +73,14 @@ export default function ProjectWorkspace({ projectId }: ProjectWorkspaceProps) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/projects", id, "resources"] });
       toast({
-        title: "Resource deleted",
-        description: "The resource has been deleted successfully.",
+        title: "リソースを削除しました",
+        description: "リソースが正常に削除されました。",
       });
     },
     onError: () => {
       toast({
-        title: "Error",
-        description: "Failed to delete resource. Please try again.",
+        title: "エラー",
+        description: "リソースの削除に失敗しました。もう一度お試しください。",
         variant: "destructive",
       });
     },
@@ -98,14 +98,14 @@ export default function ProjectWorkspace({ projectId }: ProjectWorkspaceProps) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/projects", id, "runs"] });
       toast({
-        title: "Execution started",
-        description: "The G-Method pipeline has started processing.",
+        title: "実行を開始しました",
+        description: "G-Methodパイプラインの処理を開始しました。",
       });
     },
     onError: () => {
       toast({
-        title: "Error",
-        description: "Failed to start execution. Please try again.",
+        title: "エラー",
+        description: "実行の開始に失敗しました。もう一度お試しください。",
         variant: "destructive",
       });
     },
@@ -116,7 +116,7 @@ export default function ProjectWorkspace({ projectId }: ProjectWorkspaceProps) {
   };
 
   const handleDeleteResource = (resourceId: number) => {
-    if (window.confirm("Are you sure you want to delete this resource?")) {
+    if (window.confirm("このリソースを削除しますか？")) {
       deleteResourceMutation.mutate(resourceId);
     }
   };
@@ -139,8 +139,8 @@ export default function ProjectWorkspace({ projectId }: ProjectWorkspaceProps) {
       document.body.removeChild(a);
     } catch (error) {
       toast({
-        title: "Error",
-        description: "Failed to download TSV file.",
+        title: "エラー",
+        description: "TSVファイルのダウンロードに失敗しました。",
         variant: "destructive",
       });
     }
@@ -160,8 +160,8 @@ export default function ProjectWorkspace({ projectId }: ProjectWorkspaceProps) {
       document.body.removeChild(a);
     } catch (error) {
       toast({
-        title: "Error",
-        description: "Failed to download Excel file.",
+        title: "エラー",
+        description: "Excelファイルのダウンロードに失敗しました。",
         variant: "destructive",
       });
     }
@@ -190,14 +190,14 @@ export default function ProjectWorkspace({ projectId }: ProjectWorkspaceProps) {
         <Header />
         <div className="max-w-7xl mx-auto px-6 py-8">
           <div className="flex flex-col items-center justify-center py-24 text-center">
-            <h2 className="text-xl font-medium mb-2">Project not found</h2>
+            <h2 className="text-xl font-medium mb-2">プロジェクトが見つかりません</h2>
             <p className="text-muted-foreground mb-6">
-              The project you're looking for doesn't exist or has been deleted.
+              お探しのプロジェクトは存在しないか、削除されています。
             </p>
             <Link href="/">
               <Button variant="outline" className="gap-2">
                 <ArrowLeft className="h-4 w-4" />
-                Back to Dashboard
+                ダッシュボードに戻る
               </Button>
             </Link>
           </div>

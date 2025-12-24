@@ -22,14 +22,14 @@ export default function Dashboard() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
       toast({
-        title: "Project created",
-        description: "Your new project has been created successfully.",
+        title: "プロジェクトを作成しました",
+        description: "新しいプロジェクトが正常に作成されました。",
       });
     },
     onError: () => {
       toast({
-        title: "Error",
-        description: "Failed to create project. Please try again.",
+        title: "エラー",
+        description: "プロジェクトの作成に失敗しました。もう一度お試しください。",
         variant: "destructive",
       });
     },
@@ -42,14 +42,14 @@ export default function Dashboard() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
       toast({
-        title: "Project deleted",
-        description: "The project has been deleted successfully.",
+        title: "プロジェクトを削除しました",
+        description: "プロジェクトが正常に削除されました。",
       });
     },
     onError: () => {
       toast({
-        title: "Error",
-        description: "Failed to delete project. Please try again.",
+        title: "エラー",
+        description: "プロジェクトの削除に失敗しました。もう一度お試しください。",
         variant: "destructive",
       });
     },
@@ -60,7 +60,7 @@ export default function Dashboard() {
   };
 
   const handleDeleteProject = (id: number) => {
-    if (window.confirm("Are you sure you want to delete this project? This action cannot be undone.")) {
+    if (window.confirm("このプロジェクトを削除しますか？この操作は取り消せません。")) {
       deleteProjectMutation.mutate(id);
     }
   };
@@ -72,10 +72,10 @@ export default function Dashboard() {
         <div className="flex items-center justify-between gap-4 mb-8">
           <div>
             <h1 className="text-4xl font-light tracking-tight" data-testid="text-dashboard-title">
-              Projects
+              プロジェクト
             </h1>
             <p className="text-muted-foreground mt-1">
-              Manage your G-Method hypothesis generation projects
+              G-Method仮説生成プロジェクトを管理
             </p>
           </div>
           <CreateProjectDialog
@@ -103,9 +103,9 @@ export default function Dashboard() {
             <div className="rounded-full bg-muted p-6 mb-6">
               <FolderOpen className="h-12 w-12 text-muted-foreground" />
             </div>
-            <h2 className="text-xl font-medium mb-2">No projects yet</h2>
+            <h2 className="text-xl font-medium mb-2">プロジェクトがありません</h2>
             <p className="text-muted-foreground mb-6 max-w-sm">
-              Create your first project to start generating business hypotheses with the G-Method
+              最初のプロジェクトを作成して、G-Methodでビジネス仮説の生成を始めましょう
             </p>
             <CreateProjectDialog
               onCreateProject={handleCreateProject}

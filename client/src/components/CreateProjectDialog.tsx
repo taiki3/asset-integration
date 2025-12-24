@@ -25,8 +25,8 @@ import {
 } from "@/components/ui/form";
 
 const projectFormSchema = z.object({
-  name: z.string().min(1, "Project name is required").max(200, "Name is too long"),
-  description: z.string().max(1000, "Description is too long").optional(),
+  name: z.string().min(1, "プロジェクト名は必須です").max(200, "名前が長すぎます"),
+  description: z.string().max(1000, "説明が長すぎます").optional(),
 });
 
 type ProjectFormValues = z.infer<typeof projectFormSchema>;
@@ -65,16 +65,16 @@ export function CreateProjectDialog({ onCreateProject, isPending }: CreateProjec
       <DialogTrigger asChild>
         <Button className="gap-2" data-testid="button-create-project">
           <Plus className="h-4 w-4" />
-          New Project
+          新規プロジェクト
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <Form {...form}>
           <form onSubmit={form.handleSubmit(handleSubmit)}>
             <DialogHeader>
-              <DialogTitle>Create New Project</DialogTitle>
+              <DialogTitle>新規プロジェクトを作成</DialogTitle>
               <DialogDescription>
-                Create a new project to manage your G-Method hypothesis generation.
+                G-Method仮説生成を管理するための新しいプロジェクトを作成します。
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
@@ -83,10 +83,10 @@ export function CreateProjectDialog({ onCreateProject, isPending }: CreateProjec
                 name="name"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Project Name</FormLabel>
+                    <FormLabel>プロジェクト名</FormLabel>
                     <FormControl>
                       <Input
-                        placeholder="Enter project name..."
+                        placeholder="プロジェクト名を入力..."
                         data-testid="input-project-name"
                         {...field}
                       />
@@ -100,10 +100,10 @@ export function CreateProjectDialog({ onCreateProject, isPending }: CreateProjec
                 name="description"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Description (optional)</FormLabel>
+                    <FormLabel>説明（任意）</FormLabel>
                     <FormControl>
                       <Textarea
-                        placeholder="Enter project description..."
+                        placeholder="プロジェクトの説明を入力..."
                         rows={3}
                         data-testid="input-project-description"
                         {...field}
@@ -116,10 +116,10 @@ export function CreateProjectDialog({ onCreateProject, isPending }: CreateProjec
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setOpen(false)}>
-                Cancel
+                キャンセル
               </Button>
               <Button type="submit" disabled={isPending} data-testid="button-submit-project">
-                {isPending ? "Creating..." : "Create Project"}
+                {isPending ? "作成中..." : "プロジェクトを作成"}
               </Button>
             </DialogFooter>
           </form>

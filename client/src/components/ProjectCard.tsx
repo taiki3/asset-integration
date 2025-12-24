@@ -33,7 +33,7 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
           </Button>
         </div>
         <CardDescription className="line-clamp-2 min-h-[2.5rem]" data-testid={`text-project-description-${project.id}`}>
-          {project.description || "No description"}
+          {project.description || "説明なし"}
         </CardDescription>
       </CardHeader>
       <CardFooter className="flex items-center justify-between gap-4 pt-3 border-t">
@@ -45,7 +45,7 @@ export function ProjectCard({ project, onDelete }: ProjectCardProps) {
         </div>
         <Link href={`/projects/${project.id}`}>
           <Button variant="ghost" size="sm" className="gap-1" data-testid={`button-open-project-${project.id}`}>
-            Open
+            開く
             <ArrowRight className="h-3.5 w-3.5" />
           </Button>
         </Link>

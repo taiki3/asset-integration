@@ -33,8 +33,8 @@ import { format } from "date-fns";
 import type { Resource } from "@shared/schema";
 
 const resourceFormSchema = z.object({
-  name: z.string().min(1, "Name is required").max(200, "Name is too long"),
-  content: z.string().min(1, "Content is required"),
+  name: z.string().min(1, "名前は必須です").max(200, "名前が長すぎます"),
+  content: z.string().min(1, "内容は必須です"),
 });
 
 type ResourceFormValues = z.infer<typeof resourceFormSchema>;
@@ -108,7 +108,7 @@ export function ResourcePanel({
         <CardHeader className="pb-3 shrink-0">
           <CardTitle className="text-lg font-medium flex items-center gap-2">
             <FileText className="h-5 w-5" />
-            Resources
+            リソース
           </CardTitle>
         </CardHeader>
         <CardContent className="flex-1 overflow-hidden">
@@ -118,7 +118,7 @@ export function ResourcePanel({
                 <div className="flex items-center justify-between gap-2 mb-2">
                   <CollapsibleTrigger className="flex items-center gap-2 text-sm font-medium hover-elevate active-elevate-2 px-2 py-1 rounded-md -ml-2">
                     <Target className="h-4 w-4 text-primary" />
-                    Target Specifications ({targetSpecs.length})
+                    ターゲット仕様 ({targetSpecs.length})
                   </CollapsibleTrigger>
                   <Button
                     variant="ghost"
@@ -133,7 +133,7 @@ export function ResourcePanel({
                 <CollapsibleContent className="space-y-2">
                   {targetSpecs.length === 0 ? (
                     <p className="text-xs text-muted-foreground py-2 px-2">
-                      No target specifications yet. Click + to add one.
+                      ターゲット仕様がありません。+をクリックして追加してください。
                     </p>
                   ) : (
                     targetSpecs.map((resource) => (
@@ -152,7 +152,7 @@ export function ResourcePanel({
                 <div className="flex items-center justify-between gap-2 mb-2">
                   <CollapsibleTrigger className="flex items-center gap-2 text-sm font-medium hover-elevate active-elevate-2 px-2 py-1 rounded-md -ml-2">
                     <Cpu className="h-4 w-4 text-primary" />
-                    Technical Assets ({technicalAssets.length})
+                    技術アセット ({technicalAssets.length})
                   </CollapsibleTrigger>
                   <Button
                     variant="ghost"
@@ -167,7 +167,7 @@ export function ResourcePanel({
                 <CollapsibleContent className="space-y-2">
                   {technicalAssets.length === 0 ? (
                     <p className="text-xs text-muted-foreground py-2 px-2">
-                      No technical assets yet. Click + to add one.
+                      技術アセットがありません。+をクリックして追加してください。
                     </p>
                   ) : (
                     technicalAssets.map((resource) => (
@@ -192,12 +192,12 @@ export function ResourcePanel({
             <form onSubmit={form.handleSubmit(handleAddSubmit)}>
               <DialogHeader>
                 <DialogTitle>
-                  Add {addType === "target_spec" ? "Target Specification" : "Technical Assets"}
+                  {addType === "target_spec" ? "ターゲット仕様を追加" : "技術アセットを追加"}
                 </DialogTitle>
                 <DialogDescription>
                   {addType === "target_spec"
-                    ? "Add the target market and customer specification text."
-                    : "Add your technical asset list (JSON or text format)."}
+                    ? "ターゲット市場と顧客仕様のテキストを追加してください。"
+                    : "技術アセットリスト（JSONまたはテキスト形式）を追加してください。"}
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-4">
@@ -206,10 +206,10 @@ export function ResourcePanel({
                   name="name"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Name</FormLabel>
+                      <FormLabel>名前</FormLabel>
                       <FormControl>
                         <Input
-                          placeholder="Enter resource name..."
+                          placeholder="リソース名を入力..."
                           data-testid="input-resource-name"
                           {...field}
                         />
@@ -224,7 +224,7 @@ export function ResourcePanel({
                   render={({ field }) => (
                     <FormItem>
                       <div className="flex items-center justify-between">
-                        <FormLabel>Content</FormLabel>
+                        <FormLabel>内容</FormLabel>
                         <label className="cursor-pointer">
                           <input
                             type="file"
@@ -235,14 +235,14 @@ export function ResourcePanel({
                           <Button variant="outline" size="sm" className="gap-1.5" asChild>
                             <span>
                               <Upload className="h-3.5 w-3.5" />
-                              Upload File
+                              ファイルをアップロード
                             </span>
                           </Button>
                         </label>
                       </div>
                       <FormControl>
                         <Textarea
-                          placeholder="Paste or type content here..."
+                          placeholder="ここに内容を貼り付けまたは入力..."
                           rows={12}
                           className="font-mono text-sm"
                           data-testid="input-resource-content"
@@ -256,14 +256,14 @@ export function ResourcePanel({
               </div>
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setAddDialogOpen(false)}>
-                  Cancel
+                  キャンセル
                 </Button>
                 <Button
                   type="submit"
                   disabled={isPending}
                   data-testid="button-submit-resource"
                 >
-                  {isPending ? "Adding..." : "Add Resource"}
+                  {isPending ? "追加中..." : "リソースを追加"}
                 </Button>
               </DialogFooter>
             </form>
@@ -279,7 +279,7 @@ export function ResourcePanel({
               {previewResource?.name}
             </DialogTitle>
             <DialogDescription>
-              {previewResource?.type === "target_spec" ? "Target Specification" : "Technical Assets"} •{" "}
+              {previewResource?.type === "target_spec" ? "ターゲット仕様" : "技術アセット"} ・{" "}
               {previewResource?.createdAt && format(new Date(previewResource.createdAt), "yyyy/MM/dd HH:mm")}
             </DialogDescription>
           </DialogHeader>
@@ -290,7 +290,7 @@ export function ResourcePanel({
           </ScrollArea>
           <DialogFooter>
             <Button variant="outline" onClick={() => setPreviewDialogOpen(false)}>
-              Close
+              閉じる
             </Button>
           </DialogFooter>
         </DialogContent>

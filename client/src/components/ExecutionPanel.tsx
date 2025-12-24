@@ -43,10 +43,10 @@ export function ExecutionPanel({
       <CardHeader className="pb-3 shrink-0">
         <CardTitle className="text-lg font-medium flex items-center gap-2">
           <Play className="h-5 w-5" />
-          Execute G-Method
+          G-Methodを実行
         </CardTitle>
         <CardDescription>
-          Select resources and run the hypothesis generation pipeline
+          リソースを選択して仮説生成パイプラインを実行
         </CardDescription>
       </CardHeader>
       <CardContent className="flex-1 flex flex-col">
@@ -54,7 +54,7 @@ export function ExecutionPanel({
           <div className="space-y-3">
             <Label className="flex items-center gap-2">
               <Target className="h-4 w-4 text-muted-foreground" />
-              Target Specification
+              ターゲット仕様
             </Label>
             <Select
               value={selectedTargetSpec}
@@ -62,12 +62,12 @@ export function ExecutionPanel({
               disabled={isExecuting}
             >
               <SelectTrigger data-testid="select-target-spec">
-                <SelectValue placeholder="Select target specification..." />
+                <SelectValue placeholder="ターゲット仕様を選択..." />
               </SelectTrigger>
               <SelectContent>
                 {targetSpecs.length === 0 ? (
                   <div className="py-4 px-2 text-sm text-muted-foreground text-center">
-                    No target specs available. Add one first.
+                    ターゲット仕様がありません。先に追加してください。
                   </div>
                 ) : (
                   targetSpecs.map((spec) => (
@@ -83,7 +83,7 @@ export function ExecutionPanel({
           <div className="space-y-3">
             <Label className="flex items-center gap-2">
               <Cpu className="h-4 w-4 text-muted-foreground" />
-              Technical Assets
+              技術アセット
             </Label>
             <Select
               value={selectedTechnicalAssets}
@@ -91,12 +91,12 @@ export function ExecutionPanel({
               disabled={isExecuting}
             >
               <SelectTrigger data-testid="select-technical-assets">
-                <SelectValue placeholder="Select technical assets..." />
+                <SelectValue placeholder="技術アセットを選択..." />
               </SelectTrigger>
               <SelectContent>
                 {technicalAssets.length === 0 ? (
                   <div className="py-4 px-2 text-sm text-muted-foreground text-center">
-                    No technical assets available. Add one first.
+                    技術アセットがありません。先に追加してください。
                   </div>
                 ) : (
                   technicalAssets.map((asset) => (
@@ -121,18 +121,18 @@ export function ExecutionPanel({
             {isExecuting ? (
               <>
                 <Loader2 className="h-5 w-5 animate-spin" />
-                Processing...
+                処理中...
               </>
             ) : (
               <>
                 <Play className="h-5 w-5" />
-                Run G-Method
+                G-Methodを実行
               </>
             )}
           </Button>
           {!selectedTargetSpec && !selectedTechnicalAssets && (
             <p className="text-xs text-muted-foreground text-center mt-3">
-              Select both resources to enable execution
+              両方のリソースを選択すると実行できます
             </p>
           )}
         </div>
