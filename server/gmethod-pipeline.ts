@@ -273,6 +273,7 @@ ${context.previousHypotheses || "なし（初回実行）"}
       agent: DEEP_RESEARCH_AGENT,
       input: researchPrompt,
       background: true,
+      store: true,
     });
     console.log(`[Run ${runId}] Deep Research Task Started. Interaction: ${interaction.name || interaction.id}`);
   } catch (error) {
@@ -300,7 +301,7 @@ ${context.previousHypotheses || "なし（初回実行）"}
 
     try {
       const currentStatus = await (client as any).interactions.get({
-        name: interaction.name || interaction.id
+        id: interaction.id || interaction.name
       });
 
       const status = currentStatus.status;
