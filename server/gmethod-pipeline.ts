@@ -10,6 +10,23 @@ const MODEL_PRO = "gemini-3-pro-preview";
 const MODEL_FLASH = "gemini-3-flash-preview";
 const DEEP_RESEARCH_AGENT = "deep-research-pro-preview-12-2025";
 
+// Deep Research rate limiting: 1 request per minute
+const DEEP_RESEARCH_MIN_INTERVAL_MS = 60 * 1000; // 60 seconds
+let lastDeepResearchRequestTime: number = 0;
+
+async function waitForDeepResearchRateLimit(): Promise<void> {
+  const now = Date.now();
+  const timeSinceLastRequest = now - lastDeepResearchRequestTime;
+  
+  if (lastDeepResearchRequestTime > 0 && timeSinceLastRequest < DEEP_RESEARCH_MIN_INTERVAL_MS) {
+    const waitTime = DEEP_RESEARCH_MIN_INTERVAL_MS - timeSinceLastRequest;
+    console.log(`[Rate Limit] Waiting ${Math.ceil(waitTime / 1000)}s before next Deep Research request...`);
+    await sleep(waitTime);
+  }
+  
+  lastDeepResearchRequestTime = Date.now();
+}
+
 function checkAIConfiguration(): boolean {
   return !!process.env.GEMINI_API_KEY;
 }
@@ -373,6 +390,9 @@ async function executeDeepResearchStep2(context: PipelineContext, runId: number)
     });
 
     console.log(`[Run ${runId}] Starting Deep Research with File Search Store: ${fileSearchStoreName}`);
+    
+    // Wait for rate limit before making Deep Research request
+    await waitForDeepResearchRateLimit();
     
     const interaction = await (client as any).interactions.create({
       input: researchPrompt,
