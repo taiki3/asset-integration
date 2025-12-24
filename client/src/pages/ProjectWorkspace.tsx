@@ -266,8 +266,20 @@ export default function ProjectWorkspace({ projectId }: ProjectWorkspaceProps) {
           )}
         </div>
 
+        {runningRun && (
+          <div className="mb-6">
+            <RunProgressDisplay
+              currentStep={runningRun.currentStep || 2}
+              currentLoop={runningRun.currentLoop || 1}
+              totalLoops={runningRun.totalLoops || 1}
+              progressInfo={runningRun.progressInfo as any}
+              status={runningRun.status}
+            />
+          </div>
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 min-h-[400px] lg:h-[calc(100vh-20rem)]">
-          <div className="lg:col-span-1 min-h-0 space-y-4">
+          <div className="lg:col-span-1 min-h-0">
             <ExecutionPanel
               targetSpecs={targetSpecs}
               technicalAssets={technicalAssets}
@@ -277,15 +289,6 @@ export default function ProjectWorkspace({ projectId }: ProjectWorkspaceProps) {
               isExecuting={isExecuting || executeRunMutation.isPending}
               isPending={addResourceMutation.isPending}
             />
-            {runningRun && (
-              <RunProgressDisplay
-                currentStep={runningRun.currentStep || 2}
-                currentLoop={runningRun.currentLoop || 1}
-                totalLoops={runningRun.totalLoops || 1}
-                progressInfo={runningRun.progressInfo as any}
-                status={runningRun.status}
-              />
-            )}
           </div>
           <div className="lg:col-span-1 min-h-0">
             <HistoryPanel
