@@ -4,7 +4,6 @@ import { useLocation } from "wouter";
 import { Loader2, ArrowLeft } from "lucide-react";
 import { Link } from "wouter";
 import { Header } from "@/components/Header";
-import { ResourcePanel } from "@/components/ResourcePanel";
 import { ExecutionPanel } from "@/components/ExecutionPanel";
 import { HistoryPanel } from "@/components/HistoryPanel";
 import { HypothesesPanel } from "@/components/HypothesesPanel";
@@ -148,9 +147,7 @@ export default function ProjectWorkspace({ projectId }: ProjectWorkspaceProps) {
   };
 
   const handleDeleteResource = (resourceId: number) => {
-    if (window.confirm("このリソースを削除しますか？")) {
-      deleteResourceMutation.mutate(resourceId);
-    }
+    deleteResourceMutation.mutate(resourceId);
   };
 
   const handleExecute = (targetSpecId: number, technicalAssetsId: number) => {
@@ -264,22 +261,16 @@ export default function ProjectWorkspace({ projectId }: ProjectWorkspaceProps) {
           )}
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 min-h-[400px] lg:h-[calc(100vh-20rem)]">
-          <div className="lg:col-span-1 min-h-0">
-            <ResourcePanel
-              targetSpecs={targetSpecs}
-              technicalAssets={technicalAssets}
-              onAddResource={handleAddResource}
-              onDeleteResource={handleDeleteResource}
-              isPending={addResourceMutation.isPending}
-            />
-          </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 min-h-[400px] lg:h-[calc(100vh-20rem)]">
           <div className="lg:col-span-1 min-h-0">
             <ExecutionPanel
               targetSpecs={targetSpecs}
               technicalAssets={technicalAssets}
               onExecute={handleExecute}
+              onAddResource={handleAddResource}
+              onDeleteResource={handleDeleteResource}
               isExecuting={isExecuting || executeRunMutation.isPending}
+              isPending={addResourceMutation.isPending}
             />
           </div>
           <div className="lg:col-span-1 min-h-0">
