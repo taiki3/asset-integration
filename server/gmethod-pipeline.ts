@@ -23,7 +23,7 @@ function getAIClient(): GoogleGenAI {
   if (!ai) {
     ai = new GoogleGenAI({
       apiKey: process.env.GEMINI_API_KEY!,
-      httpOptions: { apiVersion: "v1alpha" },
+      httpOptions: { apiVersion: "v1beta" },
     });
   }
   
