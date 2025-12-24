@@ -37,7 +37,7 @@ async function generateWithGemini(prompt: string): Promise<string> {
   try {
     const client = getAIClient();
     const response = await client.models.generateContent({
-      model: "gemini-3-pro",
+      model: "gemini-3-pro-preview",
       contents: [{ role: "user", parts: [{ text: prompt }] }],
       config: {
         maxOutputTokens: 65536,
