@@ -3,8 +3,8 @@ import { storage } from "./storage";
 import { STEP2_PROMPT, STEP3_PROMPT, STEP4_PROMPT, STEP5_PROMPT } from "./prompts";
 import type { InsertHypothesis } from "@shared/schema";
 
-const MODEL_PRO = "gemini-3.0-pro-preview";
-const MODEL_FLASH = "gemini-3.0-flash-preview";
+const MODEL_PRO = "gemini-2.5-pro";
+const MODEL_FLASH = "gemini-2.5-flash";
 
 function checkAIConfiguration(): boolean {
   return !!process.env.GEMINI_API_KEY;
