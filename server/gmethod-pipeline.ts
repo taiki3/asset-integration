@@ -4,26 +4,19 @@ import { STEP2_PROMPT, STEP3_PROMPT, STEP4_PROMPT, STEP5_PROMPT } from "./prompt
 import type { InsertHypothesis } from "@shared/schema";
 
 function checkAIConfiguration(): boolean {
-  return !!(
-    process.env.AI_INTEGRATIONS_GEMINI_API_KEY &&
-    process.env.AI_INTEGRATIONS_GEMINI_BASE_URL
-  );
+  return !!process.env.GEMINI_API_KEY;
 }
 
 let ai: GoogleGenAI | null = null;
 
 function getAIClient(): GoogleGenAI {
   if (!checkAIConfiguration()) {
-    throw new Error("AI integration not configured. Please ensure Gemini API credentials are set up.");
+    throw new Error("GEMINI_API_KEY not configured. Please set your API key in secrets.");
   }
   
   if (!ai) {
     ai = new GoogleGenAI({
-      apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY!,
-      httpOptions: {
-        apiVersion: "",
-        baseUrl: process.env.AI_INTEGRATIONS_GEMINI_BASE_URL!,
-      },
+      apiKey: process.env.GEMINI_API_KEY!,
     });
   }
   
@@ -44,10 +37,13 @@ async function generateWithGemini(prompt: string): Promise<string> {
   try {
     const client = getAIClient();
     const response = await client.models.generateContent({
-      model: "gemini-3-pro-preview",
+      model: "gemini-2.5-pro",
       contents: [{ role: "user", parts: [{ text: prompt }] }],
       config: {
-        maxOutputTokens: 32768,
+        maxOutputTokens: 65536,
+        temperature: 1.0,
+        topP: 0.95,
+        topK: 64,
       },
     });
     
@@ -171,7 +167,7 @@ export async function executeGMethodPipeline(runId: number): Promise<void> {
     if (!checkAIConfiguration()) {
       await storage.updateRun(runId, {
         status: "error",
-        errorMessage: "AI integration not configured. Please contact administrator to set up Gemini API credentials.",
+        errorMessage: "GEMINI_API_KEY が設定されていません。Secretsに APIキーを設定してください。",
       });
       return;
     }
