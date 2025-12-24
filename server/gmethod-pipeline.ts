@@ -3,8 +3,8 @@ import { storage } from "./storage";
 import { STEP2_PROMPT, STEP3_PROMPT, STEP4_PROMPT, STEP5_PROMPT } from "./prompts";
 import type { InsertHypothesis } from "@shared/schema";
 
-const MODEL_PRO = "gemini-2.5-pro";
-const MODEL_FLASH = "gemini-2.5-flash";
+const MODEL_PRO = "gemini-3-pro-preview";
+const MODEL_FLASH = "gemini-3-flash-preview";
 
 function checkAIConfiguration(): boolean {
   return !!process.env.GEMINI_API_KEY;
@@ -20,6 +20,7 @@ function getAIClient(): GoogleGenAI {
   if (!ai) {
     ai = new GoogleGenAI({
       apiKey: process.env.GEMINI_API_KEY!,
+      httpOptions: { apiVersion: "v1alpha" },
     });
   }
   
