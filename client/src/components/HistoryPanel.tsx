@@ -15,6 +15,8 @@ import {
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { format } from "date-fns";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import type { HypothesisRun, Resource } from "@shared/schema";
 
 interface HistoryPanelProps {
@@ -149,7 +151,7 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel }
               </div>
 
               {selectedRun.status === "completed" && (
-                <Tabs defaultValue="step5Output" className="flex-1">
+                <Tabs defaultValue="step2Output" className="flex-1">
                   <TabsList className="grid w-full grid-cols-4">
                     {stepLabels.map(({ key, step }) => (
                       <TabsTrigger key={key} value={key} disabled={!selectedRun[key]}>
@@ -157,12 +159,20 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel }
                       </TabsTrigger>
                     ))}
                   </TabsList>
-                  {stepLabels.map(({ key, label }) => (
+                  {stepLabels.map(({ key }) => (
                     <TabsContent key={key} value={key} className="mt-4">
                       <ScrollArea className="h-[45vh] rounded-md border bg-muted/30 p-4">
-                        <pre className="text-sm font-mono whitespace-pre-wrap break-words">
-                          {selectedRun[key] || "出力がありません"}
-                        </pre>
+                        {key === "step5Output" ? (
+                          <pre className="text-sm font-mono whitespace-pre-wrap break-words">
+                            {selectedRun[key] || "出力がありません"}
+                          </pre>
+                        ) : (
+                          <div className="prose prose-sm dark:prose-invert max-w-none">
+                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                              {selectedRun[key] || "出力がありません"}
+                            </ReactMarkdown>
+                          </div>
+                        )}
                       </ScrollArea>
                     </TabsContent>
                   ))}
