@@ -180,12 +180,13 @@ export function HypothesesPanel({ hypotheses, onDelete }: HypothesesPanelProps) 
           <TableRow>
             <TableHead className="w-[40px]">No.</TableHead>
             <TableHead>タイトル</TableHead>
-            <TableHead className="w-[100px]">業界</TableHead>
-            <TableHead className="w-[100px]">分野</TableHead>
-            <TableHead className="w-[100px]">科学判定</TableHead>
-            <TableHead className="w-[100px]">戦略判定</TableHead>
-            <TableHead className="w-[60px]">スコア</TableHead>
-            <TableHead className="w-[90px]">作成日</TableHead>
+            <TableHead className="w-[80px]">業界</TableHead>
+            <TableHead className="w-[80px]">分野</TableHead>
+            <TableHead className="w-[100px]">科学×経済判定</TableHead>
+            <TableHead className="w-[80px]">科学×経済スコア</TableHead>
+            <TableHead className="w-[100px]">キャッチアップ判定</TableHead>
+            <TableHead className="w-[100px]">戦略勝算レベル</TableHead>
+            <TableHead className="w-[80px]">キャッチアップスコア</TableHead>
             <TableHead className="w-[40px]"></TableHead>
           </TableRow>
         </TableHeader>
@@ -198,7 +199,7 @@ export function HypothesesPanel({ hypotheses, onDelete }: HypothesesPanelProps) 
               data-testid={`hypothesis-row-${hypothesis.id}`}
             >
               <TableCell className="font-mono text-xs">{hypothesis.hypothesisNumber}</TableCell>
-              <TableCell className="font-medium text-sm max-w-[300px] truncate">
+              <TableCell className="font-medium text-sm max-w-[250px] truncate">
                 {hypothesis.title}
               </TableCell>
               <TableCell className="text-xs">{hypothesis.industry || "-"}</TableCell>
@@ -213,6 +214,9 @@ export function HypothesesPanel({ hypotheses, onDelete }: HypothesesPanelProps) 
                   </Badge>
                 )}
               </TableCell>
+              <TableCell className="font-mono text-xs text-center">
+                {hypothesis.scientificScore ?? "-"}
+              </TableCell>
               <TableCell>
                 {hypothesis.strategicJudgment && (
                   <Badge
@@ -223,9 +227,11 @@ export function HypothesesPanel({ hypotheses, onDelete }: HypothesesPanelProps) 
                   </Badge>
                 )}
               </TableCell>
-              <TableCell className="font-mono text-xs">{hypothesis.totalScore || "-"}</TableCell>
-              <TableCell className="text-xs text-muted-foreground">
-                {format(new Date(hypothesis.createdAt), "MM/dd")}
+              <TableCell className="text-xs">
+                {hypothesis.strategicWinLevel || "-"}
+              </TableCell>
+              <TableCell className="font-mono text-xs text-center">
+                {hypothesis.catchupScore ?? "-"}
               </TableCell>
               <TableCell>
                 <Button

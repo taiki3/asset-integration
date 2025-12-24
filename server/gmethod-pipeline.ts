@@ -130,9 +130,11 @@ function extractHypothesesFromTSV(
     const parsedNumber = parseInt(rawNumber);
     const hypothesisNumber = isNaN(parsedNumber) ? index + 1 : parsedNumber;
     
-    const rawScore = row["総合スコア"] || "";
-    const parsedScore = parseInt(rawScore);
-    const totalScore = isNaN(parsedScore) ? null : parsedScore;
+    const parseIntOrNull = (value: string | undefined): number | null => {
+      if (!value) return null;
+      const parsed = parseInt(value);
+      return isNaN(parsed) ? null : parsed;
+    };
     
     return {
       projectId,
@@ -146,8 +148,11 @@ function extractHypothesesFromTSV(
       summary: row["事業仮説概要"] || null,
       customerProblem: row["顧客の解決不能な課題"] || null,
       scientificJudgment: row["科学×経済判定"] || null,
-      totalScore,
-      strategicJudgment: row["戦略判定"] || null,
+      scientificScore: parseIntOrNull(row["科学×経済スコア"]),
+      strategicJudgment: row["戦略判定"] || row["キャッチアップ判定"] || null,
+      strategicWinLevel: row["戦略勝算レベル"] || null,
+      catchupScore: parseIntOrNull(row["キャッチアップスコア"]),
+      totalScore: parseIntOrNull(row["総合スコア"]),
       fullData: row,
     };
   });

@@ -60,8 +60,11 @@ export const hypotheses = pgTable("hypotheses", {
   summary: text("summary"), // 事業仮説概要
   customerProblem: text("customer_problem"), // 顧客の解決不能な課題
   scientificJudgment: text("scientific_judgment"), // 科学×経済判定
+  scientificScore: integer("scientific_score"), // 科学×経済スコア
+  strategicJudgment: text("strategic_judgment"), // 戦略判定（キャッチアップ判定）
+  strategicWinLevel: text("strategic_win_level"), // 戦略勝算レベル
+  catchupScore: integer("catchup_score"), // キャッチアップスコア
   totalScore: integer("total_score"),
-  strategicJudgment: text("strategic_judgment"), // 戦略判定
   fullData: jsonb("full_data"), // Complete row data from Step5
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
