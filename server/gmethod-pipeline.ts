@@ -380,8 +380,9 @@ async function executeDeepResearchStep2(context: PipelineContext, runId: number)
       background: true,
       tools: [
         {
-          type: "file_search",
-          file_search_store_names: [fileSearchStoreName]
+          fileSearch: {
+            fileSearchStoreNames: [fileSearchStoreName]
+          }
         }
       ]
     });
