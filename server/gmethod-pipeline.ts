@@ -23,7 +23,6 @@ function getAIClient(): GoogleGenAI {
   if (!ai) {
     ai = new GoogleGenAI({
       apiKey: process.env.GEMINI_API_KEY!,
-      httpOptions: { apiVersion: "v1beta" },
     });
   }
   
@@ -265,39 +264,25 @@ ${context.previousHypotheses || "なし（初回実行）"}
 - 具体的な市場規模や成長率などの数値データがあれば含めてください
 - 各仮説について、なぜその技術資産が競争優位性を持つのか説明してください`;
 
-  const apiKey = process.env.GEMINI_API_KEY!;
-  const baseUrl = "https://generativelanguage.googleapis.com/v1beta";
+  const client = getAIClient();
   
   let interactionId: string;
   try {
-    const requestBody = {
+    console.log(`[Run ${runId}] Starting Deep Research with agent: ${DEEP_RESEARCH_AGENT}`);
+    console.log(`[Run ${runId}] Prompt length: ${researchPrompt.length} chars`);
+    
+    const interaction = await (client as any).interactions.create({
       input: researchPrompt,
       agent: DEEP_RESEARCH_AGENT,
       background: true,
-    };
-    console.log(`[Run ${runId}] Deep Research Request Body:`, JSON.stringify(requestBody, null, 2).substring(0, 500));
-    
-    const createResponse = await fetch(`${baseUrl}/interactions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-goog-api-key": apiKey,
-      },
-      body: JSON.stringify(requestBody),
     });
-
-    if (!createResponse.ok) {
-      const errorText = await createResponse.text();
-      console.error(`[Run ${runId}] Deep Research API Error Response:`, errorText);
-      throw new Error(`${createResponse.status} ${errorText}`);
-    }
-
-    const interaction = await createResponse.json();
+    
     interactionId = interaction.id;
     console.log(`[Run ${runId}] Deep Research Task Started. Interaction ID: ${interactionId}`);
-  } catch (error) {
+  } catch (error: any) {
     console.error(`[Run ${runId}] Failed to create Deep Research interaction:`, error);
-    throw new Error(`Deep Research APIの起動に失敗しました: ${error instanceof Error ? error.message : "Unknown error"}`);
+    console.error(`[Run ${runId}] Error details:`, JSON.stringify(error, null, 2));
+    throw new Error(`Deep Research APIの起動に失敗しました: ${error?.message || error}`);
   }
 
   await updateProgress(runId, { 
@@ -319,19 +304,7 @@ ${context.previousHypotheses || "なし（初回実行）"}
     await sleep(pollInterval);
 
     try {
-      const pollResponse = await fetch(`${baseUrl}/interactions/${interactionId}`, {
-        method: "GET",
-        headers: {
-          "x-goog-api-key": apiKey,
-        },
-      });
-
-      if (!pollResponse.ok) {
-        console.warn(`[Run ${runId}] Poll error: ${pollResponse.status}`);
-        continue;
-      }
-
-      const currentStatus = await pollResponse.json();
+      const currentStatus = await (client as any).interactions.get(interactionId);
       const status = currentStatus.status;
       console.log(`[Run ${runId}] Deep Research Status: ${status} (poll ${pollCount})`);
 
