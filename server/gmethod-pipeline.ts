@@ -2,6 +2,9 @@ import { GoogleGenAI } from "@google/genai";
 import { storage } from "./storage";
 import { STEP2_PROMPT, STEP3_PROMPT, STEP4_PROMPT, STEP5_PROMPT } from "./prompts";
 import type { InsertHypothesis } from "@shared/schema";
+import * as fs from "fs";
+import * as path from "path";
+import * as os from "os";
 
 const MODEL_PRO = "gemini-3-pro-preview";
 const MODEL_FLASH = "gemini-3-flash-preview";
@@ -14,6 +17,65 @@ function checkAIConfiguration(): boolean {
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 let ai: GoogleGenAI | null = null;
+
+interface FileSearchContext {
+  storeName: string;
+  fileNames: string[];
+}
+
+async function createFileSearchStore(displayName: string): Promise<string> {
+  const client = getAIClient();
+  const store = await (client as any).fileSearchStores.create({
+    config: { displayName }
+  });
+  console.log(`Created File Search Store: ${store.name}`);
+  return store.name;
+}
+
+async function uploadTextToFileSearchStore(
+  storeName: string, 
+  content: string, 
+  displayName: string
+): Promise<string> {
+  const client = getAIClient();
+  
+  const tempDir = os.tmpdir();
+  const tempFile = path.join(tempDir, `${displayName.replace(/[^a-zA-Z0-9]/g, '_')}.txt`);
+  fs.writeFileSync(tempFile, content, 'utf-8');
+  
+  try {
+    let operation = await (client as any).fileSearchStores.uploadToFileSearchStore({
+      file: tempFile,
+      fileSearchStoreName: storeName,
+      config: { displayName }
+    });
+    
+    while (!operation.done) {
+      await sleep(3000);
+      operation = await (client as any).operations.get({ operation });
+    }
+    
+    console.log(`Uploaded file to store: ${displayName}`);
+    return displayName;
+  } finally {
+    if (fs.existsSync(tempFile)) {
+      fs.unlinkSync(tempFile);
+    }
+  }
+}
+
+async function deleteFileSearchStore(storeName: string): Promise<void> {
+  try {
+    const client = getAIClient();
+    await (client as any).fileSearchStores.delete({
+      name: storeName,
+      config: { force: true }
+    });
+    console.log(`Deleted File Search Store: ${storeName}`);
+  } catch (error) {
+    console.warn(`Failed to delete File Search Store ${storeName}:`, error);
+  }
+}
 
 function getAIClient(): GoogleGenAI {
   if (!checkAIConfiguration()) {
@@ -220,6 +282,7 @@ async function updateProgress(runId: number, progressInfo: ProgressInfo): Promis
 async function executeDeepResearchStep2(context: PipelineContext, runId: number): Promise<DeepResearchResult> {
   const stepTimings: { [key: string]: number } = {};
   const startTime = Date.now();
+  let fileSearchStoreName: string | null = null;
 
   await updateProgress(runId, { 
     currentPhase: "deep_research_starting", 
@@ -229,21 +292,57 @@ async function executeDeepResearchStep2(context: PipelineContext, runId: number)
     stepStartTime: startTime,
   });
 
-  console.log(`[Run ${runId}] Starting Deep Research API...`);
+  console.log(`[Run ${runId}] Starting Deep Research API with File Search...`);
 
-  const researchPrompt = `あなたは事業仮説を生成するための専門リサーチャーです。
+  const client = getAIClient();
+  
+  try {
+    await updateProgress(runId, { 
+      currentPhase: "uploading_files", 
+      currentIteration: 0, 
+      maxIterations: 1,
+      planningAnalysis: "データをFile Searchストアにアップロード中...",
+      stepTimings,
+      stepStartTime: startTime,
+    });
 
-【ターゲット指定】
-${context.targetSpec}
+    fileSearchStoreName = await createFileSearchStore(`gmethod-run-${runId}-${Date.now()}`);
+    console.log(`[Run ${runId}] Created File Search Store: ${fileSearchStoreName}`);
 
-【技術資産】
-${context.technicalAssets}
+    await uploadTextToFileSearchStore(
+      fileSearchStoreName,
+      context.targetSpec,
+      "target_specification"
+    );
+    console.log(`[Run ${runId}] Uploaded target specification`);
 
-【過去に生成した仮説（重複回避用）】
-${context.previousHypotheses || "なし（初回実行）"}
+    await uploadTextToFileSearchStore(
+      fileSearchStoreName,
+      context.technicalAssets,
+      "technical_assets"
+    );
+    console.log(`[Run ${runId}] Uploaded technical assets`);
+
+    if (context.previousHypotheses) {
+      await uploadTextToFileSearchStore(
+        fileSearchStoreName,
+        context.previousHypotheses,
+        "previous_hypotheses"
+      );
+      console.log(`[Run ${runId}] Uploaded previous hypotheses`);
+    }
+
+    stepTimings["file_upload"] = Date.now() - startTime;
+
+    const researchPrompt = `あなたは事業仮説を生成するための専門リサーチャーです。
+
+添付されたファイルを参照してください：
+- target_specification: ターゲット市場・分野の仕様書
+- technical_assets: 利用可能な技術資産のリスト
+- previous_hypotheses: 過去に生成した仮説（重複回避用、存在する場合）
 
 【タスク】
-上記の「技術資産」を分析し、現在の市場トレンドと照らし合わせて、${context.hypothesisCount}件の新しい事業仮説を生成してください。
+添付された「technical_assets」の技術資産を分析し、「target_specification」で指定された市場において、現在のトレンドと照らし合わせて、${context.hypothesisCount}件の新しい事業仮説を生成してください。
 
 【各仮説に必要な要素】
 1. 仮説タイトル: 具体的で分かりやすいタイトル
@@ -264,111 +363,156 @@ ${context.previousHypotheses || "なし（初回実行）"}
 - 具体的な市場規模や成長率などの数値データがあれば含めてください
 - 各仮説について、なぜその技術資産が競争優位性を持つのか説明してください`;
 
-  const client = getAIClient();
-  
-  let interactionId: string;
-  try {
-    console.log(`[Run ${runId}] Starting Deep Research with agent: ${DEEP_RESEARCH_AGENT}`);
-    console.log(`[Run ${runId}] Prompt length: ${researchPrompt.length} chars`);
+    await updateProgress(runId, { 
+      currentPhase: "deep_research_starting", 
+      currentIteration: 0, 
+      maxIterations: 1,
+      planningAnalysis: "Deep Research エージェントを起動中...",
+      stepTimings,
+      stepStartTime: startTime,
+    });
+
+    console.log(`[Run ${runId}] Starting Deep Research with File Search Store: ${fileSearchStoreName}`);
     
     const interaction = await (client as any).interactions.create({
       input: researchPrompt,
       agent: DEEP_RESEARCH_AGENT,
       background: true,
+      tools: [
+        {
+          type: "file_search",
+          file_search_store_names: [fileSearchStoreName]
+        }
+      ]
     });
     
-    interactionId = interaction.id;
+    const interactionId = interaction.id;
     console.log(`[Run ${runId}] Deep Research Task Started. Interaction ID: ${interactionId}`);
-  } catch (error: any) {
-    console.error(`[Run ${runId}] Failed to create Deep Research interaction:`, error);
-    console.error(`[Run ${runId}] Error details:`, JSON.stringify(error, null, 2));
-    throw new Error(`Deep Research APIの起動に失敗しました: ${error?.message || error}`);
-  }
 
-  await updateProgress(runId, { 
-    currentPhase: "deep_research_running", 
-    currentIteration: 0, 
-    maxIterations: 1,
-    planningAnalysis: "Deep Research エージェントが調査中です...",
-    stepTimings,
-    stepStartTime: startTime,
-  });
+    await updateProgress(runId, { 
+      currentPhase: "deep_research_running", 
+      currentIteration: 0, 
+      maxIterations: 1,
+      planningAnalysis: "Deep Research エージェントが調査中です...",
+      stepTimings,
+      stepStartTime: startTime,
+    });
 
-  let report = "";
-  let pollCount = 0;
-  const maxPollTime = 30 * 60 * 1000;
-  const pollInterval = 15000;
+    let report = "";
+    let pollCount = 0;
+    const maxPollTime = 30 * 60 * 1000;
+    const pollInterval = 15000;
 
-  while (Date.now() - startTime < maxPollTime) {
-    pollCount++;
-    await sleep(pollInterval);
+    while (Date.now() - startTime < maxPollTime) {
+      pollCount++;
+      await sleep(pollInterval);
 
-    try {
-      const currentStatus = await (client as any).interactions.get(interactionId);
-      const status = currentStatus.status;
-      console.log(`[Run ${runId}] Deep Research Status: ${status} (poll ${pollCount})`);
+      try {
+        const currentStatus = await (client as any).interactions.get(interactionId);
+        const status = currentStatus.status;
+        console.log(`[Run ${runId}] Deep Research Status: ${status} (poll ${pollCount})`);
 
+        await updateProgress(runId, { 
+          currentPhase: "deep_research_running", 
+          currentIteration: pollCount, 
+          maxIterations: Math.ceil(maxPollTime / pollInterval),
+          planningAnalysis: `Deep Research 実行中... (${Math.floor((Date.now() - startTime) / 1000)}秒経過)`,
+          stepTimings,
+          stepStartTime: startTime,
+        });
+
+        if (status === "completed") {
+          console.log(`[Run ${runId}] Deep Research Completed!`);
+          const outputs = currentStatus.outputs || [];
+          const finalOutput = outputs[outputs.length - 1];
+          report = finalOutput?.text || "";
+          stepTimings["deep_research"] = Date.now() - startTime;
+          break;
+        } else if (status === "failed") {
+          console.error(`[Run ${runId}] Deep Research Failed:`, currentStatus.error);
+          throw new Error(`Deep Research が失敗しました: ${currentStatus.error || "Unknown error"}`);
+        }
+      } catch (pollError: any) {
+        if (pollError.message?.includes("Deep Research が失敗")) {
+          throw pollError;
+        }
+        console.warn(`[Run ${runId}] Poll error (continuing):`, pollError.message);
+      }
+    }
+
+    if (!report) {
+      throw new Error("Deep Research がタイムアウトしました（30分経過）");
+    }
+
+    if (fileSearchStoreName) {
+      await deleteFileSearchStore(fileSearchStoreName);
+      fileSearchStoreName = null;
+    }
+
+    const validationStartTime = Date.now();
+    await updateProgress(runId, { 
+      currentPhase: "validating", 
+      currentIteration: 0, 
+      maxIterations: 1,
+      planningAnalysis: "生成された仮説を検証中...",
+      stepTimings,
+      stepStartTime: startTime,
+    });
+
+    const validationResult = await validateHypotheses(report, context.hypothesisCount, runId);
+    stepTimings["validation"] = Date.now() - validationStartTime;
+
+    if (!validationResult.isValid) {
+      console.log(`[Run ${runId}] Validation failed, retrying...`);
+      
+      const retryStartTime = Date.now();
       await updateProgress(runId, { 
-        currentPhase: "deep_research_running", 
-        currentIteration: pollCount, 
-        maxIterations: Math.ceil(maxPollTime / pollInterval),
-        planningAnalysis: `Deep Research 実行中... (${Math.floor((Date.now() - startTime) / 1000)}秒経過)`,
+        currentPhase: "retrying", 
+        currentIteration: 0, 
+        maxIterations: 1,
+        planningAnalysis: `仮説数が不足（${validationResult.hypothesisCount}/${context.hypothesisCount}）。再生成中...`,
         stepTimings,
         stepStartTime: startTime,
       });
 
-      if (status === "completed") {
-        console.log(`[Run ${runId}] Deep Research Completed!`);
-        const outputs = currentStatus.outputs || [];
-        const finalOutput = outputs[outputs.length - 1];
-        report = finalOutput?.text || "";
-        stepTimings["deep_research"] = Date.now() - startTime;
-        break;
-      } else if (status === "failed") {
-        console.error(`[Run ${runId}] Deep Research Failed:`, currentStatus.error);
-        throw new Error(`Deep Research が失敗しました: ${currentStatus.error || "Unknown error"}`);
-      }
-    } catch (pollError: any) {
-      if (pollError.message?.includes("Deep Research が失敗")) {
-        throw pollError;
-      }
-      console.warn(`[Run ${runId}] Poll error (continuing):`, pollError.message);
+      const additionalNeeded = context.hypothesisCount - validationResult.hypothesisCount;
+      const retryPrompt = `前回の調査結果を踏まえて、追加で${additionalNeeded}件の仮説を生成してください。
+
+前回の結果:
+${report}
+
+追加で必要な仮説数: ${additionalNeeded}件
+
+上記と重複しない新しい仮説を生成してください。`;
+
+      const retryReport = await generateWithModel(retryPrompt, MODEL_PRO, true);
+      report = report + "\n\n【追加生成された仮説】\n" + retryReport;
+      
+      const finalValidation = await validateHypotheses(report, context.hypothesisCount, runId);
+      stepTimings["retry"] = Date.now() - retryStartTime;
+      
+      return {
+        report,
+        searchQueries: [],
+        iterationCount: 1,
+        validationResult: finalValidation
+      };
+    }
+
+    return {
+      report,
+      searchQueries: [],
+      iterationCount: 1,
+      validationResult
+    };
+  } catch (error: any) {
+    console.error(`[Run ${runId}] Deep Research Step 2 failed:`, error);
+    throw new Error(`Deep Research APIの起動に失敗しました: ${error?.message || error}`);
+  } finally {
+    if (fileSearchStoreName) {
+      await deleteFileSearchStore(fileSearchStoreName);
     }
   }
-
-  if (!report) {
-    throw new Error("Deep Research がタイムアウトしました（30分経過）");
-  }
-
-  const validationStartTime = Date.now();
-  await updateProgress(runId, { 
-    currentPhase: "validating", 
-    currentIteration: 1, 
-    maxIterations: 1,
-    planningAnalysis: "仮説の検証中...",
-    stepTimings,
-    stepStartTime: startTime,
-  });
-  
-  console.log(`[Run ${runId}] Post-process: Validating hypotheses...`);
-  const validationResult = await validateHypotheses(report, context.hypothesisCount, runId);
-  stepTimings["validating"] = Date.now() - validationStartTime;
-
-  await updateProgress(runId, { 
-    currentPhase: "completed", 
-    currentIteration: 1, 
-    maxIterations: 1,
-    planningAnalysis: "Deep Research 完了",
-    stepTimings,
-    stepStartTime: startTime,
-  });
-
-  return {
-    report,
-    searchQueries: [],
-    iterationCount: 1,
-    validationResult,
-  };
 }
 
 interface ValidationResultWithAction extends ValidationResult {
