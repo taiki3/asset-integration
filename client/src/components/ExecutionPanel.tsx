@@ -51,7 +51,7 @@ type ResourceFormValues = z.infer<typeof resourceFormSchema>;
 interface ExecutionPanelProps {
   targetSpecs: Resource[];
   technicalAssets: Resource[];
-  onExecute: (targetSpecId: number, technicalAssetsId: number) => void;
+  onExecute: (targetSpecId: number, technicalAssetsId: number, hypothesisCount: number) => void;
   onAddResource: (type: "target_spec" | "technical_assets", name: string, content: string) => void;
   onDeleteResource: (id: number) => void;
   isExecuting?: boolean;
@@ -69,6 +69,7 @@ export function ExecutionPanel({
 }: ExecutionPanelProps) {
   const [selectedTargetSpec, setSelectedTargetSpec] = useState<string>("");
   const [selectedTechnicalAssets, setSelectedTechnicalAssets] = useState<string>("");
+  const [hypothesisCount, setHypothesisCount] = useState<number>(5);
   const [resourceModalOpen, setResourceModalOpen] = useState(false);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [addType, setAddType] = useState<"target_spec" | "technical_assets">("target_spec");
@@ -90,7 +91,7 @@ export function ExecutionPanel({
 
   const handleExecute = () => {
     if (!canExecute) return;
-    onExecute(parseInt(selectedTargetSpec), parseInt(selectedTechnicalAssets));
+    onExecute(parseInt(selectedTargetSpec), parseInt(selectedTechnicalAssets), hypothesisCount);
   };
 
   const handleAddClick = (type: "target_spec" | "technical_assets") => {
@@ -211,6 +212,26 @@ export function ExecutionPanel({
                 <Settings2 className="h-3 w-3" />
                 リソースの編集
               </button>
+            </div>
+
+            <div className="space-y-3">
+              <Label className="flex items-center gap-2">
+                <Settings2 className="h-4 w-4 text-muted-foreground" />
+                生成する仮説数
+              </Label>
+              <div className="flex items-center gap-3">
+                <Input
+                  type="number"
+                  min={1}
+                  max={20}
+                  value={hypothesisCount}
+                  onChange={(e) => setHypothesisCount(Math.max(1, Math.min(20, parseInt(e.target.value) || 5)))}
+                  disabled={isExecuting}
+                  className="w-24"
+                  data-testid="input-hypothesis-count"
+                />
+                <span className="text-sm text-muted-foreground">件（1〜20）</span>
+              </div>
             </div>
           </div>
 

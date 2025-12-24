@@ -26,6 +26,7 @@ function getAIClient(): GoogleGenAI {
 interface PipelineContext {
   targetSpec: string;
   technicalAssets: string;
+  hypothesisCount: number;
   previousHypotheses?: string;
   step2Output?: string;
   step3Output?: string;
@@ -56,6 +57,7 @@ async function generateWithGemini(prompt: string): Promise<string> {
 
 async function executeStep2(context: PipelineContext): Promise<string> {
   let prompt = STEP2_PROMPT
+    .replace(/{HYPOTHESIS_COUNT}/g, context.hypothesisCount.toString())
     .replace("{TARGET_SPEC}", context.targetSpec)
     .replace("{TECHNICAL_ASSETS}", context.technicalAssets);
   
@@ -70,6 +72,7 @@ async function executeStep2(context: PipelineContext): Promise<string> {
 
 async function executeStep3(context: PipelineContext): Promise<string> {
   const prompt = STEP3_PROMPT
+    .replace(/{HYPOTHESIS_COUNT}/g, context.hypothesisCount.toString())
     .replace("{TECHNICAL_ASSETS}", context.technicalAssets)
     .replace("{STEP2_OUTPUT}", context.step2Output || "");
   
@@ -78,6 +81,7 @@ async function executeStep3(context: PipelineContext): Promise<string> {
 
 async function executeStep4(context: PipelineContext): Promise<string> {
   const prompt = STEP4_PROMPT
+    .replace(/{HYPOTHESIS_COUNT}/g, context.hypothesisCount.toString())
     .replace("{TECHNICAL_ASSETS}", context.technicalAssets)
     .replace("{STEP2_OUTPUT}", context.step2Output || "")
     .replace("{STEP3_OUTPUT}", context.step3Output || "");
@@ -87,6 +91,7 @@ async function executeStep4(context: PipelineContext): Promise<string> {
 
 async function executeStep5(context: PipelineContext): Promise<string> {
   const prompt = STEP5_PROMPT
+    .replace(/{HYPOTHESIS_COUNT}/g, context.hypothesisCount.toString())
     .replace("{STEP2_OUTPUT}", context.step2Output || "")
     .replace("{STEP3_OUTPUT}", context.step3Output || "")
     .replace("{STEP4_OUTPUT}", context.step4Output || "");
@@ -189,6 +194,7 @@ export async function executeGMethodPipeline(runId: number): Promise<void> {
     const context: PipelineContext = {
       targetSpec: targetSpec.content,
       technicalAssets: technicalAssets.content,
+      hypothesisCount: run.hypothesisCount || 5,
       previousHypotheses,
     };
 

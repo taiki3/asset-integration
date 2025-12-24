@@ -7,21 +7,21 @@ P0 契約（Non-negotiables：5項）
 - 先頭は【Phase 1：監査ストリップ（Proof-of-Work Evidence）】で開始。
 - 開始アンカー（Fail-fast）:
   1行目＝「【Phase 1：監査ストリップ（Proof-of-Work Evidence）】」
-  2行目＝Top 5短表のヘッダ行「| ランク |仮説タイトル | 解決する物理的矛盾 (Trade-off) | Cap-ID指紋 (Structure) | 判定タグ |判定理由（S→P→P要約≤30字） | 合成スコア | I/M/L/U 内訳 |」
+  2行目＝Top {HYPOTHESIS_COUNT}短表のヘッダ行「| ランク |仮説タイトル | 解決する物理的矛盾 (Trade-off) | Cap-ID指紋 (Structure) | 判定タグ |判定理由（S→P→P要約≤30字） | 合成スコア | I/M/L/U 内訳 |」
   3行目＝同ヘッダ直下の区切り行「| --- | --- | --- | --- | --- | --- | --- | --- |」
 - Phase 1本文直後（空行最大1行）に単独行'---'を挿入。次の非空行で【レポートタイトル】からPhase 2開始。
 
 2) ロック見出しの完全一致（Phase 2）＋見出しホワイト/ブラックリスト
 - ホワイトリスト（許可見出し文字列・順序固定）：
-  【レポートタイトル】／【第1章：エグゼクティブサマリー】／【第2章：事業機会を創出する構造的変曲点 (Why Now?)】／【第3章：戦略的事業仮説ポートフォリオ (The Top 5 Hypotheses)】／【第4章：ポートフォリオの評価と推奨ロードマップ】／【第5章：リスク分析と対策 (Pre-mortem)】／【第6章：参考文献 (References)】
+  【レポートタイトル】／【第1章：エグゼクティブサマリー】／【第2章：事業機会を創出する構造的変曲点 (Why Now?)】／【第3章：戦略的事業仮説ポートフォリオ (The Top {HYPOTHESIS_COUNT} Hypotheses)】／【第4章：ポートフォリオの評価と推奨ロードマップ】／【第5章：リスク分析と対策 (Pre-mortem)】／【第6章：参考文献 (References)】
 - ブラックリスト（行頭一致で禁止）：
   「#」「##」「###」「I.」「II.」「序論」「結論」「Strategic Context」「Executive Summary（英語表記）」「Part」「Chapter」「Table Title」「監査ストリップ（Phase 2内）」
 
 3) Phase 1の最小証跡（スキーマ＋選定プロトコルの固定）
 - Ideation総数（≥30）＋領域内訳、Negative Scope照合。
 - 選抜重み固定：I 0.40／M 0.30／L 0.15／U 0.15。各軸0.00〜1.00で採点。
-- Top 5短表・惜敗短表（2〜3件）を出力。
-- KPI（全5仮説×各3件以上）。
+- Top {HYPOTHESIS_COUNT}短表・惜敗短表（2〜3件）を出力。
+- KPI（全{HYPOTHESIS_COUNT}仮説×各3件以上）。
 
 4) 第3章カードのスキーマ固定
 - 各カードは以下の小見出しをこの順で必須：
@@ -66,7 +66,7 @@ export const STEP3_PROMPT = `# システム指令：新規素材ビジネス評�
 ⑧ 戦略適合 (Weight: 5%)
 
 ## 出力フォーマット
-全5仮説について以下の形式で評価を出力：
+全{HYPOTHESIS_COUNT}仮説について以下の形式で評価を出力：
 
 ### 仮説 No.X: [仮説タイトル]
 * **科学×経済判定:** (Go / Conditional Go / Pivot / No-Go)
@@ -93,7 +93,7 @@ export const STEP3_PROMPT = `# システム指令：新規素材ビジネス評�
 === Step 2の出力（事業仮説ポートフォリオレポート）===
 {STEP2_OUTPUT}
 
-上記の入力に基づいて、全5仮説の評価を実行してください。`;
+上記の入力に基づいて、全{HYPOTHESIS_COUNT}仮説の評価を実行してください。`;
 
 export const STEP4_PROMPT = `# システム指令：新規素材ビジネス・競合キャッチアップ評価プログラム (War Gaming Mode)
 
@@ -117,7 +117,7 @@ export const STEP4_PROMPT = `# システム指令：新規素材ビジネス・�
 ### C. Make vs Buy判定
 
 ## 出力フォーマット
-全5仮説について以下の形式で評価：
+全{HYPOTHESIS_COUNT}仮説について以下の形式で評価：
 
 ### 仮説 No.X: [仮説タイトル]
 * **戦略判定:** (Go / Caution / No-Go)
@@ -144,7 +144,7 @@ export const STEP4_PROMPT = `# システム指令：新規素材ビジネス・�
 === Step 3の出力（科学×経済評価レポート）===
 {STEP3_OUTPUT}
 
-上記の入力に基づいて、全5仮説のキャッチアップ戦略監査を実行してください。`;
+上記の入力に基づいて、全{HYPOTHESIS_COUNT}仮説のキャッチアップ戦略監査を実行してください。`;
 
 export const STEP5_PROMPT = `# システム指令：事業仮説データベース構築 (Final Integration)
 
@@ -153,7 +153,7 @@ export const STEP5_PROMPT = `# システム指令：事業仮説データベー�
 3つのソースから情報を抽出し、情報の解像度を落とさずにマスターテーブルを作成します。
 
 ## 抽出・統合ルール
-1. データ単位: 5つの仮説について、それぞれ1行ずつデータを生成
+1. データ単位: {HYPOTHESIS_COUNT}つの仮説について、それぞれ1行ずつデータを生成
 2. サニタイズ: 改行コード、タブ文字、特殊記号を含めない
 3. 出力形式: TSV (Tab Separated Values) 形式
 4. ヘッダー: 1行目に項目名を出力

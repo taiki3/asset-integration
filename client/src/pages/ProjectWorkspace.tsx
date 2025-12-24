@@ -97,11 +97,12 @@ export default function ProjectWorkspace({ projectId }: ProjectWorkspaceProps) {
   });
 
   const executeRunMutation = useMutation({
-    mutationFn: async ({ targetSpecId, technicalAssetsId }: { targetSpecId: number; technicalAssetsId: number }) => {
+    mutationFn: async ({ targetSpecId, technicalAssetsId, hypothesisCount }: { targetSpecId: number; technicalAssetsId: number; hypothesisCount: number }) => {
       const res = await apiRequest("POST", `/api/projects/${id}/runs`, {
         projectId: id,
         targetSpecId,
         technicalAssetsId,
+        hypothesisCount,
       });
       return res.json();
     },
@@ -150,8 +151,8 @@ export default function ProjectWorkspace({ projectId }: ProjectWorkspaceProps) {
     deleteResourceMutation.mutate(resourceId);
   };
 
-  const handleExecute = (targetSpecId: number, technicalAssetsId: number) => {
-    executeRunMutation.mutate({ targetSpecId, technicalAssetsId });
+  const handleExecute = (targetSpecId: number, technicalAssetsId: number, hypothesisCount: number) => {
+    executeRunMutation.mutate({ targetSpecId, technicalAssetsId, hypothesisCount });
   };
 
   const handleDeleteHypothesis = (hypothesisId: number) => {
