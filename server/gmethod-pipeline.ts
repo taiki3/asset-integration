@@ -47,7 +47,7 @@ async function generateWithGemini(prompt: string): Promise<string> {
       model: "gemini-3-pro-preview",
       contents: [{ role: "user", parts: [{ text: prompt }] }],
       config: {
-        maxOutputTokens: 8192,
+        maxOutputTokens: 32768,
       },
     });
     
