@@ -336,21 +336,14 @@ async function executeDeepResearchStep2(context: PipelineContext, runId: number)
       console.log(`[Run ${runId}] Uploaded previous hypotheses`);
     }
 
-    // Upload task instructions as a file (CRITICAL: keeps prompt short to avoid 400 error)
-    const taskInstructions = buildInstructionDocument(context.hypothesisCount, !!context.previousHypotheses);
-    await uploadTextToFileSearchStore(
-      fileSearchStoreName,
-      taskInstructions,
-      "task_instructions"
-    );
-    console.log(`[Run ${runId}] Uploaded task instructions (${taskInstructions.length} chars)`);
-
     stepTimings["file_upload"] = Date.now() - startTime;
 
-    // CRITICAL: Prompt must be ~65 chars or less to avoid 400 error
-    // Detailed instructions are in the uploaded task_instructions file
-    const researchPrompt = "task_instructionsの指示に従い事業仮説を生成してください。";
-    console.log(`[Run ${runId}] Short prompt: "${researchPrompt}" (${researchPrompt.length} chars)`);
+    // CRITICAL: Prompt must be under ~200 bytes to avoid 400 error with file_search
+    // Direct instructions in prompt (no RAG dependency for instructions)
+    const hypothesisCount = context.hypothesisCount;
+    const researchPrompt = `target_specificationとtechnical_assetsを分析し、事業仮説を${hypothesisCount}件生成。各仮説はタイトル、業界、概要を含むJSON配列で出力。`;
+    const promptBytes = Buffer.byteLength(researchPrompt, 'utf-8');
+    console.log(`[Run ${runId}] Prompt: "${researchPrompt}" (${researchPrompt.length} chars, ${promptBytes} bytes)`);
 
     await updateProgress(runId, { 
       currentPhase: "deep_research_starting", 
