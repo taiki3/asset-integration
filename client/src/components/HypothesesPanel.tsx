@@ -324,15 +324,9 @@ export function HypothesesPanel({ hypotheses, onDelete }: HypothesesPanelProps) 
                     CSVエクスポート
                   </Button>
                 </div>
-                {viewMode === "card" ? (
-                  <ScrollArea className="max-h-[400px]">
-                    <CardView />
-                  </ScrollArea>
-                ) : (
-                  <div className="max-h-[400px] overflow-y-auto">
-                    <TableView />
-                  </div>
-                )}
+                <div className="max-h-[400px] overflow-y-auto">
+                  {viewMode === "card" ? <CardView /> : <TableView />}
+                </div>
               </>
             )}
           </CardContent>
