@@ -390,18 +390,26 @@ async function executeDeepResearchStep2(context: PipelineContext, runId: number)
     });
 
     console.log(`[Run ${runId}] Starting Deep Research with File Search Store: ${fileSearchStoreName}`);
+    console.log(`[Run ${runId}] Prompt length: ${researchPrompt.length} chars`);
     
     // Wait for rate limit before making Deep Research request
     await waitForDeepResearchRateLimit();
     
-    const interaction = await (client as any).interactions.create({
-      input: researchPrompt,
-      agent: DEEP_RESEARCH_AGENT,
-      background: true,
-      tools: [
-        { type: 'file_search', file_search_store_names: [fileSearchStoreName] }
-      ]
-    });
+    let interaction;
+    try {
+      interaction = await (client as any).interactions.create({
+        input: researchPrompt,
+        agent: DEEP_RESEARCH_AGENT,
+        background: true,
+        tools: [
+          { type: 'file_search', file_search_store_names: [fileSearchStoreName] }
+        ]
+      });
+    } catch (apiError: any) {
+      console.error(`[Run ${runId}] Deep Research API Error:`, apiError.message);
+      console.error(`[Run ${runId}] Error details:`, JSON.stringify(apiError, null, 2));
+      throw new Error(`Deep Research APIの起動に失敗しました: ${apiError.message}`);
+    }
     
     const interactionId = interaction.id;
     console.log(`[Run ${runId}] Deep Research Task Started. Interaction ID: ${interactionId}`);
