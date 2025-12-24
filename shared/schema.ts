@@ -41,6 +41,7 @@ export const hypothesisRuns = pgTable("hypothesis_runs", {
   step4Output: text("step4_output"),
   step5Output: text("step5_output"),
   integratedList: jsonb("integrated_list"), // Parsed TSV data
+  validationMetadata: jsonb("validation_metadata"), // Deep Research validation results
   errorMessage: text("error_message"),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
   completedAt: timestamp("completed_at"),
