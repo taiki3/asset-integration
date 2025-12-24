@@ -200,11 +200,34 @@ const EXTRACTION_PROMPT = `以下の事業仮説レポートから、各仮説�
   ]
 }`;
 
+interface ProgressInfo {
+  planningAnalysis?: string;
+  planningQueries?: string[];
+  currentPhase?: string;
+  currentIteration?: number;
+  maxIterations?: number;
+  stepTimings?: { [key: string]: number };
+  phaseStartTime?: number;
+}
+
+async function updateProgress(runId: number, progressInfo: ProgressInfo): Promise<void> {
+  await storage.updateRun(runId, { progressInfo });
+}
+
 async function executeDeepResearchStep2(context: PipelineContext, runId: number): Promise<DeepResearchResult> {
   const searchQueries: string[] = [];
   let searchResults = "";
   let iterationCount = 0;
   const maxIterations = 3;
+  const stepTimings: { [key: string]: number } = {};
+
+  const planningStartTime = Date.now();
+  await updateProgress(runId, { 
+    currentPhase: "planning", 
+    currentIteration: 0, 
+    maxIterations,
+    stepTimings,
+  });
 
   console.log(`[Run ${runId}] Phase 1: Planning...`);
   const planningPrompt = PLANNING_PROMPT
@@ -213,13 +236,16 @@ async function executeDeepResearchStep2(context: PipelineContext, runId: number)
     .replace("{PREVIOUS_HYPOTHESES}", context.previousHypotheses || "なし（初回実行）");
   
   const planningResult = await generateWithFlash(planningPrompt);
+  stepTimings["planning"] = Date.now() - planningStartTime;
   
   let queries: string[] = [];
+  let planningAnalysis = "";
   try {
     const jsonMatch = planningResult.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       const parsed = JSON.parse(jsonMatch[0]);
       queries = parsed.queries || [];
+      planningAnalysis = parsed.analysis || "";
     }
   } catch (e) {
     console.log(`[Run ${runId}] Planning JSON parse failed, using fallback queries`);
@@ -229,10 +255,30 @@ async function executeDeepResearchStep2(context: PipelineContext, runId: number)
     ];
   }
   searchQueries.push(...queries);
+  
+  await updateProgress(runId, { 
+    currentPhase: "exploring", 
+    currentIteration: 1, 
+    maxIterations,
+    planningAnalysis,
+    planningQueries: queries,
+    stepTimings,
+  });
 
   while (iterationCount < maxIterations) {
     iterationCount++;
-    console.log(`[Run ${runId}] Phase 2: Exploring (iteration ${iterationCount})...`);
+    const iterationStartTime = Date.now();
+    
+    await updateProgress(runId, { 
+      currentPhase: "exploring", 
+      currentIteration: iterationCount, 
+      maxIterations,
+      planningAnalysis,
+      planningQueries: searchQueries,
+      stepTimings,
+    });
+    
+    console.log(`[Run ${runId}] Phase 2: Exploring (iteration ${iterationCount}/${maxIterations})...`);
     
     const explorationPrompt = EXPLORATION_PROMPT
       .replace("{QUERIES}", queries.join("\n"))
@@ -241,8 +287,19 @@ async function executeDeepResearchStep2(context: PipelineContext, runId: number)
     
     const explorationResult = await generateWithFlashAndSearch(explorationPrompt);
     searchResults += `\n\n【探索結果 ${iterationCount}】\n${explorationResult}`;
+    stepTimings[`exploring_${iterationCount}`] = Date.now() - iterationStartTime;
 
-    console.log(`[Run ${runId}] Phase 3: Reasoning (iteration ${iterationCount})...`);
+    const reasoningStartTime = Date.now();
+    await updateProgress(runId, { 
+      currentPhase: "reasoning", 
+      currentIteration: iterationCount, 
+      maxIterations,
+      planningAnalysis,
+      planningQueries: searchQueries,
+      stepTimings,
+    });
+    
+    console.log(`[Run ${runId}] Phase 3: Reasoning (iteration ${iterationCount}/${maxIterations})...`);
     const reasoningPrompt = REASONING_PROMPT
       .replace("{SEARCH_RESULTS}", searchResults)
       .replace("{TARGET_SPEC}", context.targetSpec)
@@ -250,6 +307,7 @@ async function executeDeepResearchStep2(context: PipelineContext, runId: number)
       .replace("{HYPOTHESIS_COUNT}", context.hypothesisCount.toString());
     
     const reasoningResult = await generateWithFlash(reasoningPrompt);
+    stepTimings[`reasoning_${iterationCount}`] = Date.now() - reasoningStartTime;
     
     try {
       const jsonMatch = reasoningResult.match(/\{[\s\S]*\}/);
@@ -274,6 +332,16 @@ async function executeDeepResearchStep2(context: PipelineContext, runId: number)
     }
   }
 
+  const synthesisStartTime = Date.now();
+  await updateProgress(runId, { 
+    currentPhase: "synthesizing", 
+    currentIteration: iterationCount, 
+    maxIterations,
+    planningAnalysis,
+    planningQueries: searchQueries,
+    stepTimings,
+  });
+  
   console.log(`[Run ${runId}] Phase 4: Synthesizing with Pro model...`);
   
   let synthesisPrompt = STEP2_PROMPT
@@ -295,9 +363,30 @@ ${synthesisPrompt}
 - 対話的なやり取りは不要です。最終的なレポートのみを出力してください。`;
 
   const report = await generateWithPro(synthesisPrompt);
+  stepTimings["synthesizing"] = Date.now() - synthesisStartTime;
 
+  const validationStartTime = Date.now();
+  await updateProgress(runId, { 
+    currentPhase: "validating", 
+    currentIteration: iterationCount, 
+    maxIterations,
+    planningAnalysis,
+    planningQueries: searchQueries,
+    stepTimings,
+  });
+  
   console.log(`[Run ${runId}] Post-process: Validating hypotheses...`);
   const validationResult = await validateHypotheses(report, context.hypothesisCount, runId);
+  stepTimings["validating"] = Date.now() - validationStartTime;
+
+  await updateProgress(runId, { 
+    currentPhase: "completed", 
+    currentIteration: iterationCount, 
+    maxIterations,
+    planningAnalysis,
+    planningQueries: searchQueries,
+    stepTimings,
+  });
 
   return {
     report,

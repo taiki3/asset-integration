@@ -51,7 +51,7 @@ type ResourceFormValues = z.infer<typeof resourceFormSchema>;
 interface ExecutionPanelProps {
   targetSpecs: Resource[];
   technicalAssets: Resource[];
-  onExecute: (targetSpecId: number, technicalAssetsId: number, hypothesisCount: number) => void;
+  onExecute: (targetSpecId: number, technicalAssetsId: number, hypothesisCount: number, loopCount: number) => void;
   onAddResource: (type: "target_spec" | "technical_assets", name: string, content: string) => void;
   onDeleteResource: (id: number) => void;
   isExecuting?: boolean;
@@ -70,6 +70,7 @@ export function ExecutionPanel({
   const [selectedTargetSpec, setSelectedTargetSpec] = useState<string>("");
   const [selectedTechnicalAssets, setSelectedTechnicalAssets] = useState<string>("");
   const [hypothesisCount, setHypothesisCount] = useState<number>(5);
+  const [loopCount, setLoopCount] = useState<number>(1);
   const [resourceModalOpen, setResourceModalOpen] = useState(false);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [addType, setAddType] = useState<"target_spec" | "technical_assets">("target_spec");
@@ -91,8 +92,10 @@ export function ExecutionPanel({
 
   const handleExecute = () => {
     if (!canExecute) return;
-    onExecute(parseInt(selectedTargetSpec), parseInt(selectedTechnicalAssets), hypothesisCount);
+    onExecute(parseInt(selectedTargetSpec), parseInt(selectedTechnicalAssets), hypothesisCount, loopCount);
   };
+  
+  const totalHypotheses = hypothesisCount * loopCount;
 
   const handleAddClick = (type: "target_spec" | "technical_assets") => {
     setAddType(type);
@@ -217,20 +220,40 @@ export function ExecutionPanel({
             <div className="space-y-3">
               <Label className="flex items-center gap-2">
                 <Settings2 className="h-4 w-4 text-muted-foreground" />
-                生成する仮説数
+                生成設定
               </Label>
-              <div className="flex items-center gap-3">
-                <Input
-                  type="number"
-                  min={1}
-                  max={20}
-                  value={hypothesisCount}
-                  onChange={(e) => setHypothesisCount(Math.max(1, Math.min(20, parseInt(e.target.value) || 5)))}
-                  disabled={isExecuting}
-                  className="w-24"
-                  data-testid="input-hypothesis-count"
-                />
-                <span className="text-sm text-muted-foreground">件（1〜20）</span>
+              <div className="space-y-3 p-3 rounded-md bg-muted/30">
+                <div className="flex items-center gap-3">
+                  <span className="text-sm w-24">1回あたり:</span>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={20}
+                    value={hypothesisCount}
+                    onChange={(e) => setHypothesisCount(Math.max(1, Math.min(20, parseInt(e.target.value) || 5)))}
+                    disabled={isExecuting}
+                    className="w-20"
+                    data-testid="input-hypothesis-count"
+                  />
+                  <span className="text-sm text-muted-foreground">件</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-sm w-24">繰り返し:</span>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={10}
+                    value={loopCount}
+                    onChange={(e) => setLoopCount(Math.max(1, Math.min(10, parseInt(e.target.value) || 1)))}
+                    disabled={isExecuting}
+                    className="w-20"
+                    data-testid="input-loop-count"
+                  />
+                  <span className="text-sm text-muted-foreground">回</span>
+                </div>
+                <div className="pt-2 border-t border-border/50">
+                  <span className="text-sm font-medium">合計: {totalHypotheses}件の仮説を生成</span>
+                </div>
               </div>
             </div>
           </div>

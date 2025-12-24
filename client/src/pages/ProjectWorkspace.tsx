@@ -7,6 +7,7 @@ import { Header } from "@/components/Header";
 import { ExecutionPanel } from "@/components/ExecutionPanel";
 import { HistoryPanel } from "@/components/HistoryPanel";
 import { HypothesesPanel } from "@/components/HypothesesPanel";
+import { RunProgressDisplay } from "@/components/RunProgressDisplay";
 import { Button } from "@/components/ui/button";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -34,11 +35,13 @@ export default function ProjectWorkspace({ projectId }: ProjectWorkspaceProps) {
     refetchInterval: (query) => {
       const data = query.state.data as HypothesisRun[] | undefined;
       if (data?.some((r) => r.status === "running")) {
-        return 3000;
+        return 2000;
       }
       return false;
     },
   });
+  
+  const runningRun = runs.find((r) => r.status === "running");
 
   const { data: hypotheses = [], isLoading: hypothesesLoading } = useQuery<Hypothesis[]>({
     queryKey: ["/api/projects", id, "hypotheses"],
@@ -97,12 +100,13 @@ export default function ProjectWorkspace({ projectId }: ProjectWorkspaceProps) {
   });
 
   const executeRunMutation = useMutation({
-    mutationFn: async ({ targetSpecId, technicalAssetsId, hypothesisCount }: { targetSpecId: number; technicalAssetsId: number; hypothesisCount: number }) => {
+    mutationFn: async ({ targetSpecId, technicalAssetsId, hypothesisCount, loopCount }: { targetSpecId: number; technicalAssetsId: number; hypothesisCount: number; loopCount: number }) => {
       const res = await apiRequest("POST", `/api/projects/${id}/runs`, {
         projectId: id,
         targetSpecId,
         technicalAssetsId,
         hypothesisCount,
+        loopCount,
       });
       return res.json();
     },
@@ -151,8 +155,8 @@ export default function ProjectWorkspace({ projectId }: ProjectWorkspaceProps) {
     deleteResourceMutation.mutate(resourceId);
   };
 
-  const handleExecute = (targetSpecId: number, technicalAssetsId: number, hypothesisCount: number) => {
-    executeRunMutation.mutate({ targetSpecId, technicalAssetsId, hypothesisCount });
+  const handleExecute = (targetSpecId: number, technicalAssetsId: number, hypothesisCount: number, loopCount: number) => {
+    executeRunMutation.mutate({ targetSpecId, technicalAssetsId, hypothesisCount, loopCount });
   };
 
   const handleDeleteHypothesis = (hypothesisId: number) => {
@@ -263,7 +267,7 @@ export default function ProjectWorkspace({ projectId }: ProjectWorkspaceProps) {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 min-h-[400px] lg:h-[calc(100vh-20rem)]">
-          <div className="lg:col-span-1 min-h-0">
+          <div className="lg:col-span-1 min-h-0 space-y-4">
             <ExecutionPanel
               targetSpecs={targetSpecs}
               technicalAssets={technicalAssets}
@@ -273,6 +277,15 @@ export default function ProjectWorkspace({ projectId }: ProjectWorkspaceProps) {
               isExecuting={isExecuting || executeRunMutation.isPending}
               isPending={addResourceMutation.isPending}
             />
+            {runningRun && (
+              <RunProgressDisplay
+                currentStep={runningRun.currentStep || 2}
+                currentLoop={runningRun.currentLoop || 1}
+                totalLoops={runningRun.totalLoops || 1}
+                progressInfo={runningRun.progressInfo as any}
+                status={runningRun.status}
+              />
+            )}
           </div>
           <div className="lg:col-span-1 min-h-0">
             <HistoryPanel

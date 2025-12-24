@@ -33,15 +33,19 @@ export const hypothesisRuns = pgTable("hypothesis_runs", {
   projectId: integer("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
   targetSpecId: integer("target_spec_id").notNull().references(() => resources.id),
   technicalAssetsId: integer("technical_assets_id").notNull().references(() => resources.id),
-  hypothesisCount: integer("hypothesis_count").notNull().default(5), // Number of hypotheses to generate
+  hypothesisCount: integer("hypothesis_count").notNull().default(5), // Number of hypotheses per loop
+  loopCount: integer("loop_count").notNull().default(1), // Number of generation loops
   status: text("status").notNull().default("pending"), // 'pending', 'running', 'completed', 'error'
   currentStep: integer("current_step").default(0), // 0-5 (0=not started, 2-5 = G-Method steps)
+  currentLoop: integer("current_loop").default(0), // Current loop iteration (1-based)
+  totalLoops: integer("total_loops").default(1), // Total loops to run
   step2Output: text("step2_output"),
   step3Output: text("step3_output"),
   step4Output: text("step4_output"),
   step5Output: text("step5_output"),
   integratedList: jsonb("integrated_list"), // Parsed TSV data
   validationMetadata: jsonb("validation_metadata"), // Deep Research validation results
+  progressInfo: jsonb("progress_info"), // Detailed progress info (planning result, step timings, etc.)
   errorMessage: text("error_message"),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
   completedAt: timestamp("completed_at"),
@@ -133,8 +137,12 @@ export const insertHypothesisRunSchema = createInsertSchema(hypothesisRuns).omit
   step4Output: true,
   step5Output: true,
   integratedList: true,
+  validationMetadata: true,
+  progressInfo: true,
   errorMessage: true,
   currentStep: true,
+  currentLoop: true,
+  totalLoops: true,
   status: true,
 });
 
