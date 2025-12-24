@@ -168,7 +168,7 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel }
                             {selectedRun[key] || "出力がありません"}
                           </pre>
                         ) : (
-                          <div className="prose prose-sm dark:prose-invert max-w-none">
+                          <div className="prose prose-sm dark:prose-invert max-w-none overflow-x-auto [&_table]:table-auto [&_table]:w-auto [&_table]:min-w-0">
                             <ReactMarkdown remarkPlugins={[remarkGfm]}>
                               {selectedRun[key] || "出力がありません"}
                             </ReactMarkdown>
