@@ -1,6 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
 import { storage } from "./storage";
-import { STEP2_PROMPT, STEP3_PROMPT, STEP4_PROMPT, STEP5_PROMPT } from "./prompts";
+import { STEP2_PROMPT, STEP2_DEEP_RESEARCH_PROMPT, STEP3_PROMPT, STEP4_PROMPT, STEP5_PROMPT } from "./prompts";
 import type { InsertHypothesis } from "@shared/schema";
 import * as fs from "fs";
 import * as path from "path";
@@ -13,25 +13,10 @@ const DEEP_RESEARCH_AGENT = "deep-research-pro-preview-12-2025";
 
 // Deep Research rate limiting is now handled by shared module (deep-research.ts)
 
-// Build STEP2 prompt with data directly embedded (same as internal engineer's approach)
-function buildStep2Prompt(
-  hypothesisCount: number,
-  targetSpec: string,
-  technicalAssets: string,
-  previousHypotheses?: string
-): string {
-  let prompt = STEP2_PROMPT
-    .replace(/\{HYPOTHESIS_COUNT\}/g, hypothesisCount.toString())
-    .replace("{TARGET_SPEC}", targetSpec)
-    .replace("{TECHNICAL_ASSETS}", technicalAssets);
-  
-  if (previousHypotheses) {
-    prompt = prompt.replace("{PREVIOUS_HYPOTHESES}", previousHypotheses);
-  } else {
-    prompt = prompt.replace("{PREVIOUS_HYPOTHESES}", "なし（初回実行）");
-  }
-  
-  return prompt;
+// Get Deep Research prompt (no data embedding - uses File Search)
+// Internal engineer's approach: prompt.md as-is, data files uploaded to File Search
+function getDeepResearchPrompt(): string {
+  return STEP2_DEEP_RESEARCH_PROMPT;
 }
 
 function checkAIConfiguration(): boolean {
@@ -358,14 +343,9 @@ async function executeDeepResearchStep2(context: PipelineContext, runId: number)
 
     stepTimings["file_upload"] = Date.now() - startTime;
 
-    // Build full research prompt with complete instructions
-    // (Confirmed: longer prompts work with file_search - previous 400 error was due to other factors)
-    const researchPrompt = buildStep2Prompt(
-      context.hypothesisCount,
-      "target_specification", // Reference to uploaded file
-      "technical_assets",     // Reference to uploaded file
-      context.previousHypotheses ? "previous_hypotheses" : undefined
-    );
+    // Use Deep Research prompt (no data embedding - File Search references attached files)
+    // Internal engineer's approach: 19KB prompt + File Search for data files
+    const researchPrompt = getDeepResearchPrompt();
     console.log(`[Run ${runId}] Prompt: ${researchPrompt.length} chars, ${Buffer.byteLength(researchPrompt, 'utf-8')} bytes`);
 
     await updateProgress(runId, { 
