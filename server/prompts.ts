@@ -42,6 +42,10 @@ P0 契約（Non-negotiables：5項）
 === 技術資産リスト（Role B）===
 {TECHNICAL_ASSETS}
 
+=== 過去に生成した仮説（重複回避用）===
+以下は過去に生成した仮説のリストです。これらと類似した仮説を再度生成しないでください。
+{PREVIOUS_HYPOTHESES}
+
 まずPhase 1（監査ストリップ）を出力し、次に'---'で区切ってPhase 2（レポート本文）を出力してください。`;
 
 export const STEP3_PROMPT = `# システム指令：新規素材ビジネス評価プログラム（Dr. Kill-Switch）

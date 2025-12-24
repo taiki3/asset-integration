@@ -7,10 +7,11 @@ import { Header } from "@/components/Header";
 import { ResourcePanel } from "@/components/ResourcePanel";
 import { ExecutionPanel } from "@/components/ExecutionPanel";
 import { HistoryPanel } from "@/components/HistoryPanel";
+import { HypothesesPanel } from "@/components/HypothesesPanel";
 import { Button } from "@/components/ui/button";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { Project, Resource, HypothesisRun } from "@shared/schema";
+import type { Project, Resource, HypothesisRun, Hypothesis } from "@shared/schema";
 
 interface ProjectWorkspaceProps {
   projectId: string;
@@ -38,6 +39,10 @@ export default function ProjectWorkspace({ projectId }: ProjectWorkspaceProps) {
       }
       return false;
     },
+  });
+
+  const { data: hypotheses = [], isLoading: hypothesesLoading } = useQuery<Hypothesis[]>({
+    queryKey: ["/api/projects", id, "hypotheses"],
   });
 
   const addResourceMutation = useMutation({
@@ -97,6 +102,7 @@ export default function ProjectWorkspace({ projectId }: ProjectWorkspaceProps) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/projects", id, "runs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", id, "hypotheses"] });
       toast({
         title: "実行を開始しました",
         description: "G-Methodパイプラインの処理を開始しました。",
@@ -106,6 +112,26 @@ export default function ProjectWorkspace({ projectId }: ProjectWorkspaceProps) {
       toast({
         title: "エラー",
         description: "実行の開始に失敗しました。もう一度お試しください。",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const deleteHypothesisMutation = useMutation({
+    mutationFn: async (hypothesisId: number) => {
+      await apiRequest("DELETE", `/api/hypotheses/${hypothesisId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", id, "hypotheses"] });
+      toast({
+        title: "仮説を削除しました",
+        description: "仮説がリストから削除されました。",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "エラー",
+        description: "仮説の削除に失敗しました。もう一度お試しください。",
         variant: "destructive",
       });
     },
@@ -123,6 +149,10 @@ export default function ProjectWorkspace({ projectId }: ProjectWorkspaceProps) {
 
   const handleExecute = (targetSpecId: number, technicalAssetsId: number) => {
     executeRunMutation.mutate({ targetSpecId, technicalAssetsId });
+  };
+
+  const handleDeleteHypothesis = (hypothesisId: number) => {
+    deleteHypothesisMutation.mutate(hypothesisId);
   };
 
   const handleDownloadTSV = async (runId: number) => {
@@ -173,7 +203,7 @@ export default function ProjectWorkspace({ projectId }: ProjectWorkspaceProps) {
     }
   }, [projectError, navigate]);
 
-  if (projectLoading || resourcesLoading || runsLoading) {
+  if (projectLoading || resourcesLoading || runsLoading || hypothesesLoading) {
     return (
       <div className="min-h-screen bg-background">
         <Header />
@@ -228,7 +258,7 @@ export default function ProjectWorkspace({ projectId }: ProjectWorkspaceProps) {
           )}
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-12rem)]">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 min-h-[400px] lg:h-[calc(100vh-20rem)]">
           <div className="lg:col-span-1 min-h-0">
             <ResourcePanel
               targetSpecs={targetSpecs}
@@ -254,6 +284,13 @@ export default function ProjectWorkspace({ projectId }: ProjectWorkspaceProps) {
               onDownloadExcel={handleDownloadExcel}
             />
           </div>
+        </div>
+
+        <div className="mt-6">
+          <HypothesesPanel
+            hypotheses={hypotheses}
+            onDelete={handleDeleteHypothesis}
+          />
         </div>
       </main>
     </div>
