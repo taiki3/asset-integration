@@ -270,12 +270,11 @@ ${context.previousHypotheses || "なし（初回実行）"}
   let interaction: any;
   try {
     interaction = await (client as any).interactions.create({
-      agent: DEEP_RESEARCH_AGENT,
       input: researchPrompt,
+      agent: DEEP_RESEARCH_AGENT,
       background: true,
-      store: true,
     });
-    console.log(`[Run ${runId}] Deep Research Task Started. Interaction: ${interaction.name || interaction.id}`);
+    console.log(`[Run ${runId}] Deep Research Task Started. Interaction ID: ${interaction.id}`);
   } catch (error) {
     console.error(`[Run ${runId}] Failed to create Deep Research interaction:`, error);
     throw new Error(`Deep Research APIの起動に失敗しました: ${error instanceof Error ? error.message : "Unknown error"}`);
@@ -300,9 +299,7 @@ ${context.previousHypotheses || "なし（初回実行）"}
     await sleep(pollInterval);
 
     try {
-      const currentStatus = await (client as any).interactions.get({
-        id: interaction.id || interaction.name
-      });
+      const currentStatus = await (client as any).interactions.get(interaction.id);
 
       const status = currentStatus.status;
       console.log(`[Run ${runId}] Deep Research Status: ${status} (poll ${pollCount})`);
