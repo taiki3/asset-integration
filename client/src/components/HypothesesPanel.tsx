@@ -174,72 +174,74 @@ export function HypothesesPanel({ hypotheses, onDelete }: HypothesesPanelProps) 
   );
 
   const TableView = () => (
-    <TableComponent>
-      <TableHeader>
-        <TableRow>
-          <TableHead className="w-[40px]">No.</TableHead>
-          <TableHead>タイトル</TableHead>
-          <TableHead className="w-[100px]">業界</TableHead>
-          <TableHead className="w-[100px]">分野</TableHead>
-          <TableHead className="w-[100px]">科学判定</TableHead>
-          <TableHead className="w-[100px]">戦略判定</TableHead>
-          <TableHead className="w-[60px]">スコア</TableHead>
-          <TableHead className="w-[90px]">作成日</TableHead>
-          <TableHead className="w-[40px]"></TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {hypotheses.map((hypothesis) => (
-          <TableRow
-            key={hypothesis.id}
-            className="cursor-pointer hover-elevate"
-            onClick={() => handleHypothesisClick(hypothesis)}
-            data-testid={`hypothesis-row-${hypothesis.id}`}
-          >
-            <TableCell className="font-mono text-xs">{hypothesis.hypothesisNumber}</TableCell>
-            <TableCell className="font-medium text-sm max-w-[300px] truncate">
-              {hypothesis.title}
-            </TableCell>
-            <TableCell className="text-xs">{hypothesis.industry || "-"}</TableCell>
-            <TableCell className="text-xs">{hypothesis.field || "-"}</TableCell>
-            <TableCell>
-              {hypothesis.scientificJudgment && (
-                <Badge
-                  variant={getJudgmentBadgeVariant(hypothesis.scientificJudgment)}
-                  className="text-xs"
-                >
-                  {hypothesis.scientificJudgment}
-                </Badge>
-              )}
-            </TableCell>
-            <TableCell>
-              {hypothesis.strategicJudgment && (
-                <Badge
-                  variant={getJudgmentBadgeVariant(hypothesis.strategicJudgment)}
-                  className="text-xs"
-                >
-                  {hypothesis.strategicJudgment}
-                </Badge>
-              )}
-            </TableCell>
-            <TableCell className="font-mono text-xs">{hypothesis.totalScore || "-"}</TableCell>
-            <TableCell className="text-xs text-muted-foreground">
-              {format(new Date(hypothesis.createdAt), "MM/dd")}
-            </TableCell>
-            <TableCell>
-              <Button
-                size="icon"
-                variant="ghost"
-                onClick={(e) => handleDelete(hypothesis.id, e)}
-                data-testid={`button-delete-hypothesis-table-${hypothesis.id}`}
-              >
-                <Trash2 className="h-4 w-4 text-muted-foreground" />
-              </Button>
-            </TableCell>
+    <div className="overflow-x-auto">
+      <TableComponent>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="w-[40px]">No.</TableHead>
+            <TableHead>タイトル</TableHead>
+            <TableHead className="w-[100px]">業界</TableHead>
+            <TableHead className="w-[100px]">分野</TableHead>
+            <TableHead className="w-[100px]">科学判定</TableHead>
+            <TableHead className="w-[100px]">戦略判定</TableHead>
+            <TableHead className="w-[60px]">スコア</TableHead>
+            <TableHead className="w-[90px]">作成日</TableHead>
+            <TableHead className="w-[40px]"></TableHead>
           </TableRow>
-        ))}
-      </TableBody>
-    </TableComponent>
+        </TableHeader>
+        <TableBody>
+          {hypotheses.map((hypothesis) => (
+            <TableRow
+              key={hypothesis.id}
+              className="cursor-pointer hover-elevate"
+              onClick={() => handleHypothesisClick(hypothesis)}
+              data-testid={`hypothesis-row-${hypothesis.id}`}
+            >
+              <TableCell className="font-mono text-xs">{hypothesis.hypothesisNumber}</TableCell>
+              <TableCell className="font-medium text-sm max-w-[300px] truncate">
+                {hypothesis.title}
+              </TableCell>
+              <TableCell className="text-xs">{hypothesis.industry || "-"}</TableCell>
+              <TableCell className="text-xs">{hypothesis.field || "-"}</TableCell>
+              <TableCell>
+                {hypothesis.scientificJudgment && (
+                  <Badge
+                    variant={getJudgmentBadgeVariant(hypothesis.scientificJudgment)}
+                    className="text-xs"
+                  >
+                    {hypothesis.scientificJudgment}
+                  </Badge>
+                )}
+              </TableCell>
+              <TableCell>
+                {hypothesis.strategicJudgment && (
+                  <Badge
+                    variant={getJudgmentBadgeVariant(hypothesis.strategicJudgment)}
+                    className="text-xs"
+                  >
+                    {hypothesis.strategicJudgment}
+                  </Badge>
+                )}
+              </TableCell>
+              <TableCell className="font-mono text-xs">{hypothesis.totalScore || "-"}</TableCell>
+              <TableCell className="text-xs text-muted-foreground">
+                {format(new Date(hypothesis.createdAt), "MM/dd")}
+              </TableCell>
+              <TableCell>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  onClick={(e) => handleDelete(hypothesis.id, e)}
+                  data-testid={`button-delete-hypothesis-table-${hypothesis.id}`}
+                >
+                  <Trash2 className="h-4 w-4 text-muted-foreground" />
+                </Button>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </TableComponent>
+    </div>
   );
 
   return (
