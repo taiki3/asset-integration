@@ -49,11 +49,32 @@ export const hypothesisRuns = pgTable("hypothesis_runs", {
   completedAt: timestamp("completed_at"),
 });
 
+// Hypotheses - Stored hypotheses from completed runs for deduplication
+export const hypotheses = pgTable("hypotheses", {
+  id: serial("id").primaryKey(),
+  projectId: integer("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  runId: integer("run_id").references(() => hypothesisRuns.id, { onDelete: "set null" }),
+  hypothesisNumber: integer("hypothesis_number").notNull(),
+  title: text("title").notNull(),
+  industry: text("industry"),
+  field: text("field"),
+  stage: text("stage"), // 素材が活躍する舞台
+  role: text("role"), // 素材の役割
+  summary: text("summary"), // 事業仮説概要
+  customerProblem: text("customer_problem"), // 顧客の解決不能な課題
+  scientificJudgment: text("scientific_judgment"), // 科学×経済判定
+  totalScore: integer("total_score"),
+  strategicJudgment: text("strategic_judgment"), // 戦略判定
+  fullData: jsonb("full_data"), // Complete row data from Step5
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
 // ============= RELATIONS (declared after tables) =============
 
 export const projectsRelations = relations(projects, ({ many }) => ({
   resources: many(resources),
   hypothesisRuns: many(hypothesisRuns),
+  hypotheses: many(hypotheses),
 }));
 
 export const resourcesRelations = relations(resources, ({ one }) => ({
@@ -63,7 +84,7 @@ export const resourcesRelations = relations(resources, ({ one }) => ({
   }),
 }));
 
-export const hypothesisRunsRelations = relations(hypothesisRuns, ({ one }) => ({
+export const hypothesisRunsRelations = relations(hypothesisRuns, ({ one, many }) => ({
   project: one(projects, {
     fields: [hypothesisRuns.projectId],
     references: [projects.id],
@@ -75,6 +96,18 @@ export const hypothesisRunsRelations = relations(hypothesisRuns, ({ one }) => ({
   technicalAssets: one(resources, {
     fields: [hypothesisRuns.technicalAssetsId],
     references: [resources.id],
+  }),
+  hypotheses: many(hypotheses),
+}));
+
+export const hypothesesRelations = relations(hypotheses, ({ one }) => ({
+  project: one(projects, {
+    fields: [hypotheses.projectId],
+    references: [projects.id],
+  }),
+  run: one(hypothesisRuns, {
+    fields: [hypotheses.runId],
+    references: [hypothesisRuns.id],
   }),
 }));
 
@@ -109,6 +142,11 @@ export const insertHypothesisRunSchema = createInsertSchema(hypothesisRuns).omit
   status: true,
 });
 
+export const insertHypothesisSchema = createInsertSchema(hypotheses).omit({
+  id: true,
+  createdAt: true,
+});
+
 // ============= TYPES =============
 
 export type User = typeof users.$inferSelect;
@@ -119,6 +157,8 @@ export type Resource = typeof resources.$inferSelect;
 export type InsertResource = z.infer<typeof insertResourceSchema>;
 export type HypothesisRun = typeof hypothesisRuns.$inferSelect;
 export type InsertHypothesisRun = z.infer<typeof insertHypothesisRunSchema>;
+export type Hypothesis = typeof hypotheses.$inferSelect;
+export type InsertHypothesis = z.infer<typeof insertHypothesisSchema>;
 
 // Re-export chat models for Gemini integration
 export * from "./models/chat";

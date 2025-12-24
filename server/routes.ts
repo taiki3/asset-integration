@@ -144,6 +144,29 @@ export async function registerRoutes(
     }
   });
 
+  // Hypotheses
+  app.get("/api/projects/:projectId/hypotheses", async (req, res) => {
+    try {
+      const projectId = parseInt(req.params.projectId);
+      const hypotheses = await storage.getHypothesesByProject(projectId);
+      res.json(hypotheses);
+    } catch (error) {
+      console.error("Error fetching hypotheses:", error);
+      res.status(500).json({ error: "Failed to fetch hypotheses" });
+    }
+  });
+
+  app.delete("/api/hypotheses/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      await storage.deleteHypothesis(id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting hypothesis:", error);
+      res.status(500).json({ error: "Failed to delete hypothesis" });
+    }
+  });
+
   // Download endpoints
   app.get("/api/runs/:id/download", async (req, res) => {
     try {

@@ -5,9 +5,12 @@ import {
   type InsertResource,
   type HypothesisRun,
   type InsertHypothesisRun,
+  type Hypothesis,
+  type InsertHypothesis,
   projects,
   resources,
   hypothesisRuns,
+  hypotheses,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc } from "drizzle-orm";
@@ -30,6 +33,12 @@ export interface IStorage {
   getRun(id: number): Promise<HypothesisRun | undefined>;
   createRun(run: InsertHypothesisRun): Promise<HypothesisRun>;
   updateRun(id: number, updates: Partial<HypothesisRun>): Promise<HypothesisRun | undefined>;
+
+  // Hypotheses
+  getHypothesesByProject(projectId: number): Promise<Hypothesis[]>;
+  createHypothesis(hypothesis: InsertHypothesis): Promise<Hypothesis>;
+  createHypotheses(hypothesesData: InsertHypothesis[]): Promise<Hypothesis[]>;
+  deleteHypothesis(id: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -89,6 +98,26 @@ export class DatabaseStorage implements IStorage {
   async updateRun(id: number, updates: Partial<HypothesisRun>): Promise<HypothesisRun | undefined> {
     const [updated] = await db.update(hypothesisRuns).set(updates).where(eq(hypothesisRuns.id, id)).returning();
     return updated;
+  }
+
+  // Hypotheses
+  async getHypothesesByProject(projectId: number): Promise<Hypothesis[]> {
+    return db.select().from(hypotheses).where(eq(hypotheses.projectId, projectId)).orderBy(desc(hypotheses.createdAt));
+  }
+
+  async createHypothesis(hypothesis: InsertHypothesis): Promise<Hypothesis> {
+    const [created] = await db.insert(hypotheses).values(hypothesis).returning();
+    return created;
+  }
+
+  async createHypotheses(hypothesesData: InsertHypothesis[]): Promise<Hypothesis[]> {
+    if (hypothesesData.length === 0) return [];
+    const created = await db.insert(hypotheses).values(hypothesesData).returning();
+    return created;
+  }
+
+  async deleteHypothesis(id: number): Promise<void> {
+    await db.delete(hypotheses).where(eq(hypotheses.id, id));
   }
 }
 
