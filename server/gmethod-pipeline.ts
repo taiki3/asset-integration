@@ -270,21 +270,25 @@ ${context.previousHypotheses || "なし（初回実行）"}
   
   let interactionId: string;
   try {
+    const requestBody = {
+      input: researchPrompt,
+      agent: DEEP_RESEARCH_AGENT,
+      background: true,
+    };
+    console.log(`[Run ${runId}] Deep Research Request Body:`, JSON.stringify(requestBody, null, 2).substring(0, 500));
+    
     const createResponse = await fetch(`${baseUrl}/interactions`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "x-goog-api-key": apiKey,
       },
-      body: JSON.stringify({
-        input: researchPrompt,
-        agent: DEEP_RESEARCH_AGENT,
-        background: true,
-      }),
+      body: JSON.stringify(requestBody),
     });
 
     if (!createResponse.ok) {
       const errorText = await createResponse.text();
+      console.error(`[Run ${runId}] Deep Research API Error Response:`, errorText);
       throw new Error(`${createResponse.status} ${errorText}`);
     }
 
