@@ -404,19 +404,25 @@ ${synthesisPrompt}
   };
 }
 
+interface ValidationResultWithAction extends ValidationResult {
+  action: "continue" | "retry" | "error";
+  adjustedHypotheses?: ExtractedHypothesis[];
+}
+
 async function validateHypotheses(
   report: string, 
   expectedCount: number,
   runId: number
-): Promise<ValidationResult> {
+): Promise<ValidationResultWithAction> {
   const extractionPrompt = EXTRACTION_PROMPT.replace("{REPORT}", report);
   const extractionResult = await generateWithFlash(extractionPrompt);
   
-  const result: ValidationResult = {
+  const result: ValidationResultWithAction = {
     hypothesisCount: 0,
     isValid: false,
     errors: [],
     extractedHypotheses: [],
+    action: "continue",
   };
 
   try {
@@ -427,11 +433,22 @@ async function validateHypotheses(
       result.hypothesisCount = hypotheses.length;
       result.extractedHypotheses = hypotheses;
 
-      if (hypotheses.length !== expectedCount) {
-        result.errors.push(`仮説数が期待値と異なります（期待: ${expectedCount}, 実際: ${hypotheses.length}）`);
+      if (hypotheses.length > expectedCount) {
+        console.log(`[Run ${runId}] Too many hypotheses (${hypotheses.length} > ${expectedCount}), truncating to top ${expectedCount}`);
+        result.adjustedHypotheses = hypotheses.slice(0, expectedCount);
+        result.hypothesisCount = expectedCount;
+        result.errors.push(`仮説数が多いため上位${expectedCount}件を採用しました（生成: ${hypotheses.length}件）`);
+        result.action = "continue";
+      } else if (hypotheses.length < expectedCount) {
+        console.log(`[Run ${runId}] Too few hypotheses (${hypotheses.length} < ${expectedCount}), needs retry`);
+        result.errors.push(`仮説数が不足しています（期待: ${expectedCount}, 実際: ${hypotheses.length}）`);
+        result.action = "retry";
+      } else {
+        result.adjustedHypotheses = hypotheses;
       }
 
-      hypotheses.forEach((h: ExtractedHypothesis, i: number) => {
+      const targetHypotheses = result.adjustedHypotheses || hypotheses;
+      targetHypotheses.forEach((h: ExtractedHypothesis, i: number) => {
         if (!h.title || h.title.trim() === "") {
           result.errors.push(`仮説${i + 1}: タイトルが空です`);
         }
@@ -446,13 +463,16 @@ async function validateHypotheses(
         }
       });
 
-      result.isValid = result.errors.length === 0;
+      const countErrors = result.errors.filter(e => e.includes("仮説数")).length;
+      const otherErrors = result.errors.length - countErrors;
+      result.isValid = otherErrors === 0 && result.action === "continue";
     }
   } catch (e) {
     result.errors.push("仮説の抽出に失敗しました");
+    result.action = "error";
   }
 
-  console.log(`[Run ${runId}] Validation result: ${result.isValid ? "PASS" : "FAIL"} (${result.errors.length} errors)`);
+  console.log(`[Run ${runId}] Validation result: ${result.isValid ? "PASS" : "FAIL"} (action: ${result.action}, ${result.errors.length} errors)`);
   if (result.errors.length > 0) {
     console.log(`[Run ${runId}] Validation errors:`, result.errors.slice(0, 5));
   }
@@ -562,6 +582,58 @@ async function getPreviousHypothesesSummary(projectId: number): Promise<string> 
   return summaryLines.join("\n\n");
 }
 
+interface Step2ResultWithRetry {
+  report: string;
+  searchQueries: string[];
+  iterationCount: number;
+  validationResult: ValidationResultWithAction;
+  retried: boolean;
+}
+
+async function executeStep2WithRetry(
+  context: PipelineContext,
+  runId: number
+): Promise<Step2ResultWithRetry> {
+  console.log(`[Run ${runId}] Starting Step 2 (Deep Research)...`);
+  let result = await executeDeepResearchStep2(context, runId);
+  let retried = false;
+
+  const validationResult = result.validationResult as ValidationResultWithAction;
+
+  if (validationResult.action === "retry") {
+    console.log(`[Run ${runId}] Hypothesis count insufficient, retrying Step 2...`);
+    retried = true;
+    
+    result = await executeDeepResearchStep2(context, runId);
+    const retryValidation = result.validationResult as ValidationResultWithAction;
+    
+    if (retryValidation.action === "retry") {
+      console.error(`[Run ${runId}] Retry failed: still insufficient hypotheses`);
+      throw new Error(`仮説数が不足しています。リトライ後も期待数（${context.hypothesisCount}件）を満たせませんでした（実際: ${retryValidation.hypothesisCount}件）`);
+    }
+    
+    return {
+      report: result.report,
+      searchQueries: result.searchQueries,
+      iterationCount: result.iterationCount,
+      validationResult: retryValidation,
+      retried,
+    };
+  }
+
+  if (validationResult.action === "error") {
+    throw new Error(`仮説の抽出に失敗しました: ${validationResult.errors.join("; ")}`);
+  }
+
+  return {
+    report: result.report,
+    searchQueries: result.searchQueries,
+    iterationCount: result.iterationCount,
+    validationResult,
+    retried,
+  };
+}
+
 export async function executeGMethodPipeline(runId: number): Promise<void> {
   try {
     if (!checkAIConfiguration()) {
@@ -595,8 +667,7 @@ export async function executeGMethodPipeline(runId: number): Promise<void> {
 
     await storage.updateRun(runId, { status: "running", currentStep: 2 });
 
-    console.log(`[Run ${runId}] Starting Step 2 (Deep Research)...`);
-    const deepResearchResult = await executeDeepResearchStep2(context, runId);
+    let deepResearchResult = await executeStep2WithRetry(context, runId);
     context.step2Output = deepResearchResult.report;
     
     const validationMetadata = {
@@ -604,8 +675,9 @@ export async function executeGMethodPipeline(runId: number): Promise<void> {
       iterationCount: deepResearchResult.iterationCount,
       validation: deepResearchResult.validationResult,
       validationPassed: deepResearchResult.validationResult.isValid,
+      retried: deepResearchResult.retried,
     };
-    console.log(`[Run ${runId}] Step 2 completed: ${deepResearchResult.iterationCount} iterations, ${deepResearchResult.searchQueries.length} queries`);
+    console.log(`[Run ${runId}] Step 2 completed: ${deepResearchResult.iterationCount} iterations, ${deepResearchResult.searchQueries.length} queries${deepResearchResult.retried ? " (retried)" : ""}`);
     
     if (!deepResearchResult.validationResult.isValid) {
       const warningMessage = `品質検証警告: ${deepResearchResult.validationResult.errors.slice(0, 3).join("; ")}`;
