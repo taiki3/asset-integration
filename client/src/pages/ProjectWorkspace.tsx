@@ -43,6 +43,12 @@ export default function ProjectWorkspace({ projectId }: ProjectWorkspaceProps) {
 
   const { data: hypotheses = [], isLoading: hypothesesLoading } = useQuery<Hypothesis[]>({
     queryKey: ["/api/projects", id, "hypotheses"],
+    refetchInterval: (query) => {
+      if (runs.some((r) => r.status === "running")) {
+        return 5000;
+      }
+      return false;
+    },
   });
 
   const addResourceMutation = useMutation({
