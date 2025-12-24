@@ -5,27 +5,14 @@ import type { InsertHypothesis } from "@shared/schema";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
+import { buildInstructionDocument, waitForDeepResearchRateLimit as sharedWaitForRateLimit } from "./deep-research";
 
 const MODEL_PRO = "gemini-3-pro-preview";
 const MODEL_FLASH = "gemini-3-flash-preview";
 const DEEP_RESEARCH_AGENT = "deep-research-pro-preview-12-2025";
 
-// Deep Research rate limiting: 1 request per minute
-const DEEP_RESEARCH_MIN_INTERVAL_MS = 60 * 1000; // 60 seconds
-let lastDeepResearchRequestTime: number = 0;
-
-async function waitForDeepResearchRateLimit(): Promise<void> {
-  const now = Date.now();
-  const timeSinceLastRequest = now - lastDeepResearchRequestTime;
-  
-  if (lastDeepResearchRequestTime > 0 && timeSinceLastRequest < DEEP_RESEARCH_MIN_INTERVAL_MS) {
-    const waitTime = DEEP_RESEARCH_MIN_INTERVAL_MS - timeSinceLastRequest;
-    console.log(`[Rate Limit] Waiting ${Math.ceil(waitTime / 1000)}s before next Deep Research request...`);
-    await sleep(waitTime);
-  }
-  
-  lastDeepResearchRequestTime = Date.now();
-}
+// Deep Research rate limiting is now handled by shared module (deep-research.ts)
+// Using sharedWaitForRateLimit imported from "./deep-research"
 
 function checkAIConfiguration(): boolean {
   return !!process.env.GEMINI_API_KEY;
@@ -349,36 +336,21 @@ async function executeDeepResearchStep2(context: PipelineContext, runId: number)
       console.log(`[Run ${runId}] Uploaded previous hypotheses`);
     }
 
+    // Upload task instructions as a file (CRITICAL: keeps prompt short to avoid 400 error)
+    const taskInstructions = buildInstructionDocument(context.hypothesisCount, !!context.previousHypotheses);
+    await uploadTextToFileSearchStore(
+      fileSearchStoreName,
+      taskInstructions,
+      "task_instructions"
+    );
+    console.log(`[Run ${runId}] Uploaded task instructions (${taskInstructions.length} chars)`);
+
     stepTimings["file_upload"] = Date.now() - startTime;
 
-    const researchPrompt = `あなたは事業仮説を生成するための専門リサーチャーです。
-
-添付されたファイルを参照してください：
-- target_specification: ターゲット市場・分野の仕様書
-- technical_assets: 利用可能な技術資産のリスト
-- previous_hypotheses: 過去に生成した仮説（重複回避用、存在する場合）
-
-【タスク】
-添付された「technical_assets」の技術資産を分析し、「target_specification」で指定された市場において、現在のトレンドと照らし合わせて、${context.hypothesisCount}件の新しい事業仮説を生成してください。
-
-【各仮説に必要な要素】
-1. 仮説タイトル: 具体的で分かりやすいタイトル
-2. 業界・分野: 対象となる業界と分野
-3. 事業仮説概要: 事業の概要説明
-4. 顧客の解決不能な課題: 顧客が従来技術では解決できなかった物理的トレードオフ
-5. 素材が活躍する舞台: 技術がどのような場面で活用されるか
-6. 素材の役割: 技術がどのようにトレードオフを解決するか
-
-【条件】
-1. 技術的な実現可能性が高いこと
-2. 成長市場であること
-3. 競合他社がまだ参入していないニッチ領域であること
-4. 過去に生成した仮説と重複しないこと
-
-【重要】
-- 調査した情報源と根拠を明記してください
-- 具体的な市場規模や成長率などの数値データがあれば含めてください
-- 各仮説について、なぜその技術資産が競争優位性を持つのか説明してください`;
+    // CRITICAL: Prompt must be ~65 chars or less to avoid 400 error
+    // Detailed instructions are in the uploaded task_instructions file
+    const researchPrompt = "task_instructionsの指示に従い事業仮説を生成してください。";
+    console.log(`[Run ${runId}] Short prompt: "${researchPrompt}" (${researchPrompt.length} chars)`);
 
     await updateProgress(runId, { 
       currentPhase: "deep_research_starting", 
@@ -392,8 +364,8 @@ async function executeDeepResearchStep2(context: PipelineContext, runId: number)
     console.log(`[Run ${runId}] Starting Deep Research with File Search Store: ${fileSearchStoreName}`);
     console.log(`[Run ${runId}] Prompt length: ${researchPrompt.length} chars`);
     
-    // Wait for rate limit before making Deep Research request
-    await waitForDeepResearchRateLimit();
+    // Wait for rate limit before making Deep Research request (using shared module)
+    await sharedWaitForRateLimit();
     
     let interaction;
     try {
