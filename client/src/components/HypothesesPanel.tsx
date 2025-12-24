@@ -174,20 +174,20 @@ export function HypothesesPanel({ hypotheses, onDelete }: HypothesesPanelProps) 
   );
 
   const TableView = () => (
-    <div className="overflow-x-auto">
-      <TableComponent>
+    <div className="w-full overflow-x-auto border rounded-md">
+      <TableComponent className="min-w-[900px]">
         <TableHeader>
           <TableRow>
-            <TableHead className="w-[40px]">No.</TableHead>
-            <TableHead>タイトル</TableHead>
-            <TableHead className="w-[80px]">業界</TableHead>
-            <TableHead className="w-[80px]">分野</TableHead>
-            <TableHead className="w-[100px]">科学×経済判定</TableHead>
-            <TableHead className="w-[80px]">科学×経済スコア</TableHead>
-            <TableHead className="w-[100px]">キャッチアップ判定</TableHead>
-            <TableHead className="w-[100px]">戦略勝算レベル</TableHead>
-            <TableHead className="w-[80px]">キャッチアップスコア</TableHead>
-            <TableHead className="w-[40px]"></TableHead>
+            <TableHead className="w-[50px] whitespace-nowrap">No.</TableHead>
+            <TableHead className="min-w-[200px]">タイトル</TableHead>
+            <TableHead className="w-[80px] whitespace-nowrap">業界</TableHead>
+            <TableHead className="w-[80px] whitespace-nowrap">分野</TableHead>
+            <TableHead className="w-[110px] whitespace-nowrap">科学×経済判定</TableHead>
+            <TableHead className="w-[70px] whitespace-nowrap text-center">スコア</TableHead>
+            <TableHead className="w-[110px] whitespace-nowrap">キャッチアップ</TableHead>
+            <TableHead className="w-[100px] whitespace-nowrap">勝算レベル</TableHead>
+            <TableHead className="w-[70px] whitespace-nowrap text-center">スコア</TableHead>
+            <TableHead className="w-[50px]"></TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -199,16 +199,16 @@ export function HypothesesPanel({ hypotheses, onDelete }: HypothesesPanelProps) 
               data-testid={`hypothesis-row-${hypothesis.id}`}
             >
               <TableCell className="font-mono text-xs">{hypothesis.hypothesisNumber}</TableCell>
-              <TableCell className="font-medium text-sm max-w-[250px] truncate">
-                {hypothesis.title}
+              <TableCell className="font-medium text-sm">
+                <span className="line-clamp-2">{hypothesis.title}</span>
               </TableCell>
-              <TableCell className="text-xs">{hypothesis.industry || "-"}</TableCell>
-              <TableCell className="text-xs">{hypothesis.field || "-"}</TableCell>
+              <TableCell className="text-xs whitespace-nowrap">{hypothesis.industry || "-"}</TableCell>
+              <TableCell className="text-xs whitespace-nowrap">{hypothesis.field || "-"}</TableCell>
               <TableCell>
                 {hypothesis.scientificJudgment && (
                   <Badge
                     variant={getJudgmentBadgeVariant(hypothesis.scientificJudgment)}
-                    className="text-xs"
+                    className="text-xs whitespace-nowrap"
                   >
                     {hypothesis.scientificJudgment}
                   </Badge>
@@ -221,13 +221,13 @@ export function HypothesesPanel({ hypotheses, onDelete }: HypothesesPanelProps) 
                 {hypothesis.strategicJudgment && (
                   <Badge
                     variant={getJudgmentBadgeVariant(hypothesis.strategicJudgment)}
-                    className="text-xs"
+                    className="text-xs whitespace-nowrap"
                   >
                     {hypothesis.strategicJudgment}
                   </Badge>
                 )}
               </TableCell>
-              <TableCell className="text-xs">
+              <TableCell className="text-xs whitespace-nowrap">
                 {hypothesis.strategicWinLevel || "-"}
               </TableCell>
               <TableCell className="font-mono text-xs text-center">
@@ -324,9 +324,15 @@ export function HypothesesPanel({ hypotheses, onDelete }: HypothesesPanelProps) 
                     CSVエクスポート
                   </Button>
                 </div>
-                <ScrollArea className="max-h-[300px]">
-                  {viewMode === "card" ? <CardView /> : <TableView />}
-                </ScrollArea>
+                {viewMode === "card" ? (
+                  <ScrollArea className="max-h-[400px]">
+                    <CardView />
+                  </ScrollArea>
+                ) : (
+                  <div className="max-h-[400px] overflow-y-auto">
+                    <TableView />
+                  </div>
+                )}
               </>
             )}
           </CardContent>
