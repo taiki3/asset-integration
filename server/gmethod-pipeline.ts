@@ -5,14 +5,34 @@ import type { InsertHypothesis } from "@shared/schema";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
-import { buildInstructionDocument, waitForDeepResearchRateLimit as sharedWaitForRateLimit } from "./deep-research";
+import { waitForDeepResearchRateLimit as sharedWaitForRateLimit } from "./deep-research";
 
 const MODEL_PRO = "gemini-3-pro-preview";
 const MODEL_FLASH = "gemini-3-flash-preview";
 const DEEP_RESEARCH_AGENT = "deep-research-pro-preview-12-2025";
 
 // Deep Research rate limiting is now handled by shared module (deep-research.ts)
-// Using sharedWaitForRateLimit imported from "./deep-research"
+
+// Build STEP2 prompt with file references for Deep Research
+function buildStep2Prompt(
+  hypothesisCount: number,
+  targetSpecFile: string,
+  technicalAssetsFile: string,
+  previousHypothesesFile?: string
+): string {
+  let prompt = STEP2_PROMPT
+    .replace(/\{HYPOTHESIS_COUNT\}/g, hypothesisCount.toString())
+    .replace("{TARGET_SPEC}", `添付ファイル「${targetSpecFile}」の内容を参照してください。`)
+    .replace("{TECHNICAL_ASSETS}", `添付ファイル「${technicalAssetsFile}」の内容を参照してください。`);
+  
+  if (previousHypothesesFile) {
+    prompt = prompt.replace("{PREVIOUS_HYPOTHESES}", `添付ファイル「${previousHypothesesFile}」の内容を参照してください。`);
+  } else {
+    prompt = prompt.replace("{PREVIOUS_HYPOTHESES}", "なし（初回実行）");
+  }
+  
+  return prompt;
+}
 
 function checkAIConfiguration(): boolean {
   return !!process.env.GEMINI_API_KEY;
@@ -338,12 +358,15 @@ async function executeDeepResearchStep2(context: PipelineContext, runId: number)
 
     stepTimings["file_upload"] = Date.now() - startTime;
 
-    // CRITICAL: Prompt must be under ~200 bytes to avoid 400 error with file_search
-    // Direct instructions in prompt (no RAG dependency for instructions)
-    const hypothesisCount = context.hypothesisCount;
-    const researchPrompt = `target_specificationとtechnical_assetsを分析し、事業仮説を${hypothesisCount}件生成。各仮説はタイトル、業界、概要を含むJSON配列で出力。`;
-    const promptBytes = Buffer.byteLength(researchPrompt, 'utf-8');
-    console.log(`[Run ${runId}] Prompt: "${researchPrompt}" (${researchPrompt.length} chars, ${promptBytes} bytes)`);
+    // Build full research prompt with complete instructions
+    // (Confirmed: longer prompts work with file_search - previous 400 error was due to other factors)
+    const researchPrompt = buildStep2Prompt(
+      context.hypothesisCount,
+      "target_specification", // Reference to uploaded file
+      "technical_assets",     // Reference to uploaded file
+      context.previousHypotheses ? "previous_hypotheses" : undefined
+    );
+    console.log(`[Run ${runId}] Prompt: ${researchPrompt.length} chars, ${Buffer.byteLength(researchPrompt, 'utf-8')} bytes`);
 
     await updateProgress(runId, { 
       currentPhase: "deep_research_starting", 
