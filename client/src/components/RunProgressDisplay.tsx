@@ -1,4 +1,5 @@
-import { Search, Brain, FileText, CheckCircle, Loader2, Clock } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Search, Brain, FileText, Loader2, Clock, Timer } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
@@ -10,6 +11,7 @@ interface ProgressInfo {
   currentIteration?: number;
   maxIterations?: number;
   stepTimings?: { [key: string]: number };
+  stepStartTime?: number;
 }
 
 interface RunProgressDisplayProps {
@@ -18,6 +20,7 @@ interface RunProgressDisplayProps {
   totalLoops?: number;
   progressInfo?: ProgressInfo;
   status: string;
+  runCreatedAt?: string;
 }
 
 const formatTime = (ms: number): string => {
@@ -42,13 +45,44 @@ const stepLabels: { [key: number]: string } = {
   5: "Step 5: 統合",
 };
 
+const formatElapsedTime = (seconds: number): string => {
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  if (mins > 0) {
+    return `${mins}分${secs}秒`;
+  }
+  return `${secs}秒`;
+};
+
 export function RunProgressDisplay({
   currentStep,
   currentLoop = 1,
   totalLoops = 1,
   progressInfo,
   status,
+  runCreatedAt,
 }: RunProgressDisplayProps) {
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  
+  useEffect(() => {
+    if (status !== "running") {
+      setElapsedSeconds(0);
+      return;
+    }
+    
+    const startTime = progressInfo?.stepStartTime || (runCreatedAt ? new Date(runCreatedAt).getTime() : Date.now());
+    
+    const updateElapsed = () => {
+      const elapsed = Math.floor((Date.now() - startTime) / 1000);
+      setElapsedSeconds(elapsed);
+    };
+    
+    updateElapsed();
+    const interval = setInterval(updateElapsed, 1000);
+    
+    return () => clearInterval(interval);
+  }, [status, progressInfo?.stepStartTime, runCreatedAt, currentStep]);
+  
   if (status !== "running") return null;
 
   const phaseProgress = progressInfo?.currentPhase ? 
@@ -58,15 +92,21 @@ export function RunProgressDisplay({
   return (
     <Card className="border-primary/20 bg-primary/5">
       <CardHeader className="pb-3">
-        <CardTitle className="text-base font-medium flex items-center gap-2">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          実行中: {stepLabels[currentStep] || `Step ${currentStep}`}
-          {totalLoops > 1 && (
-            <Badge variant="secondary" className="ml-2">
-              ループ {currentLoop}/{totalLoops}
-            </Badge>
-          )}
-        </CardTitle>
+        <div className="flex items-center justify-between gap-2">
+          <CardTitle className="text-base font-medium flex items-center gap-2 flex-wrap">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            実行中: {stepLabels[currentStep] || `Step ${currentStep}`}
+            {totalLoops > 1 && (
+              <Badge variant="secondary">
+                ループ {currentLoop}/{totalLoops}
+              </Badge>
+            )}
+          </CardTitle>
+          <div className="flex items-center gap-1 text-sm font-mono text-muted-foreground">
+            <Timer className="h-4 w-4" />
+            <span data-testid="text-elapsed-time">{formatElapsedTime(elapsedSeconds)}</span>
+          </div>
+        </div>
       </CardHeader>
       <CardContent className="space-y-4">
         {currentStep === 2 && progressInfo && (

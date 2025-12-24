@@ -274,6 +274,7 @@ export default function ProjectWorkspace({ projectId }: ProjectWorkspaceProps) {
               totalLoops={runningRun.totalLoops || 1}
               progressInfo={runningRun.progressInfo as any}
               status={runningRun.status}
+              runCreatedAt={runningRun.createdAt instanceof Date ? runningRun.createdAt.toISOString() : runningRun.createdAt}
             />
           </div>
         )}

@@ -208,6 +208,7 @@ interface ProgressInfo {
   maxIterations?: number;
   stepTimings?: { [key: string]: number };
   phaseStartTime?: number;
+  stepStartTime?: number;
 }
 
 async function updateProgress(runId: number, progressInfo: ProgressInfo): Promise<void> {
@@ -227,6 +228,7 @@ async function executeDeepResearchStep2(context: PipelineContext, runId: number)
     currentIteration: 0, 
     maxIterations,
     stepTimings,
+    stepStartTime: planningStartTime,
   });
 
   console.log(`[Run ${runId}] Phase 1: Planning...`);
@@ -263,6 +265,7 @@ async function executeDeepResearchStep2(context: PipelineContext, runId: number)
     planningAnalysis,
     planningQueries: queries,
     stepTimings,
+    stepStartTime: planningStartTime,
   });
 
   while (iterationCount < maxIterations) {
@@ -276,6 +279,7 @@ async function executeDeepResearchStep2(context: PipelineContext, runId: number)
       planningAnalysis,
       planningQueries: searchQueries,
       stepTimings,
+      stepStartTime: planningStartTime,
     });
     
     console.log(`[Run ${runId}] Phase 2: Exploring (iteration ${iterationCount}/${maxIterations})...`);
@@ -297,6 +301,7 @@ async function executeDeepResearchStep2(context: PipelineContext, runId: number)
       planningAnalysis,
       planningQueries: searchQueries,
       stepTimings,
+      stepStartTime: planningStartTime,
     });
     
     console.log(`[Run ${runId}] Phase 3: Reasoning (iteration ${iterationCount}/${maxIterations})...`);
@@ -340,6 +345,7 @@ async function executeDeepResearchStep2(context: PipelineContext, runId: number)
     planningAnalysis,
     planningQueries: searchQueries,
     stepTimings,
+    stepStartTime: planningStartTime,
   });
   
   console.log(`[Run ${runId}] Phase 4: Synthesizing with Pro model...`);
@@ -373,6 +379,7 @@ ${synthesisPrompt}
     planningAnalysis,
     planningQueries: searchQueries,
     stepTimings,
+    stepStartTime: planningStartTime,
   });
   
   console.log(`[Run ${runId}] Post-process: Validating hypotheses...`);
@@ -386,6 +393,7 @@ ${synthesisPrompt}
     planningAnalysis,
     planningQueries: searchQueries,
     stepTimings,
+    stepStartTime: planningStartTime,
   });
 
   return {
