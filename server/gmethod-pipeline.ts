@@ -265,16 +265,32 @@ ${context.previousHypotheses || "なし（初回実行）"}
 - 具体的な市場規模や成長率などの数値データがあれば含めてください
 - 各仮説について、なぜその技術資産が競争優位性を持つのか説明してください`;
 
-  const client = getAIClient();
+  const apiKey = process.env.GEMINI_API_KEY!;
+  const baseUrl = "https://generativelanguage.googleapis.com/v1beta";
   
-  let interaction: any;
+  let interactionId: string;
   try {
-    interaction = await (client as any).interactions.create({
-      input: researchPrompt,
-      agent: DEEP_RESEARCH_AGENT,
-      background: true,
+    const createResponse = await fetch(`${baseUrl}/interactions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": apiKey,
+      },
+      body: JSON.stringify({
+        input: researchPrompt,
+        agent: DEEP_RESEARCH_AGENT,
+        background: true,
+      }),
     });
-    console.log(`[Run ${runId}] Deep Research Task Started. Interaction ID: ${interaction.id}`);
+
+    if (!createResponse.ok) {
+      const errorText = await createResponse.text();
+      throw new Error(`${createResponse.status} ${errorText}`);
+    }
+
+    const interaction = await createResponse.json();
+    interactionId = interaction.id;
+    console.log(`[Run ${runId}] Deep Research Task Started. Interaction ID: ${interactionId}`);
   } catch (error) {
     console.error(`[Run ${runId}] Failed to create Deep Research interaction:`, error);
     throw new Error(`Deep Research APIの起動に失敗しました: ${error instanceof Error ? error.message : "Unknown error"}`);
@@ -299,8 +315,19 @@ ${context.previousHypotheses || "なし（初回実行）"}
     await sleep(pollInterval);
 
     try {
-      const currentStatus = await (client as any).interactions.get(interaction.id);
+      const pollResponse = await fetch(`${baseUrl}/interactions/${interactionId}`, {
+        method: "GET",
+        headers: {
+          "x-goog-api-key": apiKey,
+        },
+      });
 
+      if (!pollResponse.ok) {
+        console.warn(`[Run ${runId}] Poll error: ${pollResponse.status}`);
+        continue;
+      }
+
+      const currentStatus = await pollResponse.json();
       const status = currentStatus.status;
       console.log(`[Run ${runId}] Deep Research Status: ${status} (poll ${pollCount})`);
 
@@ -313,14 +340,14 @@ ${context.previousHypotheses || "なし（初回実行）"}
         stepStartTime: startTime,
       });
 
-      if (status === "COMPLETED") {
+      if (status === "completed") {
         console.log(`[Run ${runId}] Deep Research Completed!`);
         const outputs = currentStatus.outputs || [];
         const finalOutput = outputs[outputs.length - 1];
         report = finalOutput?.text || "";
         stepTimings["deep_research"] = Date.now() - startTime;
         break;
-      } else if (status === "FAILED") {
+      } else if (status === "failed") {
         console.error(`[Run ${runId}] Deep Research Failed:`, currentStatus.error);
         throw new Error(`Deep Research が失敗しました: ${currentStatus.error || "Unknown error"}`);
       }
