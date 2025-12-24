@@ -4,14 +4,10 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { relations } from "drizzle-orm";
 
-// ============= TABLE DEFINITIONS (declared first) =============
+// Re-export auth models (users and sessions tables for Replit Auth)
+export * from "./models/auth";
 
-// Keep existing user schema for compatibility
-export const users = pgTable("users", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  username: text("username").notNull().unique(),
-  password: text("password").notNull(),
-});
+// ============= TABLE DEFINITIONS (declared first) =============
 
 // Projects - Top level management unit
 export const projects = pgTable("projects", {
@@ -113,11 +109,6 @@ export const hypothesesRelations = relations(hypotheses, ({ one }) => ({
 
 // ============= INSERT SCHEMAS =============
 
-export const insertUserSchema = createInsertSchema(users).pick({
-  username: true,
-  password: true,
-});
-
 export const insertProjectSchema = createInsertSchema(projects).omit({
   id: true,
   createdAt: true,
@@ -149,8 +140,6 @@ export const insertHypothesisSchema = createInsertSchema(hypotheses).omit({
 
 // ============= TYPES =============
 
-export type User = typeof users.$inferSelect;
-export type InsertUser = z.infer<typeof insertUserSchema>;
 export type Project = typeof projects.$inferSelect;
 export type InsertProject = z.infer<typeof insertProjectSchema>;
 export type Resource = typeof resources.$inferSelect;

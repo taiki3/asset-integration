@@ -31,6 +31,7 @@ const statusConfig = {
   running: { label: "処理中", icon: Loader2, variant: "default" as const, animate: true },
   completed: { label: "完了", icon: CheckCircle, variant: "default" as const, animate: false },
   error: { label: "エラー", icon: XCircle, variant: "destructive" as const, animate: false },
+  failed: { label: "失敗", icon: XCircle, variant: "destructive" as const, animate: false },
 };
 
 export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel }: HistoryPanelProps) {

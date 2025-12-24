@@ -1,15 +1,35 @@
-import type { Express } from "express";
+import type { Express, RequestHandler } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertProjectSchema, insertResourceSchema, insertHypothesisRunSchema } from "@shared/schema";
 import { executeGMethodPipeline } from "./gmethod-pipeline";
+import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
+
+// Domain restriction middleware - only allow @agc.com emails
+const requireAgcDomain: RequestHandler = (req, res, next) => {
+  const user = req.user as any;
+  const email = user?.claims?.email;
+  
+  if (!email || !email.endsWith("@agc.com")) {
+    return res.status(403).json({ 
+      error: "アクセスが拒否されました", 
+      message: "このアプリはagc.comドメインのメールアドレスでのみ利用可能です。" 
+    });
+  }
+  
+  next();
+};
 
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  // Projects CRUD
-  app.get("/api/projects", async (req, res) => {
+  // Setup auth BEFORE other routes
+  await setupAuth(app);
+  registerAuthRoutes(app);
+
+  // Projects CRUD (protected routes)
+  app.get("/api/projects", isAuthenticated, requireAgcDomain, async (req, res) => {
     try {
       const projects = await storage.getProjects();
       res.json(projects);
@@ -19,7 +39,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/projects/:id", async (req, res) => {
+  app.get("/api/projects/:id", isAuthenticated, requireAgcDomain, async (req, res) => {
     try {
       const id = parseInt(req.params.id);
       const project = await storage.getProject(id);
@@ -33,7 +53,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/projects", async (req, res) => {
+  app.post("/api/projects", isAuthenticated, requireAgcDomain, async (req, res) => {
     try {
       const result = insertProjectSchema.safeParse(req.body);
       if (!result.success) {
@@ -47,7 +67,7 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/projects/:id", async (req, res) => {
+  app.delete("/api/projects/:id", isAuthenticated, requireAgcDomain, async (req, res) => {
     try {
       const id = parseInt(req.params.id);
       await storage.deleteProject(id);
@@ -59,7 +79,7 @@ export async function registerRoutes(
   });
 
   // Resources CRUD
-  app.get("/api/projects/:projectId/resources", async (req, res) => {
+  app.get("/api/projects/:projectId/resources", isAuthenticated, requireAgcDomain, async (req, res) => {
     try {
       const projectId = parseInt(req.params.projectId);
       const resources = await storage.getResourcesByProject(projectId);
@@ -70,7 +90,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/projects/:projectId/resources", async (req, res) => {
+  app.post("/api/projects/:projectId/resources", isAuthenticated, requireAgcDomain, async (req, res) => {
     try {
       const projectId = parseInt(req.params.projectId);
       const result = insertResourceSchema.safeParse({ ...req.body, projectId });
@@ -85,7 +105,7 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/projects/:projectId/resources/:id", async (req, res) => {
+  app.delete("/api/projects/:projectId/resources/:id", isAuthenticated, requireAgcDomain, async (req, res) => {
     try {
       const id = parseInt(req.params.id);
       await storage.deleteResource(id);
@@ -97,7 +117,7 @@ export async function registerRoutes(
   });
 
   // Hypothesis Runs
-  app.get("/api/projects/:projectId/runs", async (req, res) => {
+  app.get("/api/projects/:projectId/runs", isAuthenticated, requireAgcDomain, async (req, res) => {
     try {
       const projectId = parseInt(req.params.projectId);
       const runs = await storage.getRunsByProject(projectId);
@@ -108,7 +128,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/projects/:projectId/runs", async (req, res) => {
+  app.post("/api/projects/:projectId/runs", isAuthenticated, requireAgcDomain, async (req, res) => {
     try {
       const projectId = parseInt(req.params.projectId);
       const result = insertHypothesisRunSchema.safeParse({ ...req.body, projectId });
@@ -130,7 +150,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/runs/:id", async (req, res) => {
+  app.get("/api/runs/:id", isAuthenticated, requireAgcDomain, async (req, res) => {
     try {
       const id = parseInt(req.params.id);
       const run = await storage.getRun(id);
@@ -145,7 +165,7 @@ export async function registerRoutes(
   });
 
   // Hypotheses
-  app.get("/api/projects/:projectId/hypotheses", async (req, res) => {
+  app.get("/api/projects/:projectId/hypotheses", isAuthenticated, requireAgcDomain, async (req, res) => {
     try {
       const projectId = parseInt(req.params.projectId);
       const hypotheses = await storage.getHypothesesByProject(projectId);
@@ -156,7 +176,7 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/hypotheses/:id", async (req, res) => {
+  app.delete("/api/hypotheses/:id", isAuthenticated, requireAgcDomain, async (req, res) => {
     try {
       const id = parseInt(req.params.id);
       await storage.deleteHypothesis(id);
@@ -168,7 +188,7 @@ export async function registerRoutes(
   });
 
   // Download endpoints
-  app.get("/api/runs/:id/download", async (req, res) => {
+  app.get("/api/runs/:id/download", isAuthenticated, requireAgcDomain, async (req, res) => {
     try {
       const id = parseInt(req.params.id);
       const format = req.query.format as string || "tsv";
