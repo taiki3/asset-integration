@@ -271,7 +271,7 @@ ${context.previousHypotheses || "なし（初回実行）"}
   try {
     interaction = await (client as any).interactions.create({
       agent: DEEP_RESEARCH_AGENT,
-      userContent: researchPrompt,
+      input: researchPrompt,
       background: true,
     });
     console.log(`[Run ${runId}] Deep Research Task Started. Interaction: ${interaction.name || interaction.id}`);
