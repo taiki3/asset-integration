@@ -26,20 +26,27 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { format } from "date-fns";
-import type { Hypothesis } from "@shared/schema";
+import type { Hypothesis, Resource } from "@shared/schema";
 
 interface HypothesesPanelProps {
   hypotheses: Hypothesis[];
+  resources: Resource[];
   onDelete: (id: number) => void;
 }
 
 type ViewMode = "card" | "table";
 
-export function HypothesesPanel({ hypotheses, onDelete }: HypothesesPanelProps) {
+export function HypothesesPanel({ hypotheses, resources, onDelete }: HypothesesPanelProps) {
   const [isOpen, setIsOpen] = useState(true);
   const [viewMode, setViewMode] = useState<ViewMode>("card");
   const [selectedHypothesis, setSelectedHypothesis] = useState<Hypothesis | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
+
+  const getResourceName = (resourceId: number | null): string => {
+    if (!resourceId) return "-";
+    const resource = resources.find((r) => r.id === resourceId);
+    return resource?.name || "(削除済み)";
+  };
 
   const handleHypothesisClick = (hypothesis: Hypothesis) => {
     setSelectedHypothesis(hypothesis);
@@ -175,11 +182,13 @@ export function HypothesesPanel({ hypotheses, onDelete }: HypothesesPanelProps) 
 
   const TableView = () => (
     <div className="w-full overflow-x-auto border rounded-md">
-      <TableComponent className="min-w-[900px]">
+      <TableComponent className="min-w-[1100px]">
         <TableHeader>
           <TableRow>
             <TableHead className="w-[50px] whitespace-nowrap">No.</TableHead>
             <TableHead className="min-w-[200px]">タイトル</TableHead>
+            <TableHead className="w-[120px] whitespace-nowrap">ターゲット</TableHead>
+            <TableHead className="w-[120px] whitespace-nowrap">アセット</TableHead>
             <TableHead className="w-[80px] whitespace-nowrap">業界</TableHead>
             <TableHead className="w-[80px] whitespace-nowrap">分野</TableHead>
             <TableHead className="w-[110px] whitespace-nowrap">科学×経済判定</TableHead>
@@ -201,6 +210,16 @@ export function HypothesesPanel({ hypotheses, onDelete }: HypothesesPanelProps) 
               <TableCell className="font-mono text-xs">{hypothesis.hypothesisNumber}</TableCell>
               <TableCell className="font-medium text-sm">
                 <span className="line-clamp-2">{hypothesis.title}</span>
+              </TableCell>
+              <TableCell className="text-xs">
+                <span className="line-clamp-1" title={getResourceName(hypothesis.targetSpecId)}>
+                  {getResourceName(hypothesis.targetSpecId)}
+                </span>
+              </TableCell>
+              <TableCell className="text-xs">
+                <span className="line-clamp-1" title={getResourceName(hypothesis.technicalAssetsId)}>
+                  {getResourceName(hypothesis.technicalAssetsId)}
+                </span>
               </TableCell>
               <TableCell className="text-xs whitespace-nowrap">{hypothesis.industry || "-"}</TableCell>
               <TableCell className="text-xs whitespace-nowrap">{hypothesis.field || "-"}</TableCell>

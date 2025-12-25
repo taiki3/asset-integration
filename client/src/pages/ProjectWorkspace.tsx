@@ -424,6 +424,7 @@ export default function ProjectWorkspace({ projectId }: ProjectWorkspaceProps) {
         <div className="mt-6">
           <HypothesesPanel
             hypotheses={hypotheses}
+            resources={resources}
             onDelete={handleDeleteHypothesis}
           />
         </div>

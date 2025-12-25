@@ -66,6 +66,8 @@ export const hypotheses = pgTable("hypotheses", {
   id: serial("id").primaryKey(),
   projectId: integer("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
   runId: integer("run_id").references(() => hypothesisRuns.id, { onDelete: "set null" }),
+  targetSpecId: integer("target_spec_id").references(() => resources.id, { onDelete: "set null" }),
+  technicalAssetsId: integer("technical_assets_id").references(() => resources.id, { onDelete: "set null" }),
   hypothesisNumber: integer("hypothesis_number").notNull(),
   title: text("title").notNull(),
   industry: text("industry"),
@@ -123,6 +125,14 @@ export const hypothesesRelations = relations(hypotheses, ({ one }) => ({
   run: one(hypothesisRuns, {
     fields: [hypotheses.runId],
     references: [hypothesisRuns.id],
+  }),
+  targetSpec: one(resources, {
+    fields: [hypotheses.targetSpecId],
+    references: [resources.id],
+  }),
+  technicalAssets: one(resources, {
+    fields: [hypotheses.technicalAssetsId],
+    references: [resources.id],
   }),
 }));
 

@@ -695,13 +695,13 @@ function extractHypothesesFromTSV(
   tsv: string,
   projectId: number,
   runId: number,
-  startNumber: number = 1
+  startNumber: number = 1,
+  targetSpecId?: number,
+  technicalAssetsId?: number
 ): InsertHypothesis[] {
   const data = parseTSVToJSON(tsv);
   
   return data.map((row, index): InsertHypothesis => {
-    // Use project-wide sequential numbering for consistent ordering
-    // The startNumber is the next available number in the project
     const hypothesisNumber = startNumber + index;
     
     const parseIntOrNull = (value: string | undefined): number | null => {
@@ -713,6 +713,8 @@ function extractHypothesesFromTSV(
     return {
       projectId,
       runId,
+      targetSpecId: targetSpecId ?? null,
+      technicalAssetsId: technicalAssetsId ?? null,
       hypothesisNumber,
       title: row["仮説タイトル"] || `仮説 ${hypothesisNumber}`,
       industry: row["業界"] || null,
@@ -958,7 +960,9 @@ export async function executeGMethodPipeline(runId: number, resumeFromStep?: num
         context.step5Output,
         run.projectId,
         runId,
-        nextHypothesisNumber
+        nextHypothesisNumber,
+        run.targetSpecId,
+        run.technicalAssetsId
       );
       
       if (hypothesesData.length > 0) {
