@@ -1,6 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
 import { storage } from "./storage";
-import { STEP2_PROMPT, STEP2_DEEP_RESEARCH_PROMPT, STEP2_1_DEEP_RESEARCH_PROMPT, STEP2_2_DEEP_RESEARCH_PROMPT, STEP3_PROMPT, STEP4_PROMPT, STEP5_PROMPT } from "./prompts";
+import { STEP2_PROMPT, STEP2_DEEP_RESEARCH_PROMPT, STEP2_1_DEEP_RESEARCH_PROMPT, STEP2_2_DEEP_RESEARCH_PROMPT, STEP2_3_MERGE_PROMPT, STEP2_3_SUMMARIZE_PROMPT, STEP3_PROMPT, STEP4_PROMPT, STEP5_PROMPT } from "./prompts";
 import type { InsertHypothesis } from "@shared/schema";
 import * as fs from "fs";
 import * as path from "path";
@@ -113,6 +113,32 @@ async function getDeepResearchPrompt2_2(): Promise<string> {
     console.log(`[Pipeline] Error fetching custom prompt for Step 2-2, using default`);
   }
   return STEP2_2_DEEP_RESEARCH_PROMPT;
+}
+
+async function getMergePrompt(): Promise<string> {
+  try {
+    const activePrompt = await storage.getActivePrompt(23);
+    if (activePrompt && activePrompt.content.trim()) {
+      console.log(`[Pipeline] Using custom prompt v${activePrompt.version} for Step 2-3 (Merge)`);
+      return activePrompt.content;
+    }
+  } catch (error) {
+    console.log(`[Pipeline] Error fetching custom prompt for Step 2-3, using default`);
+  }
+  return STEP2_3_MERGE_PROMPT;
+}
+
+async function getSummarizePrompt(): Promise<string> {
+  try {
+    const activePrompt = await storage.getActivePrompt(24);
+    if (activePrompt && activePrompt.content.trim()) {
+      console.log(`[Pipeline] Using custom prompt v${activePrompt.version} for Step 2-3 Summarize`);
+      return activePrompt.content;
+    }
+  } catch (error) {
+    console.log(`[Pipeline] Error fetching custom prompt for Step 2-3 Summarize, using default`);
+  }
+  return STEP2_3_SUMMARIZE_PROMPT;
 }
 
 function checkAIConfiguration(): boolean {
@@ -542,25 +568,10 @@ ${step2_1Output.substring(0, 20000)}`
 }
 
 // Summarize individual report to compact format for merging
-async function summarizeReportForMerge(report: string, hypothesisNum: number): Promise<string> {
-  const summarizePrompt = `以下の仮説レポートを、以下の構造で要約してください（800〜1200文字）：
-
-【入力レポート】
-${report.substring(0, 8000)}
-
-【出力形式】
-### 仮説${hypothesisNum}
-- タイトル: [仮説タイトル]
-- エグゼクティブサマリー: [100文字]
-- 市場・顧客: [顧客セグメント、市場規模]
-- Trade-off: [顧客のジレンマと素材必然性]
-- メカニズム: [Structure→Property→Performance]
-- Moat: [競争優位性]
-- ロードマップ: [短期/中期/長期]
-- リスク: [主要リスクと対策]
-- 参考文献: [主要3-5件のURL]
-
-重要：定量データ（市場規模、成長率など）を必ず含めてください。`;
+async function summarizeReportForMerge(report: string, hypothesisNum: number, summarizePromptTemplate: string): Promise<string> {
+  const summarizePrompt = summarizePromptTemplate
+    .replace(/{REPORT}/g, report.substring(0, 8000))
+    .replace(/{HYPOTHESIS_NUMBER}/g, hypothesisNum.toString());
 
   try {
     return await generateWithFlash(summarizePrompt);
@@ -579,11 +590,15 @@ async function mergeIndividualReports(
 ): Promise<string> {
   console.log(`[Run ${runId}] Merging ${individualReports.length} individual reports...`);
   
+  // Get customizable prompts
+  const summarizePromptTemplate = await getSummarizePrompt();
+  const mergePromptTemplate = await getMergePrompt();
+  
   // First, summarize each report to reduce token count
   console.log(`[Run ${runId}] Summarizing individual reports...`);
   const summaries: string[] = [];
   for (let i = 0; i < individualReports.length; i++) {
-    const summary = await summarizeReportForMerge(individualReports[i], i + 1);
+    const summary = await summarizeReportForMerge(individualReports[i], i + 1, summarizePromptTemplate);
     summaries.push(summary);
     console.log(`[Run ${runId}] Summarized hypothesis ${i + 1} (${summary.length} chars)`);
   }
@@ -602,40 +617,14 @@ async function mergeIndividualReports(
     }
   });
   
-  const mergePrompt = `あなたは戦略レポートの編集者です。以下の要約された個別仮説レポートを統合し、最終レポートを作成してください。
-
-【Step 2-1の監査ストリップ（概要のみ）】
-${step2_1Output.substring(0, 3000)}
-
-【要約された個別仮説レポート】
-${summarizedReportsSection}
-
-【統合参考文献候補（重複除去済み、最初の20件）】
-${allReferences.slice(0, 20).map((ref, idx) => `[${idx + 1}] ${ref}`).join('\n')}
-
-【出力指示】
-以下の構成で統合レポートを作成してください：
-
-【レポートタイトル】
-[市場・顧客ニーズ] における [自社技術] を活用した戦略的事業仮説ポートフォリオ (Top ${hypothesisCount} Selection)
-
-【第1章：エグゼクティブサマリー】（600〜1000文字）
-- The Shift: 市場の構造的変化
-- The Pain: 解決すべき本質的課題
-- The Solution: 提案する解決策
-- The Value: 創出される価値
-
-【第2章：事業機会を創出する構造的変曲点 (Why Now?)】
-
-【第3章：戦略的事業仮説ポートフォリオ】
-各仮説について、要約の内容を展開して記載（各500〜800文字）
-
-【第4章：実行ロードマップ】
-
-【第5章：リスク要因と対策】
-
-【第6章：参考文献】
-（重複除去、番号を振り直し）`;
+  const referencesSection = allReferences.slice(0, 20).map((ref, idx) => `[${idx + 1}] ${ref}`).join('\n');
+  
+  // Build merge prompt from template
+  const mergePrompt = mergePromptTemplate
+    .replace(/{STEP2_1_OUTPUT}/g, step2_1Output.substring(0, 3000))
+    .replace(/{SUMMARIZED_REPORTS}/g, summarizedReportsSection)
+    .replace(/{REFERENCES}/g, referencesSection)
+    .replace(/{HYPOTHESIS_COUNT}/g, hypothesisCount.toString());
 
   const mergedReport = await generateWithPro(mergePrompt);
   console.log(`[Run ${runId}] Merge completed. Output length: ${mergedReport.length} chars`);

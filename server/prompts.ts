@@ -649,6 +649,81 @@ export const STEP2_2_DEEP_RESEARCH_PROMPT = `# 【Step 2：収束・深掘り】
 担当する仮説について、最高品質の詳細レポートを作成してください。`;
 
 
+// ===== STEP 2-3: 統合フェーズ (Gemini Pro使用) =====
+// N個の個別レポートを統合して最終レポートを生成
+export const STEP2_3_MERGE_PROMPT = `# 【Step 2-3：統合】戦略的事業仮説ポートフォリオ統合レポート
+
+## 0. 入力データ
+- Step 2-1の監査ストリップ: {STEP2_1_OUTPUT}
+- 個別仮説レポート（要約済み）: {SUMMARIZED_REPORTS}
+- 参考文献候補: {REFERENCES}
+
+## 1. 実行命令
+以下の構成で統合レポートを作成してください。各章の内容は個別レポートから抽出・統合し、一貫性のある文章にまとめてください。
+
+## 2. 出力構成（ロック見出し）
+
+【レポートタイトル】
+[市場・顧客ニーズ] における [自社技術] を活用した戦略的事業仮説ポートフォリオ (Top {HYPOTHESIS_COUNT} Selection)
+
+【第1章：エグゼクティブサマリー】（600〜1000文字）
+- The Shift: 市場の構造的変化
+- The Pain: 解決すべき本質的課題
+- The Solution: 提案する解決策
+- The Value: 創出される価値
+
+【第2章：事業機会を創出する構造的変曲点 (Why Now?)】
+技術・市場・規制の変化点を統合
+
+【第3章：戦略的事業仮説ポートフォリオ】
+各仮説について以下を記載（各500〜800文字）：
+- 仮説タイトル
+- ターゲット顧客
+- Trade-off（顧客のジレンマ）
+- メカニズム（S→P→P）
+- 競争優位性
+
+【第4章：ポートフォリオ比較と推奨ロードマップ】
+- 仮説間の比較表
+- 実行優先順位
+- 短期/中期/長期アクション
+
+【第5章：リスク要因と対策】
+- 技術リスク
+- 市場リスク  
+- Plan B
+
+【第6章：参考文献】
+（重複除去、番号を振り直し、20件以上）
+
+## 3. 品質規定
+- 言語: 日本語
+- 定量データ（市場規模、成長率など）を必ず含める
+- 本文中の引用[n]と第6章の文献を一意対応させる
+- ブラックリスト見出し（# や I. など）の使用禁止`;
+
+// ===== STEP 2-3: 個別レポート要約プロンプト =====
+export const STEP2_3_SUMMARIZE_PROMPT = `以下のレポートを800〜1200文字に要約してください。重要な定量データと構造（Structure, Property, Performance）を必ず保持してください。
+
+【入力レポート】
+{REPORT}
+
+【出力形式】
+### 仮説{HYPOTHESIS_NUMBER}
+- タイトル: [仮説タイトル]
+- エグゼクティブサマリー: [100文字]
+- 市場・顧客: [顧客セグメント、市場規模]
+- Trade-off: [顧客のジレンマと素材必然性]
+- メカニズム: [Structure→Property→Performance]
+- Moat: [競争優位性]
+- ロードマップ: [短期/中期/長期]
+- リスク: [主要リスクと対策]
+- 参考文献: [主要3-5件のURL]
+
+重要：定量データ（市場規模、成長率など）を必ず含めてください。`;
+
 // Default prompts for new installations
 export const DEFAULT_STEP2_1_PROMPT = STEP2_1_DEEP_RESEARCH_PROMPT;
 export const DEFAULT_STEP2_2_PROMPT = STEP2_2_DEEP_RESEARCH_PROMPT;
+export const DEFAULT_STEP2_3_PROMPT = STEP2_3_MERGE_PROMPT;
+export const DEFAULT_STEP2_3_SUMMARIZE_PROMPT = STEP2_3_SUMMARIZE_PROMPT;
