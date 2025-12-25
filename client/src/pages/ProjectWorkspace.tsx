@@ -122,6 +122,27 @@ export default function ProjectWorkspace({ projectId }: ProjectWorkspaceProps) {
     },
   });
 
+  const importResourcesMutation = useMutation({
+    mutationFn: async (resourceIds: number[]) => {
+      const res = await apiRequest("POST", `/api/projects/${id}/resources/import`, { resourceIds });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", id, "resources"] });
+      toast({
+        title: "インポートしました",
+        description: `${Array.isArray(data) ? data.length : 0}件のリソースをインポートしました。`,
+      });
+    },
+    onError: () => {
+      toast({
+        title: "エラー",
+        description: "リソースのインポートに失敗しました。もう一度お試しください。",
+        variant: "destructive",
+      });
+    },
+  });
+
   const executeRunMutation = useMutation({
     mutationFn: async ({ targetSpecId, technicalAssetsId, hypothesisCount, loopCount }: { targetSpecId: number; technicalAssetsId: number; hypothesisCount: number; loopCount: number }) => {
       const res = await apiRequest("POST", `/api/projects/${id}/runs`, {
@@ -240,6 +261,10 @@ export default function ProjectWorkspace({ projectId }: ProjectWorkspaceProps) {
 
   const handleDeleteResource = (resourceId: number) => {
     deleteResourceMutation.mutate(resourceId);
+  };
+
+  const handleImportResources = async (resourceIds: number[]) => {
+    await importResourcesMutation.mutateAsync(resourceIds);
   };
 
   const handleExecute = (targetSpecId: number, technicalAssetsId: number, hypothesisCount: number, loopCount: number) => {
@@ -381,6 +406,7 @@ export default function ProjectWorkspace({ projectId }: ProjectWorkspaceProps) {
               onAddResource={handleAddResource}
               onUpdateResource={handleUpdateResource}
               onDeleteResource={handleDeleteResource}
+              onImportResources={handleImportResources}
               isExecuting={isExecuting || executeRunMutation.isPending}
               isPending={addResourceMutation.isPending}
             />

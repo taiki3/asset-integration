@@ -1,5 +1,7 @@
-import { useState, useCallback } from "react";
-import { Play, Loader2, Target, Cpu, Settings2, Plus, Pencil, Trash2, Upload, FileText, X, Files } from "lucide-react";
+import { useState, useCallback, useMemo } from "react";
+import { Play, Loader2, Target, Cpu, Settings2, Plus, Pencil, Trash2, Upload, FileText, X, Files, FolderInput, ChevronRight, ChevronDown } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { Checkbox } from "@/components/ui/checkbox";
 import mammoth from "mammoth";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -49,6 +51,11 @@ const resourceFormSchema = z.object({
 
 type ResourceFormValues = z.infer<typeof resourceFormSchema>;
 
+interface ImportableProject {
+  project: { id: number; name: string };
+  resources: Resource[];
+}
+
 interface ExecutionPanelProps {
   targetSpecs: Resource[];
   technicalAssets: Resource[];
@@ -57,6 +64,7 @@ interface ExecutionPanelProps {
   onAddResource: (type: "target_spec" | "technical_assets", name: string, content: string) => Promise<void>;
   onUpdateResource: (id: number, name: string, content: string) => Promise<void>;
   onDeleteResource: (id: number) => void;
+  onImportResources: (resourceIds: number[]) => Promise<void>;
   isExecuting?: boolean;
   isPending?: boolean;
 }
@@ -69,6 +77,7 @@ export function ExecutionPanel({
   onAddResource,
   onUpdateResource,
   onDeleteResource,
+  onImportResources,
   isExecuting,
   isPending,
 }: ExecutionPanelProps) {
@@ -84,10 +93,25 @@ export function ExecutionPanel({
   const [editName, setEditName] = useState("");
   const [editContent, setEditContent] = useState("");
   const [editSubmitting, setEditSubmitting] = useState(false);
-  const [addMode, setAddMode] = useState<"single" | "bulk">("single");
+  const [addMode, setAddMode] = useState<"single" | "bulk" | "import">("single");
   const [bulkFiles, setBulkFiles] = useState<Array<{ id: string; file: File; name: string; content: string }>>([]);
   const [bulkUploading, setBulkUploading] = useState(false);
   const [singleSubmitting, setSingleSubmitting] = useState(false);
+  const [selectedImportResources, setSelectedImportResources] = useState<Set<number>>(new Set());
+  const [expandedProjects, setExpandedProjects] = useState<Set<number>>(new Set());
+  const [importSubmitting, setImportSubmitting] = useState(false);
+
+  const { data: importableProjects = [], isLoading: importableLoading } = useQuery<ImportableProject[]>({
+    queryKey: [`/api/projects/${projectId}/importable-resources`],
+    enabled: addDialogOpen && addMode === "import",
+  });
+
+  const filteredImportableProjects = useMemo(() => {
+    return importableProjects.map((p) => ({
+      ...p,
+      resources: p.resources.filter((r) => r.type === addType),
+    })).filter((p) => p.resources.length > 0);
+  }, [importableProjects, addType]);
 
   const form = useForm<ResourceFormValues>({
     resolver: zodResolver(resourceFormSchema),
@@ -114,7 +138,59 @@ export function ExecutionPanel({
     form.reset({ name: "", content: "" });
     setAddMode("single");
     setBulkFiles([]);
+    setSelectedImportResources(new Set());
+    setExpandedProjects(new Set());
     setAddDialogOpen(true);
+  };
+
+  const toggleProjectExpanded = (projectId: number) => {
+    setExpandedProjects((prev) => {
+      const next = new Set(prev);
+      if (next.has(projectId)) {
+        next.delete(projectId);
+      } else {
+        next.add(projectId);
+      }
+      return next;
+    });
+  };
+
+  const toggleResourceSelected = (resourceId: number) => {
+    setSelectedImportResources((prev) => {
+      const next = new Set(prev);
+      if (next.has(resourceId)) {
+        next.delete(resourceId);
+      } else {
+        next.add(resourceId);
+      }
+      return next;
+    });
+  };
+
+  const toggleProjectResources = (pId: number, resources: Resource[]) => {
+    setSelectedImportResources((prev) => {
+      const next = new Set(prev);
+      const allSelected = resources.every((r) => prev.has(r.id));
+      if (allSelected) {
+        resources.forEach((r) => next.delete(r.id));
+      } else {
+        resources.forEach((r) => next.add(r.id));
+      }
+      return next;
+    });
+  };
+
+  const handleImportSubmit = async () => {
+    if (selectedImportResources.size === 0) return;
+    setImportSubmitting(true);
+    try {
+      await onImportResources(Array.from(selectedImportResources));
+      setSelectedImportResources(new Set());
+      setAddDialogOpen(false);
+    } catch {
+    } finally {
+      setImportSubmitting(false);
+    }
   };
 
   const handleBulkFilesSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -535,15 +611,19 @@ export function ExecutionPanel({
             </DialogDescription>
           </DialogHeader>
 
-          <Tabs value={addMode} onValueChange={(v) => setAddMode(v as "single" | "bulk")} className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
+          <Tabs value={addMode} onValueChange={(v) => setAddMode(v as "single" | "bulk" | "import")} className="w-full">
+            <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="single" className="gap-2" data-testid="tab-single-upload">
                 <FileText className="h-4 w-4" />
-                単一追加
+                単一
               </TabsTrigger>
               <TabsTrigger value="bulk" className="gap-2" data-testid="tab-bulk-upload">
                 <Files className="h-4 w-4" />
-                まとめて追加
+                複数
+              </TabsTrigger>
+              <TabsTrigger value="import" className="gap-2" data-testid="tab-import">
+                <FolderInput className="h-4 w-4" />
+                他プロジェクト
               </TabsTrigger>
             </TabsList>
 
@@ -701,6 +781,92 @@ export function ExecutionPanel({
                       </>
                     ) : (
                       `${bulkFiles.length}件を追加`
+                    )}
+                  </Button>
+                </DialogFooter>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="import" className="mt-4">
+              <div className="space-y-4">
+                {importableLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                  </div>
+                ) : filteredImportableProjects.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-8 text-center">
+                    <FolderInput className="h-10 w-10 text-muted-foreground/30 mb-3" />
+                    <p className="text-sm text-muted-foreground">
+                      他のプロジェクトにインポート可能な{addType === "target_spec" ? "ターゲット仕様" : "技術アセット"}がありません
+                    </p>
+                  </div>
+                ) : (
+                  <ScrollArea className="h-[300px] rounded-md border p-3">
+                    <div className="space-y-2">
+                      {filteredImportableProjects.map((item) => (
+                        <div key={item.project.id} className="space-y-1">
+                          <div
+                            className="flex items-center gap-2 p-2 rounded-md bg-muted/50 cursor-pointer"
+                            onClick={() => toggleProjectExpanded(item.project.id)}
+                            data-testid={`import-project-${item.project.id}`}
+                          >
+                            {expandedProjects.has(item.project.id) ? (
+                              <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+                            ) : (
+                              <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                            )}
+                            <Checkbox
+                              checked={item.resources.every((r) => selectedImportResources.has(r.id))}
+                              onCheckedChange={() => toggleProjectResources(item.project.id, item.resources)}
+                              onClick={(e) => e.stopPropagation()}
+                              data-testid={`checkbox-project-${item.project.id}`}
+                            />
+                            <span className="font-medium text-sm flex-1 truncate">{item.project.name}</span>
+                            <span className="text-xs text-muted-foreground">{item.resources.length}件</span>
+                          </div>
+                          {expandedProjects.has(item.project.id) && (
+                            <div className="ml-6 space-y-1">
+                              {item.resources.map((resource) => (
+                                <div
+                                  key={resource.id}
+                                  className="flex items-center gap-2 p-2 rounded-md hover-elevate cursor-pointer"
+                                  onClick={() => toggleResourceSelected(resource.id)}
+                                  data-testid={`import-resource-${resource.id}`}
+                                >
+                                  <Checkbox
+                                    checked={selectedImportResources.has(resource.id)}
+                                    onCheckedChange={() => toggleResourceSelected(resource.id)}
+                                    onClick={(e) => e.stopPropagation()}
+                                    data-testid={`checkbox-resource-${resource.id}`}
+                                  />
+                                  <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+                                  <span className="text-sm flex-1 truncate">{resource.name}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                )}
+
+                <DialogFooter>
+                  <Button type="button" variant="outline" onClick={() => setAddDialogOpen(false)} disabled={importSubmitting}>
+                    キャンセル
+                  </Button>
+                  <Button
+                    onClick={handleImportSubmit}
+                    disabled={selectedImportResources.size === 0 || importSubmitting}
+                    data-testid="button-submit-import-resources"
+                  >
+                    {importSubmitting ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        インポート中...
+                      </>
+                    ) : (
+                      `${selectedImportResources.size}件をインポート`
                     )}
                   </Button>
                 </DialogFooter>

@@ -181,6 +181,38 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/projects/:projectId/importable-resources", isAuthenticated, requireAgcDomain, async (req, res) => {
+    try {
+      const projectId = parseInt(req.params.projectId);
+      const projectsWithResources = await storage.getProjectsWithResourcesExcept(projectId);
+      res.json(projectsWithResources);
+    } catch (error) {
+      console.error("Error fetching importable resources:", error);
+      res.status(500).json({ error: "Failed to fetch importable resources" });
+    }
+  });
+
+  app.post("/api/projects/:projectId/resources/import", isAuthenticated, requireAgcDomain, async (req, res) => {
+    try {
+      const projectId = parseInt(req.params.projectId);
+      const { resourceIds } = req.body;
+      
+      if (!Array.isArray(resourceIds) || resourceIds.length === 0) {
+        return res.status(400).json({ error: "resourceIds must be a non-empty array" });
+      }
+      
+      if (!resourceIds.every((id: any) => typeof id === "number" && Number.isInteger(id))) {
+        return res.status(400).json({ error: "All resourceIds must be integers" });
+      }
+      
+      const imported = await storage.importResources(projectId, resourceIds);
+      res.status(201).json(imported);
+    } catch (error) {
+      console.error("Error importing resources:", error);
+      res.status(500).json({ error: "Failed to import resources" });
+    }
+  });
+
   // Hypothesis Runs
   app.get("/api/projects/:projectId/runs", isAuthenticated, requireAgcDomain, async (req, res) => {
     try {

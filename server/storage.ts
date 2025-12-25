@@ -16,7 +16,7 @@ import {
   promptVersions,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, max, or, and } from "drizzle-orm";
+import { eq, desc, max, or, and, ne, inArray } from "drizzle-orm";
 
 export interface IStorage {
   // Projects
@@ -28,9 +28,12 @@ export interface IStorage {
   // Resources
   getResourcesByProject(projectId: number): Promise<Resource[]>;
   getResource(id: number): Promise<Resource | undefined>;
+  getResourcesByIds(ids: number[]): Promise<Resource[]>;
   createResource(resource: InsertResource): Promise<Resource>;
   updateResource(id: number, projectId: number, data: { name?: string; content?: string }): Promise<Resource | undefined>;
   deleteResource(id: number): Promise<void>;
+  getProjectsWithResourcesExcept(excludeProjectId: number): Promise<{ project: Project; resources: Resource[] }[]>;
+  importResources(targetProjectId: number, resourceIds: number[]): Promise<Resource[]>;
 
   // Hypothesis Runs
   getRunsByProject(projectId: number): Promise<HypothesisRun[]>;
@@ -97,6 +100,39 @@ export class DatabaseStorage implements IStorage {
 
   async deleteResource(id: number): Promise<void> {
     await db.delete(resources).where(eq(resources.id, id));
+  }
+
+  async getResourcesByIds(ids: number[]): Promise<Resource[]> {
+    if (ids.length === 0) return [];
+    return db.select().from(resources).where(inArray(resources.id, ids));
+  }
+
+  async getProjectsWithResourcesExcept(excludeProjectId: number): Promise<{ project: Project; resources: Resource[] }[]> {
+    const otherProjects = await db.select().from(projects).where(ne(projects.id, excludeProjectId)).orderBy(desc(projects.createdAt));
+    const result: { project: Project; resources: Resource[] }[] = [];
+    for (const project of otherProjects) {
+      const projectResources = await db.select().from(resources).where(eq(resources.projectId, project.id)).orderBy(desc(resources.createdAt));
+      if (projectResources.length > 0) {
+        result.push({ project, resources: projectResources });
+      }
+    }
+    return result;
+  }
+
+  async importResources(targetProjectId: number, resourceIds: number[]): Promise<Resource[]> {
+    if (resourceIds.length === 0) return [];
+    const sourceResources = await this.getResourcesByIds(resourceIds);
+    const importedResources: Resource[] = [];
+    for (const source of sourceResources) {
+      const [imported] = await db.insert(resources).values({
+        projectId: targetProjectId,
+        type: source.type,
+        name: source.name,
+        content: source.content,
+      }).returning();
+      importedResources.push(imported);
+    }
+    return importedResources;
   }
 
   // Hypothesis Runs
