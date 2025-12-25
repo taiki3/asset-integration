@@ -461,7 +461,11 @@ async function executeDeepResearchStep2(context: PipelineContext, runId: number)
         background: true,
         tools: [
           { type: 'file_search', file_search_store_names: [fileSearchStoreName] }
-        ]
+        ],
+        agent_config: {
+          type: 'deep-research',
+          thinking_summaries: 'auto'
+        }
       });
     } catch (apiError: any) {
       console.error(`[Run ${runId}] Deep Research API Error:`, apiError.message);
