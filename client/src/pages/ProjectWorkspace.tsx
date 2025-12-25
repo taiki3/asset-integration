@@ -330,6 +330,30 @@ export default function ProjectWorkspace({ projectId }: ProjectWorkspaceProps) {
     }
   };
 
+  const handleDownloadStep2Word = async (runId: number) => {
+    try {
+      const response = await fetch(`/api/runs/${runId}/download-step2-word`);
+      if (!response.ok) {
+        throw new Error("Download failed");
+      }
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `step2-report-${runId}.docx`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (error) {
+      toast({
+        title: "エラー",
+        description: "Wordファイルのダウンロードに失敗しました。",
+        variant: "destructive",
+      });
+    }
+  };
+
   useEffect(() => {
     if (projectError) {
       navigate("/");
@@ -431,6 +455,7 @@ export default function ProjectWorkspace({ projectId }: ProjectWorkspaceProps) {
               resources={resources}
               onDownloadTSV={handleDownloadTSV}
               onDownloadExcel={handleDownloadExcel}
+              onDownloadStep2Word={handleDownloadStep2Word}
             />
           </div>
         </div>

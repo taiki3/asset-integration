@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { History, ChevronRight, Download, Loader2, CheckCircle, XCircle, Clock, FileSpreadsheet, AlertTriangle, Timer } from "lucide-react";
+import { History, ChevronRight, Download, Loader2, CheckCircle, XCircle, Clock, FileSpreadsheet, AlertTriangle, Timer, FileText } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -24,6 +24,7 @@ interface HistoryPanelProps {
   resources: Resource[];
   onDownloadTSV: (runId: number) => void;
   onDownloadExcel: (runId: number) => void;
+  onDownloadStep2Word: (runId: number) => void;
 }
 
 const statusConfig: Record<string, { label: string; icon: typeof Clock; variant: "default" | "secondary" | "destructive"; animate: boolean }> = {
@@ -61,7 +62,7 @@ function formatDuration(ms: number): string {
   return `${seconds}秒`;
 }
 
-export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel }: HistoryPanelProps) {
+export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, onDownloadStep2Word }: HistoryPanelProps) {
   const [selectedRun, setSelectedRun] = useState<HypothesisRun | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
 
@@ -265,9 +266,20 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel }
           )}
 
           <Separator />
-          <DialogFooter className="gap-2 sm:gap-2">
+          <DialogFooter className="gap-2 sm:gap-2 flex-wrap">
             {selectedRun?.status === "completed" && (
               <>
+                {selectedRun.step2Output && (
+                  <Button
+                    variant="outline"
+                    className="gap-2"
+                    onClick={() => onDownloadStep2Word(selectedRun.id)}
+                    data-testid="button-download-step2-word"
+                  >
+                    <FileText className="h-4 w-4" />
+                    STEP2をWord出力
+                  </Button>
+                )}
                 <Button
                   variant="outline"
                   className="gap-2"

@@ -5,9 +5,202 @@ import { insertProjectSchema, insertResourceSchema, insertHypothesisRunSchema, i
 import { STEP2_PROMPT, STEP3_PROMPT, STEP4_PROMPT, STEP5_PROMPT } from "./prompts";
 import { executeGMethodPipeline, requestPause, requestResume, requestStop, resumePipeline } from "./gmethod-pipeline";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
+import { Document, Packer, Paragraph, TextRun, HeadingLevel, TableRow, TableCell, Table, WidthType, BorderStyle } from "docx";
 
 // Server start time for version tracking
 const SERVER_START_TIME = new Date().toISOString();
+
+// Helper function to convert markdown to Word document
+async function convertMarkdownToWord(markdown: string, title: string): Promise<Buffer> {
+  const children: (Paragraph | Table)[] = [];
+  
+  // Add title
+  children.push(
+    new Paragraph({
+      text: title,
+      heading: HeadingLevel.TITLE,
+      spacing: { after: 400 },
+    })
+  );
+  
+  const lines = markdown.split('\n');
+  let inTable = false;
+  let tableRows: string[][] = [];
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmedLine = line.trim();
+    
+    // Skip empty lines
+    if (!trimmedLine) {
+      if (inTable && tableRows.length > 0) {
+        // End of table, render it
+        children.push(createWordTable(tableRows));
+        tableRows = [];
+        inTable = false;
+      }
+      children.push(new Paragraph({ text: "" }));
+      continue;
+    }
+    
+    // Check for table row (starts with |)
+    if (trimmedLine.startsWith('|') && trimmedLine.endsWith('|')) {
+      // Skip separator rows (| --- | --- |)
+      if (trimmedLine.includes('---')) continue;
+      
+      inTable = true;
+      const cells = trimmedLine.split('|').filter(c => c.trim()).map(c => c.trim());
+      tableRows.push(cells);
+      continue;
+    }
+    
+    // If we were in a table, render it
+    if (inTable && tableRows.length > 0) {
+      children.push(createWordTable(tableRows));
+      tableRows = [];
+      inTable = false;
+    }
+    
+    // Parse headings
+    if (trimmedLine.startsWith('### ')) {
+      children.push(
+        new Paragraph({
+          text: trimmedLine.substring(4),
+          heading: HeadingLevel.HEADING_3,
+          spacing: { before: 300, after: 100 },
+        })
+      );
+    } else if (trimmedLine.startsWith('## ')) {
+      children.push(
+        new Paragraph({
+          text: trimmedLine.substring(3),
+          heading: HeadingLevel.HEADING_2,
+          spacing: { before: 400, after: 150 },
+        })
+      );
+    } else if (trimmedLine.startsWith('# ')) {
+      children.push(
+        new Paragraph({
+          text: trimmedLine.substring(2),
+          heading: HeadingLevel.HEADING_1,
+          spacing: { before: 500, after: 200 },
+        })
+      );
+    } else if (trimmedLine.startsWith('【') || trimmedLine.startsWith('---')) {
+      // Japanese section headers or horizontal rule
+      if (trimmedLine === '---') {
+        children.push(
+          new Paragraph({
+            border: { bottom: { color: "auto", space: 1, size: 6, style: BorderStyle.SINGLE } },
+            spacing: { before: 200, after: 200 },
+          })
+        );
+      } else {
+        children.push(
+          new Paragraph({
+            text: trimmedLine,
+            heading: HeadingLevel.HEADING_2,
+            spacing: { before: 400, after: 150 },
+          })
+        );
+      }
+    } else if (trimmedLine.startsWith('- ')) {
+      // Bullet point
+      children.push(
+        new Paragraph({
+          children: [new TextRun({ text: trimmedLine.substring(2) })],
+          bullet: { level: 0 },
+          spacing: { before: 50, after: 50 },
+        })
+      );
+    } else if (/^\d+\.\s/.test(trimmedLine)) {
+      // Numbered list
+      const text = trimmedLine.replace(/^\d+\.\s/, '');
+      children.push(
+        new Paragraph({
+          children: [new TextRun({ text })],
+          numbering: { level: 0, reference: "default-numbering" },
+          spacing: { before: 50, after: 50 },
+        })
+      );
+    } else {
+      // Regular paragraph - handle bold text
+      const textRuns: TextRun[] = [];
+      const boldRegex = /\*\*(.+?)\*\*/g;
+      let lastIndex = 0;
+      let match;
+      
+      while ((match = boldRegex.exec(trimmedLine)) !== null) {
+        if (match.index > lastIndex) {
+          textRuns.push(new TextRun({ text: trimmedLine.substring(lastIndex, match.index) }));
+        }
+        textRuns.push(new TextRun({ text: match[1], bold: true }));
+        lastIndex = match.index + match[0].length;
+      }
+      
+      if (lastIndex < trimmedLine.length) {
+        textRuns.push(new TextRun({ text: trimmedLine.substring(lastIndex) }));
+      }
+      
+      if (textRuns.length === 0) {
+        textRuns.push(new TextRun({ text: trimmedLine }));
+      }
+      
+      children.push(
+        new Paragraph({
+          children: textRuns,
+          spacing: { before: 100, after: 100 },
+        })
+      );
+    }
+  }
+  
+  // Handle any remaining table
+  if (inTable && tableRows.length > 0) {
+    children.push(createWordTable(tableRows));
+  }
+  
+  const doc = new Document({
+    sections: [{ children }],
+    numbering: {
+      config: [{
+        reference: "default-numbering",
+        levels: [{
+          level: 0,
+          format: "decimal",
+          text: "%1.",
+          alignment: "start",
+        }],
+      }],
+    },
+  });
+  
+  return await Packer.toBuffer(doc);
+}
+
+// Helper function to create a Word table from rows
+function createWordTable(rows: string[][]): Table {
+  const tableRows = rows.map((row, rowIndex) => {
+    return new TableRow({
+      children: row.map(cell => {
+        return new TableCell({
+          children: [new Paragraph({
+            children: [new TextRun({
+              text: cell,
+              bold: rowIndex === 0,
+            })],
+          })],
+          width: { size: 100 / row.length, type: WidthType.PERCENTAGE },
+        });
+      }),
+    });
+  });
+  
+  return new Table({
+    rows: tableRows,
+    width: { size: 100, type: WidthType.PERCENTAGE },
+  });
+}
 
 // Domain restriction middleware - only allow @agc.com emails (and gmail.com in development)
 // Additional emails can be whitelisted via ALLOWED_EMAILS environment variable (comma-separated)
@@ -422,6 +615,31 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error downloading run:", error);
       res.status(500).json({ error: "Failed to download run" });
+    }
+  });
+
+  // STEP2 Word export endpoint
+  app.get("/api/runs/:id/download-step2-word", isAuthenticated, requireAgcDomain, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const run = await storage.getRun(id);
+      
+      if (!run) {
+        return res.status(404).json({ error: "Run not found" });
+      }
+      
+      if (!run.step2Output) {
+        return res.status(400).json({ error: "STEP2 output not available" });
+      }
+
+      const docBuffer = await convertMarkdownToWord(run.step2Output, `STEP2 事業仮説レポート - Run #${id}`);
+      
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+      res.setHeader("Content-Disposition", `attachment; filename="step2-report-${id}.docx"`);
+      res.send(docBuffer);
+    } catch (error) {
+      console.error("Error downloading STEP2 Word:", error);
+      res.status(500).json({ error: "Failed to download STEP2 Word document" });
     }
   });
 
