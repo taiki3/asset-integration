@@ -1,5 +1,6 @@
 import { useState, useCallback } from "react";
 import { Play, Loader2, Target, Cpu, Settings2, Plus, Eye, Trash2, Upload, FileText, X, Files } from "lucide-react";
+import mammoth from "mammoth";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -113,19 +114,29 @@ export function ExecutionPanel({
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
 
-    const readPromises = files.map((file, idx) => {
-      return new Promise<{ id: string; file: File; name: string; content: string }>((resolve) => {
-        const reader = new FileReader();
-        reader.onload = (event) => {
-          resolve({
-            id: `${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 9)}`,
-            file,
-            name: file.name.replace(/\.[^/.]+$/, ""),
-            content: event.target?.result as string,
-          });
-        };
-        reader.readAsText(file);
-      });
+    const readPromises = files.map(async (file, idx) => {
+      const isWord = file.name.endsWith(".docx") || file.name.endsWith(".doc");
+      const id = `${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 9)}`;
+      const name = file.name.replace(/\.[^/.]+$/, "");
+      
+      if (isWord) {
+        const arrayBuffer = await file.arrayBuffer();
+        const result = await mammoth.extractRawText({ arrayBuffer });
+        return { id, file, name, content: result.value };
+      } else {
+        return new Promise<{ id: string; file: File; name: string; content: string }>((resolve) => {
+          const reader = new FileReader();
+          reader.onload = (event) => {
+            resolve({
+              id,
+              file,
+              name,
+              content: event.target?.result as string,
+            });
+          };
+          reader.readAsText(file);
+        });
+      }
     });
 
     Promise.all(readPromises).then((results) => {
@@ -208,19 +219,30 @@ export function ExecutionPanel({
     }
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const content = event.target?.result as string;
-      form.setValue("content", content);
+    const isWord = file.name.endsWith(".docx") || file.name.endsWith(".doc");
+    
+    if (isWord) {
+      const arrayBuffer = await file.arrayBuffer();
+      const result = await mammoth.extractRawText({ arrayBuffer });
+      form.setValue("content", result.value);
       if (!form.getValues("name")) {
         form.setValue("name", file.name.replace(/\.[^/.]+$/, ""));
       }
-    };
-    reader.readAsText(file);
+    } else {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const content = event.target?.result as string;
+        form.setValue("content", content);
+        if (!form.getValues("name")) {
+          form.setValue("name", file.name.replace(/\.[^/.]+$/, ""));
+        }
+      };
+      reader.readAsText(file);
+    }
     e.target.value = "";
   };
 
@@ -535,7 +557,7 @@ export function ExecutionPanel({
                               <input
                                 type="file"
                                 className="hidden"
-                                accept=".txt,.json,.md"
+                                accept=".txt,.json,.md,.doc,.docx"
                                 onChange={handleFileUpload}
                               />
                               <Button variant="outline" size="sm" className="gap-1.5" asChild>
@@ -588,7 +610,7 @@ export function ExecutionPanel({
                     <input
                       type="file"
                       className="hidden"
-                      accept=".txt,.json,.md"
+                      accept=".txt,.json,.md,.doc,.docx"
                       multiple
                       onChange={handleBulkFilesSelect}
                       data-testid="input-bulk-files"
