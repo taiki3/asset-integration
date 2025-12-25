@@ -63,11 +63,7 @@ async function main() {
             type: 'file_search',
             file_search_store_names: [fileSearchStore.name!]
           }
-        ],
-        agent_config: {
-          type: 'deep-research',
-          thinking_summaries: 'auto'
-        }
+        ]
       });
       console.log(`Interaction created: ${interaction.id}`);
     } catch (apiError: any) {

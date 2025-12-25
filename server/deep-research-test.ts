@@ -64,11 +64,7 @@ async function main() {
           type: 'file_search',
           file_search_store_names: [fileSearchStore.name!]
         }
-      ],
-      agent_config: {
-        type: 'deep-research',
-        thinking_summaries: 'auto'
-      }
+      ]
     });
 
     let interactionId: string | undefined;

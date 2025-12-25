@@ -666,11 +666,7 @@ async function runDeepResearchPhase(
       stream: true,
       tools: [
         { type: 'file_search', file_search_store_names: [storeName] }
-      ],
-      agent_config: {
-        type: 'deep-research',
-        thinking_summaries: 'auto'
-      }
+      ]
     });
     
     debugLog(`[Run ${runId}] ${phaseName}: Stream created, waiting for interaction.start event`);
