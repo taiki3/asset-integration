@@ -7,6 +7,19 @@ import * as path from "path";
 import * as os from "os";
 import { waitForDeepResearchRateLimit as sharedWaitForRateLimit } from "./deep-research";
 
+// Debug logger that writes to both console and file
+const LOG_FILE = "/tmp/gmethod-debug.log";
+function debugLog(message: string): void {
+  const timestamp = new Date().toISOString();
+  const line = `[${timestamp}] ${message}\n`;
+  console.log(message);
+  try {
+    fs.appendFileSync(LOG_FILE, line);
+  } catch (e) {
+    // ignore file write errors
+  }
+}
+
 const MODEL_PRO = "gemini-3-pro-preview";
 const MODEL_FLASH = "gemini-3-flash-preview";
 const DEEP_RESEARCH_AGENT = "deep-research-pro-preview-12-2025";
@@ -447,14 +460,15 @@ async function executeDeepResearchStep2(context: PipelineContext, runId: number)
       stepStartTime: startTime,
     });
 
-    console.log(`[Run ${runId}] Starting Deep Research with File Search Store: ${fileSearchStoreName}`);
-    console.log(`[Run ${runId}] Prompt length: ${researchPrompt.length} chars`);
+    debugLog(`[Run ${runId}] Starting Deep Research with File Search Store: ${fileSearchStoreName}`);
+    debugLog(`[Run ${runId}] Prompt length: ${researchPrompt.length} chars`);
     
     // Wait for rate limit before making Deep Research request (using shared module)
     await sharedWaitForRateLimit();
     
     let interactionId: string;
     try {
+      debugLog(`[Run ${runId}] Calling interactions.create with stream: true`);
       // Use stream: true to avoid 400 errors (required by Deep Research API)
       const stream = await (client as any).interactions.create({
         input: researchPrompt,
@@ -470,11 +484,14 @@ async function executeDeepResearchStep2(context: PipelineContext, runId: number)
         }
       });
       
+      debugLog(`[Run ${runId}] Stream created, waiting for interaction.start event`);
+      
       // Get interaction ID from first stream event
       for await (const chunk of stream as AsyncIterable<any>) {
+        debugLog(`[Run ${runId}] Stream event: ${chunk.event_type}`);
         if (chunk.event_type === 'interaction.start' && chunk.interaction?.id) {
           interactionId = chunk.interaction.id;
-          console.log(`[Run ${runId}] Stream started, Interaction ID: ${interactionId}`);
+          debugLog(`[Run ${runId}] Stream started, Interaction ID: ${interactionId}`);
           break;
         }
       }
@@ -483,11 +500,11 @@ async function executeDeepResearchStep2(context: PipelineContext, runId: number)
         throw new Error('Failed to get interaction ID from stream');
       }
     } catch (apiError: any) {
-      console.error(`[Run ${runId}] Deep Research API Error:`, apiError.message);
-      console.error(`[Run ${runId}] Error details:`, JSON.stringify(apiError, null, 2));
+      debugLog(`[Run ${runId}] Deep Research API Error: ${apiError.message}`);
+      debugLog(`[Run ${runId}] Error details: ${JSON.stringify(apiError, null, 2)}`);
       throw new Error(`Deep Research APIの起動に失敗しました: ${apiError.message}`);
     }
-    console.log(`[Run ${runId}] Deep Research Task Started. Interaction ID: ${interactionId}`);
+    debugLog(`[Run ${runId}] Deep Research Task Started. Interaction ID: ${interactionId}`);
 
     await updateProgress(runId, { 
       currentPhase: "deep_research_running", 
