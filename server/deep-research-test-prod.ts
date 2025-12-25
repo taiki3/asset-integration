@@ -62,8 +62,7 @@ async function main() {
           }
         ],
         agent_config: {
-          type: 'deep-research',
-          thinking_summaries: 'auto'
+          type: 'deep-research'
         }
       });
       console.log(`Interaction created: ${interaction.id}`);

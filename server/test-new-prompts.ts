@@ -1,5 +1,7 @@
 import { GoogleGenAI } from '@google/genai';
 import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
@@ -22,9 +24,9 @@ async function waitForOperation(operation: any): Promise<void> {
 
 async function main() {
   try {
-    // Load prompts
-    const prompt2_1 = fs.readFileSync('attached_assets/prompt2-1_1766670311870.md', 'utf-8');
-    const prompt2_2 = fs.readFileSync('attached_assets/prompt2-2_1766670311870.md', 'utf-8');
+    // Load prompts from attached_assets
+    const prompt2_1 = fs.readFileSync('attached_assets/prompt2-1_1766670630142.md', 'utf-8');
+    const prompt2_2 = fs.readFileSync('attached_assets/prompt2-2_1766670630141.md', 'utf-8');
     
     console.log('=== Prompts Loaded ===');
     console.log(`Prompt 2-1 length: ${prompt2_1.length} chars`);
@@ -37,7 +39,7 @@ async function main() {
     });
     console.log(`Store created: ${fileSearchStore.name}`);
 
-    // Upload sample data
+    // Create sample data files
     const sampleTarget = `【市場・顧客ニーズ】
 半導体製造装置向け高純度部材市場
 - 顧客: 半導体製造装置メーカー (Applied Materials, Lam Research, Tokyo Electron)
@@ -48,10 +50,9 @@ Cap-01: CVD-SiC (化学気相成長炭化ケイ素) - 高純度、耐プラズ�
 Cap-02: 精密加工技術 - ミクロン精度の形状制御
 Cap-03: 表面処理技術 - 低パーティクル特性`;
 
-    // Upload files
-    const tempDir = require('os').tmpdir();
-    const targetFile = `${tempDir}/target.txt`;
-    const techFile = `${tempDir}/tech.txt`;
+    const tempDir = os.tmpdir();
+    const targetFile = path.join(tempDir, 'target.txt');
+    const techFile = path.join(tempDir, 'tech.txt');
     
     fs.writeFileSync(targetFile, sampleTarget);
     fs.writeFileSync(techFile, sampleTech);
@@ -60,7 +61,7 @@ Cap-03: 表面処理技術 - 低パーティクル特性`;
     let op = await (client as any).fileSearchStores.uploadToFileSearchStore({
       file: targetFile,
       fileSearchStoreName: fileSearchStore.name!,
-      config: { displayName: 'target_specification' }
+      config: { displayName: 'target.md' }
     });
     await waitForOperation(op);
 
@@ -68,16 +69,16 @@ Cap-03: 表面処理技術 - 低パーティクル特性`;
     op = await (client as any).fileSearchStores.uploadToFileSearchStore({
       file: techFile,
       fileSearchStoreName: fileSearchStore.name!,
-      config: { displayName: 'technical_assets' }
+      config: { displayName: 'tech_prop.md' }
     });
     await waitForOperation(op);
 
     fs.unlinkSync(targetFile);
     fs.unlinkSync(techFile);
 
-    // Test Step 2-1
+    // Test Step 2-1 prompt
     console.log('\n=== Testing Step 2-1 Prompt ===');
-    console.log(`Prompt: ${prompt2_1.substring(0, 200)}...`);
+    console.log(`Prompt preview: ${prompt2_1.substring(0, 150)}...`);
     
     try {
       const interaction = await (client as any).interactions.create({
@@ -91,16 +92,13 @@ Cap-03: 表面処理技術 - 低パーティクル特性`;
           }
         ],
         agent_config: {
-          type: 'deep-research',
-          thinking_summaries: 'auto'
+          type: 'deep-research'
         }
       });
       console.log(`✅ Step 2-1 started successfully! Interaction ID: ${interaction.id}`);
     } catch (apiError: any) {
       console.error('❌ Step 2-1 API Error:', apiError.message);
-      if (apiError.message?.includes('400')) {
-        console.log('\nChecking if it\'s an invalid argument error...');
-      }
+      console.error('Error details:', JSON.stringify(apiError, null, 2));
     }
 
     // Cleanup

@@ -668,8 +668,7 @@ async function runDeepResearchPhase(
         { type: 'file_search', file_search_store_names: [storeName] }
       ],
       agent_config: {
-        type: 'deep-research',
-        thinking_summaries: 'auto'
+        type: 'deep-research'
       }
     });
     
