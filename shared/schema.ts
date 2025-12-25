@@ -156,7 +156,6 @@ export const insertHypothesisRunSchema = createInsertSchema(hypothesisRuns).omit
   errorMessage: true,
   currentStep: true,
   currentLoop: true,
-  totalLoops: true,
   status: true,
 });
 
