@@ -329,6 +329,12 @@ const EXTRACTION_PROMPT = `以下の事業仮説レポートから、各仮説�
   ]
 }`;
 
+interface StepTiming {
+  startTime: number;
+  endTime?: number;
+  durationMs?: number;
+}
+
 interface ProgressInfo {
   planningAnalysis?: string;
   planningQueries?: string[];
@@ -338,10 +344,28 @@ interface ProgressInfo {
   stepTimings?: { [key: string]: number };
   phaseStartTime?: number;
   stepStartTime?: number;
+  stepDurations?: {
+    step2?: StepTiming;
+    step3?: StepTiming;
+    step4?: StepTiming;
+    step5?: StepTiming;
+  };
 }
 
 async function updateProgress(runId: number, progressInfo: ProgressInfo): Promise<void> {
   await storage.updateRun(runId, { progressInfo });
+}
+
+async function updateStepDuration(
+  runId: number, 
+  stepKey: 'step2' | 'step3' | 'step4' | 'step5', 
+  timing: StepTiming
+): Promise<void> {
+  const run = await storage.getRun(runId);
+  const existingProgress = (run?.progressInfo as ProgressInfo) || {};
+  const stepDurations = existingProgress.stepDurations || {};
+  stepDurations[stepKey] = timing;
+  await updateProgress(runId, { ...existingProgress, stepDurations });
 }
 
 async function executeDeepResearchStep2(context: PipelineContext, runId: number): Promise<DeepResearchResult> {
@@ -892,8 +916,18 @@ export async function executeGMethodPipeline(
 
       // Step 2: Deep Research
       if (loopStartStep <= 2) {
+        const step2StartTime = Date.now();
+        await updateStepDuration(runId, 'step2', { startTime: step2StartTime });
+        
         let deepResearchResult = await executeStep2WithRetry(context, runId);
         context.step2Output = deepResearchResult.report;
+        
+        const step2EndTime = Date.now();
+        await updateStepDuration(runId, 'step2', { 
+          startTime: step2StartTime, 
+          endTime: step2EndTime, 
+          durationMs: step2EndTime - step2StartTime 
+        });
         
         const validationMetadata = {
           searchQueries: deepResearchResult.searchQueries,
@@ -902,7 +936,7 @@ export async function executeGMethodPipeline(
           validationPassed: deepResearchResult.validationResult.isValid,
           retried: deepResearchResult.retried,
         };
-        console.log(`[Run ${runId}] Loop ${loopIndex} Step 2 completed: ${deepResearchResult.iterationCount} iterations, ${deepResearchResult.searchQueries.length} queries${deepResearchResult.retried ? " (retried)" : ""}`);
+        console.log(`[Run ${runId}] Loop ${loopIndex} Step 2 completed in ${Math.round((step2EndTime - step2StartTime) / 1000)}s: ${deepResearchResult.iterationCount} iterations, ${deepResearchResult.searchQueries.length} queries${deepResearchResult.retried ? " (retried)" : ""}`);
         
         if (!deepResearchResult.validationResult.isValid) {
           const warningMessage = `品質検証警告: ${deepResearchResult.validationResult.errors.slice(0, 3).join("; ")}`;
@@ -937,8 +971,20 @@ export async function executeGMethodPipeline(
 
       // Step 3: Scientific Evaluation
       if (loopStartStep <= 3) {
+        const step3StartTime = Date.now();
+        await updateStepDuration(runId, 'step3', { startTime: step3StartTime });
+        
         console.log(`[Run ${runId}] Loop ${loopIndex} Starting Step 3 (Scientific Evaluation with Pro)...`);
         context.step3Output = await executeStep3(context);
+        
+        const step3EndTime = Date.now();
+        await updateStepDuration(runId, 'step3', { 
+          startTime: step3StartTime, 
+          endTime: step3EndTime, 
+          durationMs: step3EndTime - step3StartTime 
+        });
+        console.log(`[Run ${runId}] Loop ${loopIndex} Step 3 completed in ${Math.round((step3EndTime - step3StartTime) / 1000)}s`);
+        
         await storage.updateRun(runId, { step3Output: context.step3Output, currentStep: 4 });
 
         // Check pause/stop after step 3
@@ -957,8 +1003,20 @@ export async function executeGMethodPipeline(
 
       // Step 4: Strategic Audit
       if (loopStartStep <= 4) {
+        const step4StartTime = Date.now();
+        await updateStepDuration(runId, 'step4', { startTime: step4StartTime });
+        
         console.log(`[Run ${runId}] Loop ${loopIndex} Starting Step 4 (Strategic Audit with Pro)...`);
         context.step4Output = await executeStep4(context);
+        
+        const step4EndTime = Date.now();
+        await updateStepDuration(runId, 'step4', { 
+          startTime: step4StartTime, 
+          endTime: step4EndTime, 
+          durationMs: step4EndTime - step4StartTime 
+        });
+        console.log(`[Run ${runId}] Loop ${loopIndex} Step 4 completed in ${Math.round((step4EndTime - step4StartTime) / 1000)}s`);
+        
         await storage.updateRun(runId, { step4Output: context.step4Output, currentStep: 5 });
 
         // Check pause/stop after step 4
@@ -976,8 +1034,19 @@ export async function executeGMethodPipeline(
       }
 
       // Step 5: Integration
+      const step5StartTime = Date.now();
+      await updateStepDuration(runId, 'step5', { startTime: step5StartTime });
+      
       console.log(`[Run ${runId}] Loop ${loopIndex} Starting Step 5 (Integration with Flash)...`);
       context.step5Output = await executeStep5(context);
+      
+      const step5EndTime = Date.now();
+      await updateStepDuration(runId, 'step5', { 
+        startTime: step5StartTime, 
+        endTime: step5EndTime, 
+        durationMs: step5EndTime - step5StartTime 
+      });
+      console.log(`[Run ${runId}] Loop ${loopIndex} Step 5 completed in ${Math.round((step5EndTime - step5StartTime) / 1000)}s`);
       
       const integratedList = parseTSVToJSON(context.step5Output);
       
