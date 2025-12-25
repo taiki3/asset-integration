@@ -13,7 +13,7 @@ import {
   hypotheses,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, max } from "drizzle-orm";
 
 export interface IStorage {
   // Projects
@@ -39,6 +39,7 @@ export interface IStorage {
   createHypothesis(hypothesis: InsertHypothesis): Promise<Hypothesis>;
   createHypotheses(hypothesesData: InsertHypothesis[]): Promise<Hypothesis[]>;
   deleteHypothesis(id: number): Promise<void>;
+  getNextHypothesisNumber(projectId: number): Promise<number>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -118,6 +119,16 @@ export class DatabaseStorage implements IStorage {
 
   async deleteHypothesis(id: number): Promise<void> {
     await db.delete(hypotheses).where(eq(hypotheses.id, id));
+  }
+
+  async getNextHypothesisNumber(projectId: number): Promise<number> {
+    const result = await db
+      .select({ maxNumber: max(hypotheses.hypothesisNumber) })
+      .from(hypotheses)
+      .where(eq(hypotheses.projectId, projectId));
+    
+    const currentMax = result[0]?.maxNumber ?? 0;
+    return currentMax + 1;
   }
 }
 
