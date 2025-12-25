@@ -456,7 +456,13 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, 
         </DialogContent>
       </Dialog>
 
-      <Dialog open={debugPromptsOpen} onOpenChange={setDebugPromptsOpen}>
+      <Dialog open={debugPromptsOpen} onOpenChange={(open) => {
+        setDebugPromptsOpen(open);
+        if (!open) {
+          setSelectedDebugStep("");
+          setDebugPrompts([]);
+        }
+      }}>
         <DialogContent className="sm:max-w-5xl max-h-[90vh]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -518,7 +524,7 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, 
                           添付ファイル:
                         </span>
                         {selectedEntry.attachments.map((attachment, idx) => (
-                          <Badge key={idx} variant="secondary">
+                          <Badge key={idx} variant="secondary" data-testid={`badge-attachment-${idx}`}>
                             {attachment}
                           </Badge>
                         ))}
@@ -528,7 +534,7 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, 
                     <div>
                       <span className="text-sm font-medium">プロンプト内容:</span>
                       <ScrollArea className="h-[50vh] mt-2 rounded-md border bg-muted/30 p-4">
-                        <pre className="text-xs font-mono whitespace-pre-wrap break-words">
+                        <pre className="text-xs font-mono whitespace-pre-wrap break-words" data-testid="text-debug-prompt">
                           {selectedEntry.prompt}
                         </pre>
                       </ScrollArea>
