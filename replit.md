@@ -26,7 +26,20 @@ A web application for automating the "G-Method" business hypothesis generation p
 
 ## G-Method Pipeline
 The pipeline consists of 4 steps (numbered 2-5):
-1. **Step 2 - Proposal**: Generate business hypotheses from target spec and technical assets
+
+### Step 2 - Three-Phase Deep Research Architecture
+Step 2 uses a sophisticated 3-phase parallel architecture:
+1. **Step 2-1 (発散・選定)**: One AI generates 30+ hypotheses and selects Top N using I/M/L/U criteria (weights: I:40%, M:30%, L:15%, U:15%)
+2. **Step 2-2 (個別深掘り)**: N separate Deep Research tasks run sequentially (rate limit: 1 req/min with 60s delay between each). Each AI analyzes one hypothesis in depth.
+3. **Step 2-3 (統合)**: Gemini 3.0 Pro merges all N individual reports into a unified final report. Reports are summarized before merging to stay within token limits.
+
+Key implementation details:
+- `extractHypothesesFromStep2_1()`: Robust parser with multi-attempt extraction, regex fallback, and strict count validation
+- `summarizeReportForMerge()`: Reduces each report to 800-1200 chars before merging
+- `mergeIndividualReports()`: Combines summaries using Gemini 3.0 Pro with reference deduplication
+- Rate limiting: 60-second delay after each Deep Research completion
+
+### Other Steps
 2. **Step 3 - Scientific Evaluation**: Evaluate hypotheses for scientific and economic validity
 3. **Step 4 - Strategic Audit**: Assess competitive catch-up difficulty and make/buy decisions
 4. **Step 5 - Integration**: Generate final TSV data with all hypothesis information
