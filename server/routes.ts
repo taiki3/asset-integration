@@ -6,6 +6,9 @@ import { STEP2_PROMPT, STEP3_PROMPT, STEP4_PROMPT, STEP5_PROMPT } from "./prompt
 import { executeGMethodPipeline, requestPause, requestResume, requestStop, resumePipeline } from "./gmethod-pipeline";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
 
+// Server start time for version tracking
+const SERVER_START_TIME = new Date().toISOString();
+
 // Domain restriction middleware - only allow @agc.com emails (and gmail.com in development)
 // Additional emails can be whitelisted via ALLOWED_EMAILS environment variable (comma-separated)
 const requireAgcDomain: RequestHandler = (req, res, next) => {
@@ -87,6 +90,11 @@ export async function registerRoutes(
   // Setup auth BEFORE other routes
   await setupAuth(app);
   registerAuthRoutes(app);
+
+  // Version info endpoint (public)
+  app.get("/api/version", (req, res) => {
+    res.json({ serverStartTime: SERVER_START_TIME });
+  });
 
   // Projects CRUD (protected routes)
   app.get("/api/projects", isAuthenticated, requireAgcDomain, async (req, res) => {

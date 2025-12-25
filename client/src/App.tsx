@@ -12,6 +12,7 @@ import NotFound from "@/pages/not-found";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, LogIn, Mail } from "lucide-react";
+import { AppFooter } from "@/components/AppFooter";
 
 function Router() {
   return (
@@ -80,7 +81,14 @@ function AuthWrapper() {
     return <LoginPage />;
   }
 
-  return <Router />;
+  return (
+    <div className="min-h-screen flex flex-col">
+      <div className="flex-1">
+        <Router />
+      </div>
+      <AppFooter />
+    </div>
+  );
 }
 
 function App() {
