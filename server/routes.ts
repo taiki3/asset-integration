@@ -748,6 +748,36 @@ export async function registerRoutes(
     }
   });
 
+  // Debug Prompts API - Get actual prompts used in a run
+  app.get("/api/runs/:id/debug-prompts", isAuthenticated, requireAgcDomain, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const run = await storage.getRun(id);
+      
+      if (!run) {
+        return res.status(404).json({ error: "Run not found" });
+      }
+      
+      const debugPrompts = run.debugPrompts as { entries: Array<{ step: string; prompt: string; attachments: string[]; timestamp: string }> } | null;
+      
+      if (!debugPrompts || !debugPrompts.entries || debugPrompts.entries.length === 0) {
+        return res.json({ 
+          available: false, 
+          message: "デバッグプロンプトが利用できません。このRunはプロンプト記録機能追加前に実行された可能性があります。",
+          entries: [] 
+        });
+      }
+      
+      res.json({ 
+        available: true, 
+        entries: debugPrompts.entries 
+      });
+    } catch (error) {
+      console.error("Error fetching debug prompts:", error);
+      res.status(500).json({ error: "Failed to fetch debug prompts" });
+    }
+  });
+
   // Prompt Management API
   const DEFAULT_PROMPTS: Record<number, string> = {
     21: STEP2_1_DEEP_RESEARCH_PROMPT,

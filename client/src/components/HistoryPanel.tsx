@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { History, ChevronRight, Download, Loader2, CheckCircle, XCircle, Clock, FileSpreadsheet, AlertTriangle, Timer, FileText } from "lucide-react";
+import { History, ChevronRight, Download, Loader2, CheckCircle, XCircle, Clock, FileSpreadsheet, AlertTriangle, Timer, FileText, Bug, Paperclip } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -30,6 +30,13 @@ interface IndividualReport {
   index: number;
   title: string;
   previewLength: number;
+}
+
+interface DebugPromptEntry {
+  step: string;
+  prompt: string;
+  attachments: string[];
+  timestamp: string;
 }
 
 interface HistoryPanelProps {
@@ -83,6 +90,10 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, 
   const [individualReports, setIndividualReports] = useState<IndividualReport[]>([]);
   const [selectedHypothesisIndex, setSelectedHypothesisIndex] = useState<string>("");
   const [loadingReports, setLoadingReports] = useState(false);
+  const [debugPromptsOpen, setDebugPromptsOpen] = useState(false);
+  const [debugPrompts, setDebugPrompts] = useState<DebugPromptEntry[]>([]);
+  const [loadingDebugPrompts, setLoadingDebugPrompts] = useState(false);
+  const [selectedDebugStep, setSelectedDebugStep] = useState<string>("");
 
   const getResourceName = (id: number) => {
     return resources.find((r) => r.id === id)?.name || "不明";
@@ -106,6 +117,37 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, 
       setIndividualReports([]);
     } finally {
       setLoadingReports(false);
+    }
+  };
+
+  const fetchDebugPrompts = async (runId: number) => {
+    setLoadingDebugPrompts(true);
+    try {
+      const response = await fetch(`/api/runs/${runId}/debug-prompts`, { credentials: "include" });
+      if (response.ok) {
+        const data = await response.json();
+        if (data.available) {
+          setDebugPrompts(data.entries);
+          if (data.entries.length > 0) {
+            setSelectedDebugStep(data.entries[0].step);
+          }
+        } else {
+          setDebugPrompts([]);
+        }
+      } else {
+        setDebugPrompts([]);
+      }
+    } catch {
+      setDebugPrompts([]);
+    } finally {
+      setLoadingDebugPrompts(false);
+    }
+  };
+
+  const handleOpenDebugPrompts = () => {
+    if (selectedRun) {
+      setDebugPromptsOpen(true);
+      fetchDebugPrompts(selectedRun.id);
     }
   };
 
@@ -203,10 +245,22 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, 
       <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
         <DialogContent className="sm:max-w-4xl max-h-[85vh]">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <FileSpreadsheet className="h-5 w-5" />
-              実行詳細
-            </DialogTitle>
+            <div className="flex items-center justify-between gap-4">
+              <DialogTitle className="flex items-center gap-2">
+                <FileSpreadsheet className="h-5 w-5" />
+                実行詳細
+              </DialogTitle>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                onClick={handleOpenDebugPrompts}
+                data-testid="button-debug-prompts"
+              >
+                <Bug className="h-4 w-4" />
+                プロンプト確認
+              </Button>
+            </div>
             <DialogDescription>
               {selectedRun && (
                 <>
@@ -396,6 +450,97 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, 
               </>
             )}
             <Button variant="outline" onClick={() => setDetailsOpen(false)}>
+              閉じる
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={debugPromptsOpen} onOpenChange={setDebugPromptsOpen}>
+        <DialogContent className="sm:max-w-5xl max-h-[90vh]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Bug className="h-5 w-5" />
+              プロンプト確認（デバッグ）
+            </DialogTitle>
+            <DialogDescription>
+              各ステップで実際に送信されたプロンプトと添付ファイルを確認できます
+            </DialogDescription>
+          </DialogHeader>
+
+          {loadingDebugPrompts ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : debugPrompts.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <Bug className="h-12 w-12 text-muted-foreground/30 mb-4" />
+              <p className="text-sm text-muted-foreground">
+                デバッグプロンプトが利用できません
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                このRunはプロンプト記録機能追加前に実行された可能性があります
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground shrink-0">ステップ選択:</span>
+                <Select value={selectedDebugStep} onValueChange={setSelectedDebugStep}>
+                  <SelectTrigger className="w-full" data-testid="select-debug-step">
+                    <SelectValue placeholder="ステップを選択" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {debugPrompts.map((entry, index) => (
+                      <SelectItem key={index} value={entry.step}>
+                        {entry.step}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {(() => {
+                const selectedEntry = debugPrompts.find(e => e.step === selectedDebugStep);
+                if (!selectedEntry) return null;
+
+                return (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Clock className="h-3 w-3" />
+                      <span>送信時刻: {format(new Date(selectedEntry.timestamp), "yyyy/MM/dd HH:mm:ss")}</span>
+                    </div>
+
+                    {selectedEntry.attachments.length > 0 && (
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-medium flex items-center gap-1">
+                          <Paperclip className="h-4 w-4" />
+                          添付ファイル:
+                        </span>
+                        {selectedEntry.attachments.map((attachment, idx) => (
+                          <Badge key={idx} variant="secondary">
+                            {attachment}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+
+                    <div>
+                      <span className="text-sm font-medium">プロンプト内容:</span>
+                      <ScrollArea className="h-[50vh] mt-2 rounded-md border bg-muted/30 p-4">
+                        <pre className="text-xs font-mono whitespace-pre-wrap break-words">
+                          {selectedEntry.prompt}
+                        </pre>
+                      </ScrollArea>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDebugPromptsOpen(false)}>
               閉じる
             </Button>
           </DialogFooter>
