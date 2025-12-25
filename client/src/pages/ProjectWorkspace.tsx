@@ -209,8 +209,8 @@ export default function ProjectWorkspace({ projectId }: ProjectWorkspaceProps) {
     },
   });
 
-  const handleAddResource = (type: "target_spec" | "technical_assets", name: string, content: string) => {
-    addResourceMutation.mutate({ type, name, content });
+  const handleAddResource = async (type: "target_spec" | "technical_assets", name: string, content: string) => {
+    await addResourceMutation.mutateAsync({ type, name, content });
   };
 
   const handleDeleteResource = (resourceId: number) => {

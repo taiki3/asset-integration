@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Play, Loader2, Target, Cpu, Settings2, Plus, Eye, Trash2, Upload, FileText } from "lucide-react";
+import { useState, useCallback } from "react";
+import { Play, Loader2, Target, Cpu, Settings2, Plus, Eye, Trash2, Upload, FileText, X, Files } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -52,7 +52,7 @@ interface ExecutionPanelProps {
   targetSpecs: Resource[];
   technicalAssets: Resource[];
   onExecute: (targetSpecId: number, technicalAssetsId: number, hypothesisCount: number, loopCount: number) => void;
-  onAddResource: (type: "target_spec" | "technical_assets", name: string, content: string) => void;
+  onAddResource: (type: "target_spec" | "technical_assets", name: string, content: string) => Promise<void>;
   onDeleteResource: (id: number) => void;
   isExecuting?: boolean;
   isPending?: boolean;
@@ -76,6 +76,10 @@ export function ExecutionPanel({
   const [addType, setAddType] = useState<"target_spec" | "technical_assets">("target_spec");
   const [previewResource, setPreviewResource] = useState<Resource | null>(null);
   const [previewDialogOpen, setPreviewDialogOpen] = useState(false);
+  const [addMode, setAddMode] = useState<"single" | "bulk">("single");
+  const [bulkFiles, setBulkFiles] = useState<Array<{ id: string; file: File; name: string; content: string }>>([]);
+  const [bulkUploading, setBulkUploading] = useState(false);
+  const [singleSubmitting, setSingleSubmitting] = useState(false);
 
   const form = useForm<ResourceFormValues>({
     resolver: zodResolver(resourceFormSchema),
@@ -100,13 +104,97 @@ export function ExecutionPanel({
   const handleAddClick = (type: "target_spec" | "technical_assets") => {
     setAddType(type);
     form.reset({ name: "", content: "" });
+    setAddMode("single");
+    setBulkFiles([]);
     setAddDialogOpen(true);
   };
 
-  const handleAddSubmit = (values: ResourceFormValues) => {
-    onAddResource(addType, values.name, values.content);
-    setAddDialogOpen(false);
-    form.reset();
+  const handleBulkFilesSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    const readPromises = files.map((file, idx) => {
+      return new Promise<{ id: string; file: File; name: string; content: string }>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          resolve({
+            id: `${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 9)}`,
+            file,
+            name: file.name.replace(/\.[^/.]+$/, ""),
+            content: event.target?.result as string,
+          });
+        };
+        reader.readAsText(file);
+      });
+    });
+
+    Promise.all(readPromises).then((results) => {
+      setBulkFiles((prev) => [...prev, ...results]);
+    });
+    e.target.value = "";
+  }, []);
+
+  const handleBulkFileNameChange = (index: number, newName: string) => {
+    setBulkFiles((prev) =>
+      prev.map((item, i) => (i === index ? { ...item, name: newName } : item))
+    );
+  };
+
+  const handleBulkFileRemove = (index: number) => {
+    setBulkFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleBulkSubmit = async () => {
+    if (bulkFiles.length === 0) return;
+
+    const emptyNames = bulkFiles.some((f) => !f.name.trim());
+    if (emptyNames) {
+      alert("すべてのファイルに登録名を入力してください");
+      return;
+    }
+
+    const names = bulkFiles.map((f) => f.name.trim());
+    const uniqueNames = new Set(names);
+    if (uniqueNames.size !== names.length) {
+      alert("登録名が重複しています。それぞれ異なる名前を入力してください");
+      return;
+    }
+
+    setBulkUploading(true);
+    const failedIds: Set<string> = new Set();
+    const failedNames: string[] = [];
+
+    for (const item of bulkFiles) {
+      try {
+        await onAddResource(addType, item.name.trim(), item.content);
+      } catch (error) {
+        failedIds.add(item.id);
+        failedNames.push(item.name);
+      }
+    }
+
+    setBulkUploading(false);
+
+    if (failedIds.size > 0) {
+      const remaining = bulkFiles.filter((f) => failedIds.has(f.id));
+      setBulkFiles(remaining);
+      alert(`以下のファイルの追加に失敗しました:\n${failedNames.join("\n")}\n\n再度お試しください。`);
+    } else {
+      setAddDialogOpen(false);
+      setBulkFiles([]);
+    }
+  };
+
+  const handleAddSubmit = async (values: ResourceFormValues) => {
+    setSingleSubmitting(true);
+    try {
+      await onAddResource(addType, values.name, values.content);
+      setAddDialogOpen(false);
+      form.reset();
+    } catch (error) {
+    } finally {
+      setSingleSubmitting(false);
+    }
   };
 
   const handlePreview = (resource: Resource) => {
@@ -391,87 +479,190 @@ export function ExecutionPanel({
       </Dialog>
 
       <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
-        <DialogContent className="sm:max-w-lg">
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(handleAddSubmit)}>
-              <DialogHeader>
-                <DialogTitle>
-                  {addType === "target_spec" ? "ターゲット仕様を追加" : "技術アセットを追加"}
-                </DialogTitle>
-                <DialogDescription>
-                  {addType === "target_spec"
-                    ? "ターゲット市場と顧客仕様のテキストを追加してください。"
-                    : "技術アセットリスト（JSONまたはテキスト形式）を追加してください。"}
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4 py-4">
-                <FormField
-                  control={form.control}
-                  name="name"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>名前</FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder="リソース名を入力..."
-                          data-testid="input-resource-name"
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="content"
-                  render={({ field }) => (
-                    <FormItem>
-                      <div className="flex items-center justify-between">
-                        <FormLabel>内容</FormLabel>
-                        <label className="cursor-pointer">
-                          <input
-                            type="file"
-                            className="hidden"
-                            accept=".txt,.json,.md"
-                            onChange={handleFileUpload}
-                          />
-                          <Button variant="outline" size="sm" className="gap-1.5" asChild>
-                            <span>
-                              <Upload className="h-3.5 w-3.5" />
-                              ファイルをアップロード
-                            </span>
+        <DialogContent className="sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>
+              {addType === "target_spec" ? "ターゲット仕様を追加" : "技術アセットを追加"}
+            </DialogTitle>
+            <DialogDescription>
+              {addType === "target_spec"
+                ? "ターゲット市場と顧客仕様のテキストを追加してください。"
+                : "技術アセットリスト（JSONまたはテキスト形式）を追加してください。"}
+            </DialogDescription>
+          </DialogHeader>
+
+          <Tabs value={addMode} onValueChange={(v) => setAddMode(v as "single" | "bulk")} className="w-full">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="single" className="gap-2" data-testid="tab-single-upload">
+                <FileText className="h-4 w-4" />
+                単一追加
+              </TabsTrigger>
+              <TabsTrigger value="bulk" className="gap-2" data-testid="tab-bulk-upload">
+                <Files className="h-4 w-4" />
+                まとめて追加
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="single" className="mt-4">
+              <Form {...form}>
+                <form onSubmit={form.handleSubmit(handleAddSubmit)}>
+                  <div className="space-y-4">
+                    <FormField
+                      control={form.control}
+                      name="name"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>名前</FormLabel>
+                          <FormControl>
+                            <Input
+                              placeholder="リソース名を入力..."
+                              data-testid="input-resource-name"
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="content"
+                      render={({ field }) => (
+                        <FormItem>
+                          <div className="flex items-center justify-between">
+                            <FormLabel>内容</FormLabel>
+                            <label className="cursor-pointer">
+                              <input
+                                type="file"
+                                className="hidden"
+                                accept=".txt,.json,.md"
+                                onChange={handleFileUpload}
+                              />
+                              <Button variant="outline" size="sm" className="gap-1.5" asChild>
+                                <span>
+                                  <Upload className="h-3.5 w-3.5" />
+                                  ファイルをアップロード
+                                </span>
+                              </Button>
+                            </label>
+                          </div>
+                          <FormControl>
+                            <Textarea
+                              placeholder="ここに内容を貼り付けまたは入力..."
+                              rows={10}
+                              className="font-mono text-sm"
+                              data-testid="input-resource-content"
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                  <DialogFooter className="mt-4">
+                    <Button type="button" variant="outline" onClick={() => setAddDialogOpen(false)} disabled={singleSubmitting}>
+                      キャンセル
+                    </Button>
+                    <Button
+                      type="submit"
+                      disabled={singleSubmitting}
+                      data-testid="button-submit-resource"
+                    >
+                      {singleSubmitting ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          追加中...
+                        </>
+                      ) : "リソースを追加"}
+                    </Button>
+                  </DialogFooter>
+                </form>
+              </Form>
+            </TabsContent>
+
+            <TabsContent value="bulk" className="mt-4">
+              <div className="space-y-4">
+                <div className="border-2 border-dashed rounded-md p-6 text-center">
+                  <label className="cursor-pointer">
+                    <input
+                      type="file"
+                      className="hidden"
+                      accept=".txt,.json,.md"
+                      multiple
+                      onChange={handleBulkFilesSelect}
+                      data-testid="input-bulk-files"
+                    />
+                    <div className="flex flex-col items-center gap-2">
+                      <Upload className="h-8 w-8 text-muted-foreground" />
+                      <p className="text-sm text-muted-foreground">
+                        クリックしてファイルを選択
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        複数ファイルを選択可能（.txt, .json, .md）
+                      </p>
+                    </div>
+                  </label>
+                </div>
+
+                {bulkFiles.length > 0 && (
+                  <ScrollArea className="h-[250px] rounded-md border p-3">
+                    <div className="space-y-2">
+                      {bulkFiles.map((item, index) => (
+                        <div
+                          key={`${item.file.name}-${index}`}
+                          className="flex items-center gap-2 p-2 rounded-md bg-muted/50"
+                          data-testid={`bulk-file-item-${index}`}
+                        >
+                          <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+                          <div className="flex-1 min-w-0 space-y-1">
+                            <p className="text-xs text-muted-foreground truncate">
+                              {item.file.name}
+                            </p>
+                            <Input
+                              value={item.name}
+                              onChange={(e) => handleBulkFileNameChange(index, e.target.value)}
+                              placeholder="登録名を入力..."
+                              className="h-8 text-sm"
+                              data-testid={`input-bulk-file-name-${index}`}
+                            />
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleBulkFileRemove(index)}
+                            data-testid={`button-remove-bulk-file-${index}`}
+                          >
+                            <X className="h-4 w-4" />
                           </Button>
-                        </label>
-                      </div>
-                      <FormControl>
-                        <Textarea
-                          placeholder="ここに内容を貼り付けまたは入力..."
-                          rows={12}
-                          className="font-mono text-sm"
-                          data-testid="input-resource-content"
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                        </div>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                )}
+
+                <DialogFooter>
+                  <Button type="button" variant="outline" onClick={() => setAddDialogOpen(false)} disabled={bulkUploading}>
+                    キャンセル
+                  </Button>
+                  <Button
+                    onClick={handleBulkSubmit}
+                    disabled={bulkFiles.length === 0 || bulkUploading}
+                    data-testid="button-submit-bulk-resources"
+                  >
+                    {bulkUploading ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        追加中...
+                      </>
+                    ) : (
+                      `${bulkFiles.length}件を追加`
+                    )}
+                  </Button>
+                </DialogFooter>
               </div>
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setAddDialogOpen(false)}>
-                  キャンセル
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={isPending}
-                  data-testid="button-submit-resource"
-                >
-                  {isPending ? "追加中..." : "リソースを追加"}
-                </Button>
-              </DialogFooter>
-            </form>
-          </Form>
+            </TabsContent>
+          </Tabs>
         </DialogContent>
       </Dialog>
 
