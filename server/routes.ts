@@ -624,12 +624,32 @@ export async function registerRoutes(
         res.setHeader("Content-Disposition", `attachment; filename="hypothesis-run-${id}.tsv"`);
         res.send(run.step5Output);
       } else if (format === "xlsx") {
-        // For Excel, we'll send the TSV with xlsx content type
-        // In a production app, you'd use a library like xlsx to generate proper Excel files
+        // Generate proper Excel file using xlsx library
+        const XLSX = await import("xlsx");
+        
+        // Parse TSV data
+        const lines = run.step5Output.split("\n").filter(line => line.trim());
+        const data = lines.map(line => line.split("\t"));
+        
+        // Create workbook and worksheet
+        const wb = XLSX.utils.book_new();
+        const ws = XLSX.utils.aoa_to_sheet(data);
+        
+        // Auto-size columns (approximate)
+        const colWidths = data[0]?.map((_, colIndex) => {
+          const maxLen = Math.max(...data.map(row => (row[colIndex] || "").length));
+          return { wch: Math.min(maxLen + 2, 50) };
+        }) || [];
+        ws["!cols"] = colWidths;
+        
+        XLSX.utils.book_append_sheet(wb, ws, "Hypotheses");
+        
+        // Generate buffer
+        const buffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+        
         res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
         res.setHeader("Content-Disposition", `attachment; filename="hypothesis-run-${id}.xlsx"`);
-        // Convert TSV to simple Excel-compatible format (CSV with tabs works in Excel)
-        res.send(run.step5Output);
+        res.send(buffer);
       } else {
         res.status(400).json({ error: "Invalid format. Use 'tsv' or 'xlsx'" });
       }
