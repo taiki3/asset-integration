@@ -40,3 +40,8 @@ waitForPort = 5000
 
 [agent]
 integrations = ["javascript_database:1.0.0", "javascript_gemini_ai_integrations:2.0.0", "javascript_log_in_with_replit:2.0.0"]
+
+[userenv]
+
+[userenv.production]
+ALLOWED_EMAILS = "taiki3.phys@gmail.com"

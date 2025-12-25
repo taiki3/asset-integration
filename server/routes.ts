@@ -7,10 +7,29 @@ import { executeGMethodPipeline, requestPause, requestResume, requestStop, resum
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
 
 // Domain restriction middleware - only allow @agc.com emails (and gmail.com in development)
+// Additional emails can be whitelisted via ALLOWED_EMAILS environment variable (comma-separated)
 const requireAgcDomain: RequestHandler = (req, res, next) => {
   const user = req.user as any;
-  const email = user?.claims?.email;
+  const email = user?.claims?.email?.toLowerCase();
   
+  if (!email) {
+    return res.status(403).json({ 
+      error: "アクセスが拒否されました", 
+      message: "メールアドレスが確認できません。" 
+    });
+  }
+  
+  // Check whitelisted emails first (case-insensitive)
+  const allowedEmails = (process.env.ALLOWED_EMAILS || "")
+    .split(",")
+    .map(e => e.trim().toLowerCase())
+    .filter(e => e.length > 0);
+  
+  if (allowedEmails.includes(email)) {
+    return next();
+  }
+  
+  // Check allowed domains
   const allowedDomains = ["@agc.com"];
   
   // Allow gmail.com in development mode
@@ -18,7 +37,7 @@ const requireAgcDomain: RequestHandler = (req, res, next) => {
     allowedDomains.push("@gmail.com");
   }
   
-  const isAllowed = email && allowedDomains.some(domain => email.endsWith(domain));
+  const isAllowed = allowedDomains.some(domain => email.endsWith(domain));
   
   if (!isAllowed) {
     return res.status(403).json({ 
