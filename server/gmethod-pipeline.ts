@@ -425,6 +425,221 @@ async function updateStepDuration(
 interface TwoPhaseDeepResearchResult extends DeepResearchResult {
   step2_1Output: string;
   step2_2Output: string;
+  step2_2IndividualOutputs?: string[];
+}
+
+// Interface for extracted hypothesis from STEP2-1 output
+interface ExtractedHypothesisFromStep2_1 {
+  number: number;
+  title: string;
+  category: string;
+  scores: {
+    I: number;
+    M: number;
+    L: number;
+    U: number;
+    total: number;
+  };
+  rawText: string;
+}
+
+// Extract individual hypotheses from STEP2-1 output for parallel processing
+async function extractHypothesesFromStep2_1(step2_1Output: string, hypothesisCount: number): Promise<ExtractedHypothesisFromStep2_1[]> {
+  console.log(`[Pipeline] Extracting ${hypothesisCount} hypotheses from Step 2-1 output...`);
+  
+  // Try multiple extraction attempts with different prompts
+  const extractionPrompts = [
+    `以下のStep 2-1出力から、Top ${hypothesisCount}仮説の情報を抽出してください。
+
+【Step 2-1出力】
+${step2_1Output}
+
+【出力形式】
+以下のJSON形式で出力してください（他のテキストは含めないでください）：
+{
+  "hypotheses": [
+    {
+      "number": 1,
+      "title": "仮説タイトル",
+      "category": "Core/Strategic/Moonshot",
+      "scores": { "I": 0.85, "M": 0.90, "L": 0.80, "U": 0.75, "total": 0.85 },
+      "summary": "仮説の要約（100〜200文字）",
+      "details": "Step 2-1出力から抽出した仮説の詳細説明（300〜500文字）"
+    }
+  ]
+}
+
+重要：必ず${hypothesisCount}件の仮説を抽出してください。`,
+    // Fallback prompt with simpler format
+    `Step 2-1出力からTop ${hypothesisCount}の仮説を抽出。JSON形式で出力：
+{"hypotheses":[{"number":1,"title":"タイトル","category":"Core","scores":{"I":0.8,"M":0.8,"L":0.8,"U":0.8,"total":0.8},"summary":"要約","details":"詳細"}]}
+Step 2-1出力:
+${step2_1Output.substring(0, 20000)}`
+  ];
+
+  for (let attempt = 0; attempt < extractionPrompts.length; attempt++) {
+    try {
+      const result = await generateWithFlash(extractionPrompts[attempt]);
+      const jsonMatch = result.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        if (parsed.hypotheses && Array.isArray(parsed.hypotheses) && parsed.hypotheses.length > 0) {
+          const hypotheses: ExtractedHypothesisFromStep2_1[] = parsed.hypotheses.map((h: any, idx: number) => ({
+            number: h.number || idx + 1,
+            title: h.title || `仮説${idx + 1}`,
+            category: h.category || 'Unknown',
+            scores: h.scores || { I: 0, M: 0, L: 0, U: 0, total: 0 },
+            rawText: `【仮説${h.number || idx + 1}: ${h.title || '不明'}】
+カテゴリ: ${h.category || 'Unknown'}
+スコア: I=${h.scores?.I || 0}, M=${h.scores?.M || 0}, L=${h.scores?.L || 0}, U=${h.scores?.U || 0}
+要約: ${h.summary || ''}
+詳細: ${h.details || h.summary || ''}`
+          }));
+          
+          // Validate extraction count - strict mode
+          if (hypotheses.length >= hypothesisCount) {
+            console.log(`[Pipeline] Successfully extracted ${hypotheses.length} hypotheses (attempt ${attempt + 1})`);
+            return hypotheses.slice(0, hypothesisCount);
+          } else {
+            console.warn(`[Pipeline] Attempt ${attempt + 1}: Extracted only ${hypotheses.length}/${hypothesisCount} hypotheses, will retry...`);
+            // Continue to next attempt instead of accepting incomplete extraction
+          }
+        }
+      }
+    } catch (error) {
+      console.error(`[Pipeline] Extraction attempt ${attempt + 1} failed:`, error);
+    }
+  }
+  
+  // Last resort: Parse Step 2-1 output directly using regex patterns
+  console.warn(`[Pipeline] JSON extraction failed, attempting direct parsing...`);
+  const directHypotheses: ExtractedHypothesisFromStep2_1[] = [];
+  
+  // Look for hypothesis markers in the output using exec loop (ES5 compatible)
+  const hypothesisPattern = /仮説\s*(?:No\.?|番号)?\s*(\d+)\s*[:：]?\s*([^\n]+)/g;
+  let match: RegExpExecArray | null;
+  
+  while ((match = hypothesisPattern.exec(step2_1Output)) !== null && directHypotheses.length < hypothesisCount) {
+    directHypotheses.push({
+      number: parseInt(match[1]) || directHypotheses.length + 1,
+      title: match[2].trim().substring(0, 200),
+      category: 'Unknown',
+      scores: { I: 0, M: 0, L: 0, U: 0, total: 0 },
+      rawText: match[0].trim()
+    });
+  }
+  
+  // Enforce exact count even for direct parsing
+  if (directHypotheses.length >= hypothesisCount) {
+    console.log(`[Pipeline] Direct parsing extracted ${directHypotheses.length} hypotheses`);
+    return directHypotheses.slice(0, hypothesisCount);
+  } else if (directHypotheses.length > 0) {
+    throw new Error(`仮説の抽出が不完全です。期待: ${hypothesisCount}件、抽出: ${directHypotheses.length}件。Step 2-1の出力形式を確認してください。`);
+  }
+  
+  // If all else fails, throw error
+  throw new Error(`仮説の抽出に失敗しました。Step 2-1の出力に仮説が見つかりませんでした。`);
+}
+
+// Summarize individual report to compact format for merging
+async function summarizeReportForMerge(report: string, hypothesisNum: number): Promise<string> {
+  const summarizePrompt = `以下の仮説レポートを、以下の構造で要約してください（800〜1200文字）：
+
+【入力レポート】
+${report.substring(0, 8000)}
+
+【出力形式】
+### 仮説${hypothesisNum}
+- タイトル: [仮説タイトル]
+- エグゼクティブサマリー: [100文字]
+- 市場・顧客: [顧客セグメント、市場規模]
+- Trade-off: [顧客のジレンマと素材必然性]
+- メカニズム: [Structure→Property→Performance]
+- Moat: [競争優位性]
+- ロードマップ: [短期/中期/長期]
+- リスク: [主要リスクと対策]
+- 参考文献: [主要3-5件のURL]
+
+重要：定量データ（市場規模、成長率など）を必ず含めてください。`;
+
+  try {
+    return await generateWithFlash(summarizePrompt);
+  } catch (error) {
+    console.error(`[Pipeline] Failed to summarize hypothesis ${hypothesisNum}:`, error);
+    return `### 仮説${hypothesisNum}\n${report.substring(0, 1000)}...`;
+  }
+}
+
+// Merge individual hypothesis reports into unified report using Gemini 3.0 Pro
+async function mergeIndividualReports(
+  step2_1Output: string,
+  individualReports: string[],
+  hypothesisCount: number,
+  runId: number
+): Promise<string> {
+  console.log(`[Run ${runId}] Merging ${individualReports.length} individual reports...`);
+  
+  // First, summarize each report to reduce token count
+  console.log(`[Run ${runId}] Summarizing individual reports...`);
+  const summaries: string[] = [];
+  for (let i = 0; i < individualReports.length; i++) {
+    const summary = await summarizeReportForMerge(individualReports[i], i + 1);
+    summaries.push(summary);
+    console.log(`[Run ${runId}] Summarized hypothesis ${i + 1} (${summary.length} chars)`);
+  }
+  
+  const summarizedReportsSection = summaries.join('\n\n---\n\n');
+  
+  // Collect all references from individual reports for deduplication
+  const allReferences: string[] = [];
+  individualReports.forEach(report => {
+    const refPattern = /\[\d+\]\s*(.+?https?:\/\/[^\s\]]+)/g;
+    let refMatch: RegExpExecArray | null;
+    while ((refMatch = refPattern.exec(report)) !== null) {
+      if (!allReferences.includes(refMatch[1])) {
+        allReferences.push(refMatch[1]);
+      }
+    }
+  });
+  
+  const mergePrompt = `あなたは戦略レポートの編集者です。以下の要約された個別仮説レポートを統合し、最終レポートを作成してください。
+
+【Step 2-1の監査ストリップ（概要のみ）】
+${step2_1Output.substring(0, 3000)}
+
+【要約された個別仮説レポート】
+${summarizedReportsSection}
+
+【統合参考文献候補（重複除去済み、最初の20件）】
+${allReferences.slice(0, 20).map((ref, idx) => `[${idx + 1}] ${ref}`).join('\n')}
+
+【出力指示】
+以下の構成で統合レポートを作成してください：
+
+【レポートタイトル】
+[市場・顧客ニーズ] における [自社技術] を活用した戦略的事業仮説ポートフォリオ (Top ${hypothesisCount} Selection)
+
+【第1章：エグゼクティブサマリー】（600〜1000文字）
+- The Shift: 市場の構造的変化
+- The Pain: 解決すべき本質的課題
+- The Solution: 提案する解決策
+- The Value: 創出される価値
+
+【第2章：事業機会を創出する構造的変曲点 (Why Now?)】
+
+【第3章：戦略的事業仮説ポートフォリオ】
+各仮説について、要約の内容を展開して記載（各500〜800文字）
+
+【第4章：実行ロードマップ】
+
+【第5章：リスク要因と対策】
+
+【第6章：参考文献】
+（重複除去、番号を振り直し）`;
+
+  const mergedReport = await generateWithPro(mergePrompt);
+  console.log(`[Run ${runId}] Merge completed. Output length: ${mergedReport.length} chars`);
+  return mergedReport;
 }
 
 // Helper function to run a single Deep Research phase
@@ -607,70 +822,136 @@ async function executeDeepResearchStep2(context: PipelineContext, runId: number)
       fileSearchStoreName1 = null;
     }
 
-    // ===== PHASE 2: Step 2-2 (Convergent Deep-dive) =====
-    console.log(`[Run ${runId}] === PHASE 2: Step 2-2 (収束・深掘りフェーズ) ===`);
+    // ===== PHASE 2: Step 2-2 Parallel (N個のDeep Researchを並列実行) =====
+    console.log(`[Run ${runId}] === PHASE 2: Step 2-2 Parallel (${context.hypothesisCount}個の仮説を並列深掘り) ===`);
     
     const step2_2StartTime = Date.now();
     
+    // Extract individual hypotheses from Step 2-1 output
     await updateProgress(runId, { 
-      currentPhase: "step2_2_uploading", 
+      currentPhase: "step2_2_extracting", 
       currentIteration: 2, 
-      maxIterations: 2,
-      planningAnalysis: "Step 2-2: Step 2-1の結果をFile Searchストアにアップロード中...",
+      maxIterations: context.hypothesisCount + 2,
+      planningAnalysis: "Step 2-2: Step 2-1の結果から個別仮説を抽出中...",
       stepTimings,
       stepStartTime: startTime,
     });
 
-    fileSearchStoreName2 = await createFileSearchStore(`gmethod-run-${runId}-step2-2-${Date.now()}`);
-    console.log(`[Run ${runId}] Created File Search Store for Step 2-2: ${fileSearchStoreName2}`);
+    const extractedHypotheses = await extractHypothesesFromStep2_1(step2_1Output, context.hypothesisCount);
+    console.log(`[Run ${runId}] Extracted ${extractedHypotheses.length} hypotheses for parallel processing`);
 
-    // Upload Step 2-1 result
-    await uploadTextToFileSearchStore(fileSearchStoreName2, step2_1Output, "step2_1_result");
-    console.log(`[Run ${runId}] Uploaded Step 2-1 result`);
-
-    // Upload original resources too
-    await uploadTextToFileSearchStore(fileSearchStoreName2, context.targetSpec, "target_specification");
-    await uploadTextToFileSearchStore(fileSearchStoreName2, context.technicalAssets, "technical_assets");
-    console.log(`[Run ${runId}] Uploaded original resources for Step 2-2`);
-
-    stepTimings["step2_2_file_upload"] = Date.now() - step2_2StartTime;
-
-    // Get Step 2-2 prompt (convergent deep-dive)
-    let researchPrompt2_2 = await getDeepResearchPrompt2_2();
-    researchPrompt2_2 = researchPrompt2_2.replace(/{HYPOTHESIS_COUNT}/g, context.hypothesisCount.toString());
+    // Get Step 2-2 prompt template (individual hypothesis deep-dive)
+    const researchPrompt2_2Template = await getDeepResearchPrompt2_2();
     
-    console.log(`[Run ${runId}] Step 2-2 Prompt: ${researchPrompt2_2.length} chars`);
+    // Run N Deep Research tasks sequentially (due to rate limiting: 1 request/minute)
+    const individualReports: string[] = [];
+    const fileSearchStores: string[] = [];
+    
+    for (let i = 0; i < extractedHypotheses.length; i++) {
+      const hypothesis = extractedHypotheses[i];
+      const hypothesisNum = i + 1;
+      
+      console.log(`[Run ${runId}] Starting Deep Research for Hypothesis ${hypothesisNum}/${extractedHypotheses.length}: ${hypothesis.title}`);
+      
+      await updateProgress(runId, { 
+        currentPhase: `step2_2_hypothesis_${hypothesisNum}`, 
+        currentIteration: hypothesisNum + 1, 
+        maxIterations: context.hypothesisCount + 2,
+        planningAnalysis: `Step 2-2: 仮説${hypothesisNum}「${hypothesis.title}」をDeep Research中... (${hypothesisNum}/${extractedHypotheses.length})`,
+        stepTimings,
+        stepStartTime: startTime,
+      });
 
+      // Create File Search Store for this hypothesis
+      const storeName = await createFileSearchStore(`gmethod-run-${runId}-step2-2-h${hypothesisNum}-${Date.now()}`);
+      fileSearchStores.push(storeName);
+      console.log(`[Run ${runId}] Created File Search Store for Hypothesis ${hypothesisNum}: ${storeName}`);
+
+      // Upload context for this specific hypothesis
+      const hypothesisContext = `【対象仮説】
+仮説番号: ${hypothesisNum}
+タイトル: ${hypothesis.title}
+カテゴリ: ${hypothesis.category}
+スコア: I=${hypothesis.scores.I}, M=${hypothesis.scores.M}, L=${hypothesis.scores.L}, U=${hypothesis.scores.U}, Total=${hypothesis.scores.total}
+
+【Step 2-1からの詳細情報】
+${hypothesis.rawText}
+
+【Step 2-1全体の監査ストリップ（参考）】
+${step2_1Output}`;
+
+      await uploadTextToFileSearchStore(storeName, hypothesisContext, "hypothesis_context");
+      await uploadTextToFileSearchStore(storeName, context.targetSpec, "target_specification");
+      await uploadTextToFileSearchStore(storeName, context.technicalAssets, "technical_assets");
+      
+      // Customize prompt for this specific hypothesis
+      const individualPrompt = researchPrompt2_2Template
+        .replace(/{HYPOTHESIS_COUNT}/g, "1")
+        .replace(/{HYPOTHESIS_NUMBER}/g, hypothesisNum.toString())
+        .replace(/{HYPOTHESIS_TITLE}/g, hypothesis.title);
+      
+      try {
+        // Execute Deep Research for this hypothesis
+        const hypothesisReport = await runDeepResearchPhase(
+          client, 
+          individualPrompt, 
+          storeName, 
+          runId, 
+          `Step 2-2 Hypothesis ${hypothesisNum}`,
+          startTime
+        );
+        
+        individualReports.push(hypothesisReport);
+        console.log(`[Run ${runId}] Hypothesis ${hypothesisNum} completed. Output length: ${hypothesisReport.length} chars`);
+        
+        stepTimings[`step2_2_hypothesis_${hypothesisNum}`] = Date.now() - step2_2StartTime;
+      } catch (error: any) {
+        console.error(`[Run ${runId}] Hypothesis ${hypothesisNum} failed:`, error);
+        individualReports.push(`【仮説${hypothesisNum}: ${hypothesis.title}】\nDeep Researchの実行に失敗しました: ${error?.message || error}`);
+      }
+      
+      // Cleanup this hypothesis's File Search Store
+      await deleteFileSearchStore(storeName);
+      
+      // Enforce 60s spacing between Deep Research requests (rate limit: 1 req/min)
+      if (i < extractedHypotheses.length - 1) {
+        console.log(`[Run ${runId}] Waiting 60 seconds before next Deep Research (rate limit)...`);
+        await updateProgress(runId, { 
+          currentPhase: `step2_2_rate_limit`, 
+          currentIteration: hypothesisNum + 1, 
+          maxIterations: context.hypothesisCount + 2,
+          planningAnalysis: `レート制限のため60秒待機中... (仮説${hypothesisNum}完了、次: 仮説${hypothesisNum + 1})`,
+          stepTimings,
+          stepStartTime: startTime,
+        });
+        await sleep(60000); // 60 second delay
+      }
+    }
+    
+    stepTimings["step2_2_all_hypotheses"] = Date.now() - step2_2StartTime;
+    console.log(`[Run ${runId}] All ${individualReports.length} hypothesis Deep Research tasks completed`);
+
+    // ===== PHASE 3: Merge individual reports using Gemini 3.0 Pro =====
+    console.log(`[Run ${runId}] === PHASE 3: Step 2-3 (統合レポート生成 - Gemini 3.0 Pro) ===`);
+    
+    const step2_3StartTime = Date.now();
+    
     await updateProgress(runId, { 
-      currentPhase: "step2_2_running", 
-      currentIteration: 2, 
-      maxIterations: 2,
-      planningAnalysis: "Step 2-2: Deep Research エージェントが収束・深掘りフェーズを実行中...",
+      currentPhase: "step2_3_merging", 
+      currentIteration: context.hypothesisCount + 2, 
+      maxIterations: context.hypothesisCount + 2,
+      planningAnalysis: "Step 2-3: 個別レポートを統合中（Gemini 3.0 Pro）...",
       stepTimings,
       stepStartTime: startTime,
     });
 
-    // Execute Step 2-2 Deep Research
-    step2_2Output = await runDeepResearchPhase(
-      client, 
-      researchPrompt2_2, 
-      fileSearchStoreName2, 
-      runId, 
-      "Step 2-2",
-      startTime
-    );
+    step2_2Output = await mergeIndividualReports(step2_1Output, individualReports, context.hypothesisCount, runId);
     
-    stepTimings["step2_2_deep_research"] = Date.now() - step2_2StartTime;
-    console.log(`[Run ${runId}] Step 2-2 completed. Output length: ${step2_2Output.length} chars`);
+    stepTimings["step2_3_merge"] = Date.now() - step2_3StartTime;
+    console.log(`[Run ${runId}] Merge completed. Final report length: ${step2_2Output.length} chars`);
 
     // Save Step 2-2 output to database
     await storage.updateRun(runId, { step2_2Output });
-
-    // Cleanup Step 2-2 File Search Store
-    if (fileSearchStoreName2) {
-      await deleteFileSearchStore(fileSearchStoreName2);
-      fileSearchStoreName2 = null;
-    }
 
     // ===== Combine outputs =====
     const combinedReport = `【Step 2-1：発散・選定フェーズ（監査ストリップ）】
@@ -679,7 +960,7 @@ ${step2_1Output}
 
 ${'='.repeat(80)}
 
-【Step 2-2：収束・深掘りフェーズ（詳細レポート）】
+【Step 2-2：収束・深掘りフェーズ（${context.hypothesisCount}個のAIによる並列詳細分析 + 統合レポート）】
 
 ${step2_2Output}`;
 
@@ -699,18 +980,19 @@ ${step2_2Output}`;
     const validationResult = await validateHypotheses(combinedReport, context.hypothesisCount, runId);
     stepTimings["validation"] = Date.now() - validationStartTime;
 
-    console.log(`[Run ${runId}] Two-Phase Deep Research completed. Total time: ${Math.floor(stepTimings["total"] / 1000)}s`);
+    console.log(`[Run ${runId}] Three-Phase Deep Research completed. Total time: ${Math.floor(stepTimings["total"] / 1000)}s`);
 
     return {
       report: combinedReport,
       searchQueries: [],
-      iterationCount: 2,
+      iterationCount: context.hypothesisCount + 2,
       validationResult,
       step2_1Output,
-      step2_2Output
+      step2_2Output,
+      step2_2IndividualOutputs: individualReports
     };
   } catch (error: any) {
-    console.error(`[Run ${runId}] Two-Phase Deep Research failed:`, error);
+    console.error(`[Run ${runId}] Three-Phase Deep Research failed:`, error);
     throw new Error(`Deep Research APIの起動に失敗しました: ${error?.message || error}`);
   } finally {
     if (fileSearchStoreName1) {
