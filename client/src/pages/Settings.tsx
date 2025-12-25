@@ -23,7 +23,9 @@ interface PromptData {
 }
 
 const STEP_NAMES: Record<number, string> = {
-  2: "Step 2: 仮説提案",
+  21: "Step 2-1: 発散・選定フェーズ",
+  22: "Step 2-2: 収束・深掘りフェーズ",
+  2: "Step 2: 仮説提案（レガシー）",
   3: "Step 3: 科学的評価",
   4: "Step 4: 戦略監査",
   5: "Step 5: 統合出力",
@@ -31,7 +33,7 @@ const STEP_NAMES: Record<number, string> = {
 
 export default function Settings() {
   const { toast } = useToast();
-  const [selectedStep, setSelectedStep] = useState<number>(2);
+  const [selectedStep, setSelectedStep] = useState<number>(21);
   const [editContent, setEditContent] = useState<string>("");
   const [selectedVersionId, setSelectedVersionId] = useState<string>("");
 
@@ -165,7 +167,7 @@ export default function Settings() {
                   <SelectValue placeholder="ステップを選択" />
                 </SelectTrigger>
                 <SelectContent>
-                  {[2, 3, 4, 5].map(step => (
+                  {[21, 22, 3, 4, 5].map(step => (
                     <SelectItem key={step} value={step.toString()}>
                       {STEP_NAMES[step]}
                     </SelectItem>
