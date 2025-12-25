@@ -831,10 +831,11 @@ async function executeDeepResearchStep2(context: PipelineContext, runId: number)
       fileSearchStoreName1 = null;
     }
 
-    // ===== PHASE 2: Step 2-2 Parallel (N個のDeep Researchを並列実行) =====
-    console.log(`[Run ${runId}] === PHASE 2: Step 2-2 Parallel (${context.hypothesisCount}個の仮説を並列深掘り) ===`);
+    // ===== PHASE 2: Step 2-2 Parallel (N個のDeep Researchを1分間隔で投入・並列実行) =====
+    console.log(`[Run ${runId}] === PHASE 2: Step 2-2 Parallel (${context.hypothesisCount}個の仮説を1分間隔で投入・並列実行) ===`);
     
     const step2_2StartTime = Date.now();
+    const LAUNCH_INTERVAL_MS = 60 * 1000; // 1分間隔
     
     // Extract individual hypotheses from Step 2-1 output
     await updateProgress(runId, { 
@@ -852,21 +853,27 @@ async function executeDeepResearchStep2(context: PipelineContext, runId: number)
     // Get Step 2-2 prompt template (individual hypothesis deep-dive)
     const researchPrompt2_2Template = await getDeepResearchPrompt2_2();
     
-    // Run N Deep Research tasks sequentially (due to rate limiting: 1 request/minute)
-    const individualReports: string[] = [];
+    // Prepare all Deep Research tasks with staggered launch (1 minute intervals)
     const fileSearchStores: string[] = [];
     
-    for (let i = 0; i < extractedHypotheses.length; i++) {
-      const hypothesis = extractedHypotheses[i];
-      const hypothesisNum = i + 1;
+    // Create a task runner function for each hypothesis
+    const createHypothesisTask = async (hypothesis: ExtractedHypothesisFromStep2_1, index: number): Promise<{ index: number; report: string }> => {
+      const hypothesisNum = index + 1;
       
-      console.log(`[Run ${runId}] Starting Deep Research for Hypothesis ${hypothesisNum}/${extractedHypotheses.length}: ${hypothesis.title}`);
+      // Wait for staggered launch (hypothesis 1 starts immediately, 2 waits 1 min, 3 waits 2 min, etc.)
+      const delayMs = index * LAUNCH_INTERVAL_MS;
+      if (delayMs > 0) {
+        console.log(`[Run ${runId}] Hypothesis ${hypothesisNum} waiting ${index} minute(s) before launch...`);
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+      }
+      
+      console.log(`[Run ${runId}] Launching Deep Research for Hypothesis ${hypothesisNum}/${extractedHypotheses.length}: ${hypothesis.title}`);
       
       await updateProgress(runId, { 
         currentPhase: `step2_2_hypothesis_${hypothesisNum}`, 
         currentIteration: hypothesisNum + 1, 
         maxIterations: context.hypothesisCount + 2,
-        planningAnalysis: `Step 2-2: 仮説${hypothesisNum}「${hypothesis.title}」をDeep Research中... (${hypothesisNum}/${extractedHypotheses.length})`,
+        planningAnalysis: `Step 2-2: 仮説${hypothesisNum}「${hypothesis.title}」をDeep Research中... (${hypothesisNum}/${extractedHypotheses.length}並列実行中)`,
         stepTimings,
         stepStartTime: startTime,
       });
@@ -910,21 +917,39 @@ ${step2_1Output}`;
           startTime
         );
         
-        individualReports.push(hypothesisReport);
         console.log(`[Run ${runId}] Hypothesis ${hypothesisNum} completed. Output length: ${hypothesisReport.length} chars`);
-        
         stepTimings[`step2_2_hypothesis_${hypothesisNum}`] = Date.now() - step2_2StartTime;
+        
+        // Cleanup this hypothesis's File Search Store
+        await deleteFileSearchStore(storeName);
+        
+        return { index, report: hypothesisReport };
       } catch (error: any) {
         console.error(`[Run ${runId}] Hypothesis ${hypothesisNum} failed:`, error);
-        individualReports.push(`【仮説${hypothesisNum}: ${hypothesis.title}】\nDeep Researchの実行に失敗しました: ${error?.message || error}`);
+        
+        // Cleanup on error
+        await deleteFileSearchStore(storeName);
+        
+        return { index, report: `【仮説${hypothesisNum}: ${hypothesis.title}】\nDeep Researchの実行に失敗しました: ${error?.message || error}` };
       }
-      
-      // Cleanup this hypothesis's File Search Store
-      await deleteFileSearchStore(storeName);
-    }
+    };
+    
+    // Launch all tasks with staggered starts (1 minute intervals) and run in parallel
+    console.log(`[Run ${runId}] Starting ${extractedHypotheses.length} parallel Deep Research tasks with 1-minute staggered launch...`);
+    
+    const taskPromises = extractedHypotheses.map((hypothesis, index) => 
+      createHypothesisTask(hypothesis, index)
+    );
+    
+    // Wait for all tasks to complete
+    const results = await Promise.all(taskPromises);
+    
+    // Sort results by index to maintain order
+    results.sort((a, b) => a.index - b.index);
+    const individualReports = results.map(r => r.report);
     
     stepTimings["step2_2_all_hypotheses"] = Date.now() - step2_2StartTime;
-    console.log(`[Run ${runId}] All ${individualReports.length} hypothesis Deep Research tasks completed`);
+    console.log(`[Run ${runId}] All ${individualReports.length} parallel Deep Research tasks completed`);
 
     // ===== PHASE 3: Merge individual reports using Gemini 3.0 Pro =====
     console.log(`[Run ${runId}] === PHASE 3: Step 2-3 (統合レポート生成 - Gemini 3.0 Pro) ===`);
