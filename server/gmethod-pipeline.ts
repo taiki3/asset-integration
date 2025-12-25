@@ -353,7 +353,17 @@ interface ProgressInfo {
 }
 
 async function updateProgress(runId: number, progressInfo: ProgressInfo): Promise<void> {
-  await storage.updateRun(runId, { progressInfo });
+  const run = await storage.getRun(runId);
+  const existingProgress = (run?.progressInfo as ProgressInfo) || {};
+  const mergedProgress = {
+    ...existingProgress,
+    ...progressInfo,
+    stepDurations: {
+      ...existingProgress.stepDurations,
+      ...progressInfo.stepDurations,
+    },
+  };
+  await storage.updateRun(runId, { progressInfo: mergedProgress });
 }
 
 async function updateStepDuration(
@@ -365,7 +375,7 @@ async function updateStepDuration(
   const existingProgress = (run?.progressInfo as ProgressInfo) || {};
   const stepDurations = existingProgress.stepDurations || {};
   stepDurations[stepKey] = timing;
-  await updateProgress(runId, { ...existingProgress, stepDurations });
+  await updateProgress(runId, { stepDurations });
 }
 
 async function executeDeepResearchStep2(context: PipelineContext, runId: number): Promise<DeepResearchResult> {

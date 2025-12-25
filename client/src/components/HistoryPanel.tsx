@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { History, ChevronRight, Download, Loader2, CheckCircle, XCircle, Clock, FileSpreadsheet, AlertTriangle } from "lucide-react";
+import { History, ChevronRight, Download, Loader2, CheckCircle, XCircle, Clock, FileSpreadsheet, AlertTriangle, Timer } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -37,6 +37,29 @@ const statusConfig: Record<string, { label: string; icon: typeof Clock; variant:
 };
 
 const defaultStatus = { label: "不明", icon: Clock, variant: "secondary" as const, animate: false };
+
+interface StepTiming {
+  startTime: number;
+  endTime?: number;
+  durationMs?: number;
+}
+
+interface StepDurations {
+  step2?: StepTiming;
+  step3?: StepTiming;
+  step4?: StepTiming;
+  step5?: StepTiming;
+}
+
+function formatDuration(ms: number): string {
+  const seconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  if (minutes > 0) {
+    return `${minutes}分${remainingSeconds}秒`;
+  }
+  return `${seconds}秒`;
+}
 
 export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel }: HistoryPanelProps) {
   const [selectedRun, setSelectedRun] = useState<HypothesisRun | null>(null);
@@ -164,6 +187,41 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel }
                       </TabsTrigger>
                     ))}
                   </TabsList>
+                  
+                  {(() => {
+                    const progressInfo = selectedRun.progressInfo as { stepDurations?: StepDurations } | null;
+                    const stepDurations = progressInfo?.stepDurations;
+                    if (stepDurations && Object.keys(stepDurations).length > 0) {
+                      const totalDuration = Object.values(stepDurations).reduce(
+                        (sum, timing) => sum + (timing?.durationMs || 0), 0
+                      );
+                      return (
+                        <div className="flex items-center gap-4 mt-3 px-1 text-xs text-muted-foreground" data-testid="step-timings">
+                          <div className="flex items-center gap-1">
+                            <Timer className="h-3 w-3" />
+                            <span>処理時間:</span>
+                          </div>
+                          {stepDurations.step2?.durationMs && (
+                            <span data-testid="timing-step2">S2: {formatDuration(stepDurations.step2.durationMs)}</span>
+                          )}
+                          {stepDurations.step3?.durationMs && (
+                            <span data-testid="timing-step3">S3: {formatDuration(stepDurations.step3.durationMs)}</span>
+                          )}
+                          {stepDurations.step4?.durationMs && (
+                            <span data-testid="timing-step4">S4: {formatDuration(stepDurations.step4.durationMs)}</span>
+                          )}
+                          {stepDurations.step5?.durationMs && (
+                            <span data-testid="timing-step5">S5: {formatDuration(stepDurations.step5.durationMs)}</span>
+                          )}
+                          {totalDuration > 0 && (
+                            <span className="font-medium" data-testid="timing-total">合計: {formatDuration(totalDuration)}</span>
+                          )}
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
+                  
                   {stepLabels.map(({ key }) => (
                     <TabsContent key={key} value={key} className="mt-4 overflow-hidden">
                       <ScrollArea className="h-[45vh] rounded-md border bg-muted/30 p-4">
