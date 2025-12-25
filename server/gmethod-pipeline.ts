@@ -689,6 +689,11 @@ async function runDeepResearchPhase(
     }
   } catch (apiError: any) {
     debugLog(`[Run ${runId}] ${phaseName} API Error: ${apiError.message}`);
+    // Check for rate limit error (429)
+    if (apiError.status === 429 || apiError.message?.includes('429') || apiError.message?.includes('rate') || apiError.message?.includes('quota')) {
+      console.error(`[Run ${runId}] ⚠️ RATE LIMIT ERROR (429): ${phaseName} - APIレート制限に達しました`);
+      throw new Error(`${phaseName} レート制限エラー (429): APIのクォータを超過しました。しばらく待ってから再試行してください。`);
+    }
     throw new Error(`${phaseName} APIの起動に失敗しました: ${apiError.message}`);
   }
   
@@ -722,6 +727,11 @@ async function runDeepResearchPhase(
     } catch (pollError: any) {
       if (pollError.message?.includes("が失敗")) {
         throw pollError;
+      }
+      // Check for rate limit error (429) during polling
+      if (pollError.status === 429 || pollError.message?.includes('429') || pollError.message?.includes('rate') || pollError.message?.includes('quota')) {
+        console.error(`[Run ${runId}] ⚠️ RATE LIMIT ERROR (429): ${phaseName} - ポーリング中にレート制限に達しました`);
+        throw new Error(`${phaseName} レート制限エラー (429): APIのクォータを超過しました。`);
       }
       console.warn(`[Run ${runId}] ${phaseName} Poll error (continuing):`, pollError.message);
     }
@@ -912,20 +922,6 @@ ${step2_1Output}`;
       
       // Cleanup this hypothesis's File Search Store
       await deleteFileSearchStore(storeName);
-      
-      // Enforce 60s spacing between Deep Research requests (rate limit: 1 req/min)
-      if (i < extractedHypotheses.length - 1) {
-        console.log(`[Run ${runId}] Waiting 60 seconds before next Deep Research (rate limit)...`);
-        await updateProgress(runId, { 
-          currentPhase: `step2_2_rate_limit`, 
-          currentIteration: hypothesisNum + 1, 
-          maxIterations: context.hypothesisCount + 2,
-          planningAnalysis: `レート制限のため60秒待機中... (仮説${hypothesisNum}完了、次: 仮説${hypothesisNum + 1})`,
-          stepTimings,
-          stepStartTime: startTime,
-        });
-        await sleep(60000); // 60 second delay
-      }
     }
     
     stepTimings["step2_2_all_hypotheses"] = Date.now() - step2_2StartTime;
