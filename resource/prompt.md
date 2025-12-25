@@ -30,7 +30,7 @@ Title」「監査ストリップ（Phase 2内）」
  
 4) 第3章カードのスキーマ固定＋Skeletonコピペ義務化
 - 各カードは以下の小見出しをこの順で必須（語句・記号・コロン位置まで完全一致。改変・別表記禁止）：
-  - ターゲット:
+  - 市場・顧客ニーズ:
   - 顧客の「解決不能なジレンマ」 (The Trade-off):
     - Inevitability (Must-have根拠):
     - Material Necessity (素材必然性の根拠):
@@ -105,13 +105,13 @@ Sintered HA | Cap-163 + Cap-137 | 科学的飛躍 | メカニズム | 0.58 |
   - 仮説1: WVTR ≤ 1e-6 g/m²/day @37°C; tanδ ≤ 0.001 @ GHz; ピール強度 ≥ 1.0 kN/m
 ---
 【レポートタイトル】
-[Role Aに基づくターゲット] における [自社技術] を活用した戦略的事業仮説ポートフォリオ (Top 5 Selection)
+[Role Aに基づく市場・顧客ニーズ] における [自社技術] を活用した戦略的事業仮説ポートフォリオ (Top 5 Selection)
 【第1章：エグゼクティブサマリー】
 【第2章：事業機会を創出する構造的変曲点 (Why Now?)】
 【第3章：戦略的事業仮説ポートフォリオ (The Top 5 Hypotheses)】
 仮説
 No. 1 : Neuro-Hermetic Packaging
-- ターゲット:
+- 市場・顧客ニーズ:
 - 顧客の「解決不能なジレンマ」 (The
 Trade-off):
   - Inevitability (Must-have根拠):
@@ -150,13 +150,13 @@ Plasma-Catalysis Lite | Cap-007 + Cap-036 | 採算性不足 | なし | 0.62 |
   - 仮説1: エネルギー消費 ≤ 100 kJ/mol-CO2; サイクル寿命 ≥ 10万回; 漏液率 = 0 %
 ---
 【レポートタイトル】
-[Role Aに基づくターゲット] における [自社技術] を活用した戦略的事業仮説ポートフォリオ (Top 5 Selection)
+[Role Aに基づく市場・顧客ニーズ] における [自社技術] を活用した戦略的事業仮説ポートフォリオ (Top 5 Selection)
 【第1章：エグゼクティブサマリー】
 【第2章：事業機会を創出する構造的変曲点 (Why Now?)】
 【第3章：戦略的事業仮説ポートフォリオ (The Top 5 Hypotheses)】
 仮説
 No. 1 : Electro-Swing CO2 Matrix
-- ターゲット:
+- 市場・顧客ニーズ:
 - 顧客の「解決不能なジレンマ」 (The
 Trade-off):
   - Inevitability (Must-have根拠):
@@ -179,7 +179,7 @@ Mechanism):
 - 出力開始後に新規Web検索は禁止（引用[n]は前処理取得情報から）。
  
 0.1 役割マッピング（Role Map）
-- 添付ファイルから自動判定：Role A（ターゲット定義）／Role B（技術資産：Cap-ID／material_system／function）／Role C（除外リスト：.xlsx/.csv可）
+- 添付ファイルから自動判定：Role A（市場・顧客ニーズ定義）／Role B（技術シーズ：Cap-ID／material_system／function）／Role C（除外リスト：.xlsx/.csv可）
 - Negative
 Scope重複判定：「Pain ×
 Core Mechanism一致＝重複（形態差は不問）」。
@@ -213,11 +213,11 @@ A/B/Cと外部探索結果に基づき、Top
 - 出力要素：Ideation総数（≥30）＋内訳／Negative Scope照合／選抜重み（I 40%, M 30%, L 15%, U 15%）／Top 5短表（固定列）／惜敗短表（固定列）／KPI（各3件以上、数値＋単位のみ）
  
 4. 事業仮説の核心インプット（Core Inputs）
-- Role A（ターゲット）・Role B（技術資産）・Web情報に基づき、Cap-XXが素材必然性を発揮しうる「物理ボトルネック」「構造的変曲点」を特定。Negative Scope焼き直し禁止。
+- Role A（市場・顧客ニーズ）・Role B（技術シーズ）・Web情報に基づき、Cap-XXが素材必然性を発揮しうる「物理ボトルネック」「構造的変曲点」を特定。Negative Scope焼き直し禁止。
  
 5. Phase 2：レポート構成と出力テンプレート（Strict）
 【レポートタイトル】
-[Role Aに基づくターゲット] における [自社技術] を活用した戦略的事業仮説ポートフォリオ (Top 5 Selection)
+[Role Aに基づく市場・顧客ニーズ] における [自社技術] を活用した戦略的事業仮説ポートフォリオ (Top 5 Selection)
  
 【第1章：エグゼクティブサマリー】（600〜1000文字）
 - The Shift／The Pain／The Solution／The Value
@@ -228,7 +228,7 @@ A/B/Cと外部探索結果に基づき、Top
 【第3章：戦略的事業仮説ポートフォリオ (The Top 5 Hypotheses)】（カード5枚・各1,000〜2,000字）
 仮説
 No. [1] : [Phase 1短表と完全一致のタイトル]
-- ターゲット:
+- 市場・顧客ニーズ:
 - 顧客の「解決不能なジレンマ」 (The
 Trade-off):
   - 今の板挟み…
@@ -268,7 +268,7 @@ Sandwich（Recency Bias対策）】
 <instruction>
 - Role Mapを確認後、即座にSkeleton→Fillで出力。開始アンカー3行→Phase 1（監査ストリップ）→単独行'---'→Phase 2（ロック見出し＋第3章カード枠）→本文充填。
 - 見出しはロックに完全一致。独自見出し禁止。添付ファイルの文体・見出しは模倣禁止。
-- 第3章カードは5枚・各カードに「ターゲット」「Trade-off（Inevitability／Material Necessity）」「Mechanism（Structure／Property／Performance／Causal chain）」「Moat」。StructureにCap-ID≥2。各カードで定量[n]≥1。
+- 第3章カードは5枚・各カードに「市場・顧客ニーズ」「Trade-off（Inevitability／Material Necessity）」「Mechanism（Structure／Property／Performance／Causal chain）」「Moat」。StructureにCap-ID≥2。各カードで定量[n]≥1。
 - Phase 1のTop 5短表・惜敗短表は固定列・列順で出力。判定タグはCore/Strategic/Moonshotのみ。KPIは全5仮説×3件以上（数値＋単位／プレースホルダ不可）。説明≤600字（短表・KPI除外）。
 - 本文[n]と第6章（20件以上・完全URL）は一意対応。送信前に受け入れテストを実行し、合格まで自動再構成。
 - 追加検索禁止。途切れた場合は「続けて」で同一フォーマット・同一番号体系で続行。

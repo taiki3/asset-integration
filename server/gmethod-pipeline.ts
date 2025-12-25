@@ -280,12 +280,12 @@ async function generateWithFlashAndSearch(prompt: string): Promise<string> {
 
 const PLANNING_PROMPT = `あなたは事業仮説のリサーチプランナーです。
 
-以下の「ターゲット指定」と「技術資産」を分析し、事業仮説を生成するために必要な調査クエリを5〜10個生成してください。
+以下の「市場・顧客ニーズ」と「技術シーズ」を分析し、事業仮説を生成するために必要な調査クエリを5〜10個生成してください。
 
-【ターゲット指定】
+【市場・顧客ニーズ】
 {TARGET_SPEC}
 
-【技術資産】
+【技術シーズ】
 {TECHNICAL_ASSETS}
 
 【過去に生成した仮説（重複回避用）】
@@ -313,10 +313,10 @@ const EXPLORATION_PROMPT = `以下の検索クエリに基づいて、事業仮�
 【検索クエリ】
 {QUERIES}
 
-【ターゲット指定】
+【市場・顧客ニーズ】
 {TARGET_SPEC}
 
-【技術資産】
+【技術シーズ】
 {TECHNICAL_ASSETS}
 
 各クエリについて、関連する情報を収集し、事業仮説の立案に役立つ知見をまとめてください。
@@ -329,10 +329,10 @@ const REASONING_PROMPT = `あなたは事業仮説レポートの品質評価者
 【収集した情報】
 {SEARCH_RESULTS}
 
-【ターゲット指定】
+【市場・顧客ニーズ】
 {TARGET_SPEC}
 
-【技術資産】
+【技術シーズ】
 {TECHNICAL_ASSETS}
 
 以下の要件を満たせるか確認してください：

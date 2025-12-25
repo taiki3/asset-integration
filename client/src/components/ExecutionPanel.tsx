@@ -421,7 +421,7 @@ export function ExecutionPanel({
               <div className="space-y-3">
               <Label className="flex items-center gap-2">
                 <Target className="h-4 w-4 text-muted-foreground" />
-                ターゲット仕様
+                市場・顧客ニーズ
               </Label>
               <Select
                 value={selectedTargetSpec}
@@ -429,12 +429,12 @@ export function ExecutionPanel({
                 disabled={isExecuting}
               >
                 <SelectTrigger data-testid="select-target-spec">
-                  <SelectValue placeholder="ターゲット仕様を選択..." />
+                  <SelectValue placeholder="市場・顧客ニーズを選択..." />
                 </SelectTrigger>
                 <SelectContent>
                   {targetSpecs.length === 0 ? (
                     <div className="py-4 px-2 text-sm text-muted-foreground text-center">
-                      ターゲット仕様がありません。先に追加してください。
+                      市場・顧客ニーズがありません。先に追加してください。
                     </div>
                   ) : (
                     targetSpecs.map((spec) => (
@@ -450,7 +450,7 @@ export function ExecutionPanel({
             <div className="space-y-3">
               <Label className="flex items-center gap-2">
                 <Cpu className="h-4 w-4 text-muted-foreground" />
-                技術アセット
+                技術シーズ
               </Label>
               <Select
                 value={selectedTechnicalAssets}
@@ -458,12 +458,12 @@ export function ExecutionPanel({
                 disabled={isExecuting}
               >
                 <SelectTrigger data-testid="select-technical-assets">
-                  <SelectValue placeholder="技術アセットを選択..." />
+                  <SelectValue placeholder="技術シーズを選択..." />
                 </SelectTrigger>
                 <SelectContent>
                   {technicalAssets.length === 0 ? (
                     <div className="py-4 px-2 text-sm text-muted-foreground text-center">
-                      技術アセットがありません。先に追加してください。
+                      技術シーズがありません。先に追加してください。
                     </div>
                   ) : (
                     technicalAssets.map((asset) => (
@@ -523,11 +523,11 @@ export function ExecutionPanel({
                     <div className="space-y-2">
                       <Label className="text-sm flex items-center gap-2">
                         <Target className="h-3 w-3" />
-                        ターゲット仕様で絞り込み
+                        市場・顧客ニーズで絞り込み
                       </Label>
                       {availableFilterTargets.length === 0 ? (
                         <p className="text-xs text-muted-foreground py-2">
-                          既出仮説に紐づくターゲット仕様がありません
+                          既出仮説に紐づく市場・顧客ニーズがありません
                         </p>
                       ) : (
                         <div className="space-y-1 max-h-32 overflow-y-auto">
@@ -552,11 +552,11 @@ export function ExecutionPanel({
                     <div className="space-y-2">
                       <Label className="text-sm flex items-center gap-2">
                         <Cpu className="h-3 w-3" />
-                        技術アセットで絞り込み
+                        技術シーズで絞り込み
                       </Label>
                       {availableFilterAssets.length === 0 ? (
                         <p className="text-xs text-muted-foreground py-2">
-                          既出仮説に紐づく技術アセットがありません
+                          既出仮説に紐づく技術シーズがありません
                         </p>
                       ) : (
                         <div className="space-y-1 max-h-32 overflow-y-auto">
@@ -667,7 +667,7 @@ export function ExecutionPanel({
               リソースの編集
             </DialogTitle>
             <DialogDescription>
-              ターゲット仕様と技術アセットを管理
+              市場・顧客ニーズと技術シーズを管理
             </DialogDescription>
           </DialogHeader>
           
@@ -675,11 +675,11 @@ export function ExecutionPanel({
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="target_spec" className="gap-2">
                 <Target className="h-4 w-4" />
-                ターゲット仕様 ({targetSpecs.length})
+                市場・顧客ニーズ ({targetSpecs.length})
               </TabsTrigger>
               <TabsTrigger value="technical_assets" className="gap-2">
                 <Cpu className="h-4 w-4" />
-                技術アセット ({technicalAssets.length})
+                技術シーズ ({technicalAssets.length})
               </TabsTrigger>
             </TabsList>
             
@@ -700,7 +700,7 @@ export function ExecutionPanel({
                   <div className="flex flex-col items-center justify-center py-8 text-center">
                     <Target className="h-10 w-10 text-muted-foreground/30 mb-3" />
                     <p className="text-sm text-muted-foreground">
-                      ターゲット仕様がありません
+                      市場・顧客ニーズがありません
                     </p>
                   </div>
                 ) : (
@@ -735,7 +735,7 @@ export function ExecutionPanel({
                   <div className="flex flex-col items-center justify-center py-8 text-center">
                     <Cpu className="h-10 w-10 text-muted-foreground/30 mb-3" />
                     <p className="text-sm text-muted-foreground">
-                      技術アセットがありません
+                      技術シーズがありません
                     </p>
                   </div>
                 ) : (
@@ -766,12 +766,12 @@ export function ExecutionPanel({
         <DialogContent className="sm:max-w-xl">
           <DialogHeader>
             <DialogTitle>
-              {addType === "target_spec" ? "ターゲット仕様を追加" : "技術アセットを追加"}
+              {addType === "target_spec" ? "市場・顧客ニーズを追加" : "技術シーズを追加"}
             </DialogTitle>
             <DialogDescription>
               {addType === "target_spec"
-                ? "ターゲット市場と顧客仕様のテキストを追加してください。"
-                : "技術アセットリスト（JSONまたはテキスト形式）を追加してください。"}
+                ? "市場・顧客ニーズのテキストを追加してください。"
+                : "技術シーズリスト（JSONまたはテキスト形式）を追加してください。"}
             </DialogDescription>
           </DialogHeader>
 
@@ -961,7 +961,7 @@ export function ExecutionPanel({
                   <div className="flex flex-col items-center justify-center py-8 text-center">
                     <FolderInput className="h-10 w-10 text-muted-foreground/30 mb-3" />
                     <p className="text-sm text-muted-foreground">
-                      他のプロジェクトにインポート可能な{addType === "target_spec" ? "ターゲット仕様" : "技術アセット"}がありません
+                      他のプロジェクトにインポート可能な{addType === "target_spec" ? "市場・顧客ニーズ" : "技術シーズ"}がありません
                     </p>
                   </div>
                 ) : (
@@ -1048,7 +1048,7 @@ export function ExecutionPanel({
               リソースを編集
             </DialogTitle>
             <DialogDescription>
-              {editResource?.type === "target_spec" ? "ターゲット仕様" : "技術アセット"} / ID: {editResource?.id}
+              {editResource?.type === "target_spec" ? "市場・顧客ニーズ" : "技術シーズ"} / ID: {editResource?.id}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
