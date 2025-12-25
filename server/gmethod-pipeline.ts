@@ -11,6 +11,35 @@ const MODEL_PRO = "gemini-3-pro-preview";
 const MODEL_FLASH = "gemini-3-flash-preview";
 const DEEP_RESEARCH_AGENT = "deep-research-pro-preview-12-2025";
 
+// Pause/Stop request management
+const pauseRequests = new Map<number, boolean>();
+const stopRequests = new Map<number, boolean>();
+
+export function requestPause(runId: number): void {
+  pauseRequests.set(runId, true);
+}
+
+export function requestResume(runId: number): void {
+  pauseRequests.delete(runId);
+}
+
+export function requestStop(runId: number): void {
+  stopRequests.set(runId, true);
+}
+
+export function isPauseRequested(runId: number): boolean {
+  return pauseRequests.get(runId) === true;
+}
+
+export function isStopRequested(runId: number): boolean {
+  return stopRequests.get(runId) === true;
+}
+
+export function clearControlRequests(runId: number): void {
+  pauseRequests.delete(runId);
+  stopRequests.delete(runId);
+}
+
 // Deep Research rate limiting is now handled by shared module (deep-research.ts)
 
 // Get Deep Research prompt (no data embedding - uses File Search)
