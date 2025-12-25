@@ -849,6 +849,30 @@ function parseTSVToJSON(tsv: string): Record<string, string>[] {
   return data;
 }
 
+function computeContentHash(data: Record<string, string>): string {
+  const sortedKeys = Object.keys(data).sort();
+  const normalized = sortedKeys.map(k => `${k}:${data[k]}`).join('|');
+  let hash = 0;
+  for (let i = 0; i < normalized.length; i++) {
+    const char = normalized.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash;
+  }
+  return Math.abs(hash).toString(36);
+}
+
+function extractDisplayTitle(row: Record<string, string>, hypothesisNumber: number): string {
+  const titleKeys = ["仮説タイトル", "タイトル", "Title", "title", "仮説名", "事業仮説"];
+  for (const key of titleKeys) {
+    if (row[key]) return row[key];
+  }
+  const firstKey = Object.keys(row)[0];
+  if (firstKey && row[firstKey]) {
+    return row[firstKey].substring(0, 100);
+  }
+  return `仮説 ${hypothesisNumber}`;
+}
+
 function extractHypothesesFromTSV(
   tsv: string,
   projectId: number,
@@ -861,12 +885,8 @@ function extractHypothesesFromTSV(
   
   return data.map((row, index): InsertHypothesis => {
     const hypothesisNumber = startNumber + index;
-    
-    const parseIntOrNull = (value: string | undefined): number | null => {
-      if (!value) return null;
-      const parsed = parseInt(value);
-      return isNaN(parsed) ? null : parsed;
-    };
+    const displayTitle = extractDisplayTitle(row, hypothesisNumber);
+    const contentHash = computeContentHash(row);
     
     return {
       projectId,
@@ -874,19 +894,8 @@ function extractHypothesesFromTSV(
       targetSpecId: targetSpecId ?? null,
       technicalAssetsId: technicalAssetsId ?? null,
       hypothesisNumber,
-      title: row["仮説タイトル"] || `仮説 ${hypothesisNumber}`,
-      industry: row["業界"] || null,
-      field: row["分野"] || null,
-      stage: row["素材が活躍する舞台"] || null,
-      role: row["素材の役割"] || null,
-      summary: row["事業仮説概要"] || null,
-      customerProblem: row["顧客の解決不能な課題"] || null,
-      scientificJudgment: row["科学×経済判定"] || null,
-      scientificScore: parseIntOrNull(row["科学×経済スコア"]),
-      strategicJudgment: row["戦略判定"] || row["キャッチアップ判定"] || null,
-      strategicWinLevel: row["戦略勝算レベル"] || null,
-      catchupScore: parseIntOrNull(row["キャッチアップスコア"]),
-      totalScore: parseIntOrNull(row["総合スコア"]),
+      displayTitle,
+      contentHash,
       fullData: row,
     };
   });
@@ -904,7 +913,6 @@ async function getPreviousHypothesesSummary(
 ): Promise<string> {
   let hypotheses = await storage.getHypothesesByProject(projectId);
   
-  // Apply filter if enabled
   if (filter?.enabled) {
     const hasTargetFilter = filter.targetSpecIds.length > 0;
     const hasAssetFilter = filter.technicalAssetsIds.length > 0;
@@ -923,7 +931,16 @@ async function getPreviousHypothesesSummary(
   }
   
   const summaryLines = hypotheses.map((h, index) => {
-    return `${index + 1}. 【${h.title}】\n   業界: ${h.industry || "不明"} / 分野: ${h.field || "不明"}\n   概要: ${h.summary || "概要なし"}\n   判定: ${h.scientificJudgment || "未評価"} / ${h.strategicJudgment || "未評価"}`;
+    const data = h.fullData as Record<string, string> | null;
+    const title = h.displayTitle || "タイトル不明";
+    
+    if (!data) {
+      return `${index + 1}. 【${title}】`;
+    }
+    
+    const keys = Object.keys(data).slice(0, 5);
+    const details = keys.map(k => `${k}: ${data[k] || "不明"}`).join(" / ");
+    return `${index + 1}. 【${title}】\n   ${details}`;
   });
   
   return summaryLines.join("\n\n");

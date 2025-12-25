@@ -64,6 +64,7 @@ export const promptVersions = pgTable("prompt_versions", {
 });
 
 // Hypotheses - Stored hypotheses from completed runs for deduplication
+// Flexible schema: fullData (JSONB) stores all columns dynamically based on STEP5 prompt output
 export const hypotheses = pgTable("hypotheses", {
   id: serial("id").primaryKey(),
   projectId: integer("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
@@ -71,20 +72,9 @@ export const hypotheses = pgTable("hypotheses", {
   targetSpecId: integer("target_spec_id").references(() => resources.id, { onDelete: "set null" }),
   technicalAssetsId: integer("technical_assets_id").references(() => resources.id, { onDelete: "set null" }),
   hypothesisNumber: integer("hypothesis_number").notNull(),
-  title: text("title").notNull(),
-  industry: text("industry"),
-  field: text("field"),
-  stage: text("stage"), // 素材が活躍する舞台
-  role: text("role"), // 素材の役割
-  summary: text("summary"), // 事業仮説概要
-  customerProblem: text("customer_problem"), // 顧客の解決不能な課題
-  scientificJudgment: text("scientific_judgment"), // 科学×経済判定
-  scientificScore: integer("scientific_score"), // 科学×経済スコア
-  strategicJudgment: text("strategic_judgment"), // 戦略判定（キャッチアップ判定）
-  strategicWinLevel: text("strategic_win_level"), // 戦略勝算レベル
-  catchupScore: integer("catchup_score"), // キャッチアップスコア
-  totalScore: integer("total_score"),
-  fullData: jsonb("full_data"), // Complete row data from Step5
+  displayTitle: text("display_title"), // First text column from TSV for display/dedup (auto-extracted)
+  contentHash: text("content_hash"), // Hash of fullData for efficient deduplication
+  fullData: jsonb("full_data").notNull(), // Complete row data from Step5 - all columns stored here
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 
