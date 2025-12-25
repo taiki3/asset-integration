@@ -10,6 +10,9 @@ import { Document, Packer, Paragraph, TextRun, HeadingLevel, TableRow, TableCell
 // Server start time for version tracking
 const SERVER_START_TIME = new Date().toISOString();
 
+// Font configuration for Word documents
+const WORD_FONT = "Meiryo UI";
+
 // Helper function to convert markdown to Word document
 async function convertMarkdownToWord(markdown: string, title: string): Promise<Buffer> {
   const children: (Paragraph | Table)[] = [];
@@ -17,7 +20,7 @@ async function convertMarkdownToWord(markdown: string, title: string): Promise<B
   // Add title
   children.push(
     new Paragraph({
-      text: title,
+      children: [new TextRun({ text: title, font: WORD_FONT, size: 32, bold: true })],
       heading: HeadingLevel.TITLE,
       spacing: { after: 400 },
     })
@@ -39,7 +42,7 @@ async function convertMarkdownToWord(markdown: string, title: string): Promise<B
         tableRows = [];
         inTable = false;
       }
-      children.push(new Paragraph({ text: "" }));
+      children.push(new Paragraph({ children: [new TextRun({ text: "", font: WORD_FONT })] }));
       continue;
     }
     
@@ -65,7 +68,7 @@ async function convertMarkdownToWord(markdown: string, title: string): Promise<B
     if (trimmedLine.startsWith('### ')) {
       children.push(
         new Paragraph({
-          text: trimmedLine.substring(4),
+          children: [new TextRun({ text: trimmedLine.substring(4), font: WORD_FONT, bold: true })],
           heading: HeadingLevel.HEADING_3,
           spacing: { before: 300, after: 100 },
         })
@@ -73,7 +76,7 @@ async function convertMarkdownToWord(markdown: string, title: string): Promise<B
     } else if (trimmedLine.startsWith('## ')) {
       children.push(
         new Paragraph({
-          text: trimmedLine.substring(3),
+          children: [new TextRun({ text: trimmedLine.substring(3), font: WORD_FONT, bold: true })],
           heading: HeadingLevel.HEADING_2,
           spacing: { before: 400, after: 150 },
         })
@@ -81,7 +84,7 @@ async function convertMarkdownToWord(markdown: string, title: string): Promise<B
     } else if (trimmedLine.startsWith('# ')) {
       children.push(
         new Paragraph({
-          text: trimmedLine.substring(2),
+          children: [new TextRun({ text: trimmedLine.substring(2), font: WORD_FONT, bold: true })],
           heading: HeadingLevel.HEADING_1,
           spacing: { before: 500, after: 200 },
         })
@@ -98,7 +101,7 @@ async function convertMarkdownToWord(markdown: string, title: string): Promise<B
       } else {
         children.push(
           new Paragraph({
-            text: trimmedLine,
+            children: [new TextRun({ text: trimmedLine, font: WORD_FONT, bold: true })],
             heading: HeadingLevel.HEADING_2,
             spacing: { before: 400, after: 150 },
           })
@@ -108,7 +111,7 @@ async function convertMarkdownToWord(markdown: string, title: string): Promise<B
       // Bullet point
       children.push(
         new Paragraph({
-          children: [new TextRun({ text: trimmedLine.substring(2) })],
+          children: [new TextRun({ text: trimmedLine.substring(2), font: WORD_FONT })],
           bullet: { level: 0 },
           spacing: { before: 50, after: 50 },
         })
@@ -118,7 +121,7 @@ async function convertMarkdownToWord(markdown: string, title: string): Promise<B
       const text = trimmedLine.replace(/^\d+\.\s/, '');
       children.push(
         new Paragraph({
-          children: [new TextRun({ text })],
+          children: [new TextRun({ text, font: WORD_FONT })],
           numbering: { level: 0, reference: "default-numbering" },
           spacing: { before: 50, after: 50 },
         })
@@ -132,18 +135,18 @@ async function convertMarkdownToWord(markdown: string, title: string): Promise<B
       
       while ((match = boldRegex.exec(trimmedLine)) !== null) {
         if (match.index > lastIndex) {
-          textRuns.push(new TextRun({ text: trimmedLine.substring(lastIndex, match.index) }));
+          textRuns.push(new TextRun({ text: trimmedLine.substring(lastIndex, match.index), font: WORD_FONT }));
         }
-        textRuns.push(new TextRun({ text: match[1], bold: true }));
+        textRuns.push(new TextRun({ text: match[1], bold: true, font: WORD_FONT }));
         lastIndex = match.index + match[0].length;
       }
       
       if (lastIndex < trimmedLine.length) {
-        textRuns.push(new TextRun({ text: trimmedLine.substring(lastIndex) }));
+        textRuns.push(new TextRun({ text: trimmedLine.substring(lastIndex), font: WORD_FONT }));
       }
       
       if (textRuns.length === 0) {
-        textRuns.push(new TextRun({ text: trimmedLine }));
+        textRuns.push(new TextRun({ text: trimmedLine, font: WORD_FONT }));
       }
       
       children.push(
@@ -188,6 +191,7 @@ function createWordTable(rows: string[][]): Table {
             children: [new TextRun({
               text: cell,
               bold: rowIndex === 0,
+              font: WORD_FONT,
             })],
           })],
           width: { size: 100 / row.length, type: WidthType.PERCENTAGE },
