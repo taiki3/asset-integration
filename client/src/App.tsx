@@ -7,6 +7,7 @@ import { ThemeProvider } from "@/lib/theme";
 import { useAuth } from "@/hooks/use-auth";
 import Dashboard from "@/pages/Dashboard";
 import ProjectWorkspace from "@/pages/ProjectWorkspace";
+import Settings from "@/pages/Settings";
 import NotFound from "@/pages/not-found";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,6 +17,7 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={Dashboard} />
+      <Route path="/settings" component={Settings} />
       <Route path="/projects/:projectId">
         {(params) => <ProjectWorkspace projectId={params.projectId} />}
       </Route>

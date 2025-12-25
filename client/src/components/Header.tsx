@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { ChevronRight, FolderOpen, LogOut } from "lucide-react";
+import { ChevronRight, FolderOpen, LogOut, Settings } from "lucide-react";
 import { ThemeToggle } from "./ThemeToggle";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
@@ -34,6 +34,11 @@ export function Header({ project }: HeaderProps) {
               {user.email}
             </span>
           )}
+          <Link href="/settings">
+            <Button variant="ghost" size="icon" data-testid="button-settings">
+              <Settings className="h-4 w-4" />
+            </Button>
+          </Link>
           <ThemeToggle />
           <Button
             variant="ghost"

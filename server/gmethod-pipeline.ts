@@ -42,6 +42,33 @@ export function clearControlRequests(runId: number): void {
 
 // Deep Research rate limiting is now handled by shared module (deep-research.ts)
 
+// Get prompt for a step - uses DB version if available, otherwise default
+async function getPromptForStep(stepNumber: number): Promise<string> {
+  const DEFAULT_PROMPTS: Record<number, string> = {
+    2: STEP2_PROMPT,
+    3: STEP3_PROMPT,
+    4: STEP4_PROMPT,
+    5: STEP5_PROMPT,
+  };
+  
+  const defaultPrompt = DEFAULT_PROMPTS[stepNumber];
+  if (!defaultPrompt) {
+    throw new Error(`No default prompt found for Step ${stepNumber}`);
+  }
+  
+  try {
+    const activePrompt = await storage.getActivePrompt(stepNumber);
+    if (activePrompt && activePrompt.content.trim()) {
+      console.log(`[Pipeline] Using custom prompt v${activePrompt.version} for Step ${stepNumber}`);
+      return activePrompt.content;
+    }
+  } catch (error) {
+    console.log(`[Pipeline] Error fetching custom prompt for Step ${stepNumber}, using default`);
+  }
+  
+  return defaultPrompt;
+}
+
 // Get Deep Research prompt (no data embedding - uses File Search)
 // Internal engineer's approach: prompt.md as-is, data files uploaded to File Search
 function getDeepResearchPrompt(): string {
@@ -614,7 +641,8 @@ async function validateHypotheses(
 }
 
 async function executeStep3(context: PipelineContext): Promise<string> {
-  const prompt = STEP3_PROMPT
+  const basePrompt = await getPromptForStep(3);
+  const prompt = basePrompt
     .replace(/{HYPOTHESIS_COUNT}/g, context.hypothesisCount.toString())
     .replace("{TECHNICAL_ASSETS}", context.technicalAssets)
     .replace("{STEP2_OUTPUT}", context.step2Output || "");
@@ -623,7 +651,8 @@ async function executeStep3(context: PipelineContext): Promise<string> {
 }
 
 async function executeStep4(context: PipelineContext): Promise<string> {
-  const prompt = STEP4_PROMPT
+  const basePrompt = await getPromptForStep(4);
+  const prompt = basePrompt
     .replace(/{HYPOTHESIS_COUNT}/g, context.hypothesisCount.toString())
     .replace("{TECHNICAL_ASSETS}", context.technicalAssets)
     .replace("{STEP2_OUTPUT}", context.step2Output || "")
@@ -633,7 +662,8 @@ async function executeStep4(context: PipelineContext): Promise<string> {
 }
 
 async function executeStep5(context: PipelineContext): Promise<string> {
-  const prompt = STEP5_PROMPT
+  const basePrompt = await getPromptForStep(5);
+  const prompt = basePrompt
     .replace(/{HYPOTHESIS_COUNT}/g, context.hypothesisCount.toString())
     .replace("{STEP2_OUTPUT}", context.step2Output || "")
     .replace("{STEP3_OUTPUT}", context.step3Output || "")

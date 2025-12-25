@@ -1,7 +1,8 @@
 import type { Express, RequestHandler } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertProjectSchema, insertResourceSchema, insertHypothesisRunSchema } from "@shared/schema";
+import { insertProjectSchema, insertResourceSchema, insertHypothesisRunSchema, insertPromptVersionSchema } from "@shared/schema";
+import { STEP2_PROMPT, STEP3_PROMPT, STEP4_PROMPT, STEP5_PROMPT } from "./prompts";
 import { executeGMethodPipeline, requestPause, requestResume, requestStop, resumePipeline } from "./gmethod-pipeline";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
 
@@ -324,6 +325,113 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error downloading run:", error);
       res.status(500).json({ error: "Failed to download run" });
+    }
+  });
+
+  // Prompt Management API
+  const DEFAULT_PROMPTS: Record<number, string> = {
+    2: STEP2_PROMPT,
+    3: STEP3_PROMPT,
+    4: STEP4_PROMPT,
+    5: STEP5_PROMPT,
+  };
+
+  app.get("/api/prompts/steps", isAuthenticated, requireAgcDomain, async (req, res) => {
+    try {
+      const steps = [2, 3, 4, 5].map(stepNumber => ({
+        stepNumber,
+        name: `Step ${stepNumber}`,
+      }));
+      res.json(steps);
+    } catch (error) {
+      console.error("Error fetching steps:", error);
+      res.status(500).json({ error: "Failed to fetch steps" });
+    }
+  });
+
+  app.get("/api/prompts/:stepNumber", isAuthenticated, requireAgcDomain, async (req, res) => {
+    try {
+      const stepNumber = parseInt(req.params.stepNumber);
+      if (![2, 3, 4, 5].includes(stepNumber)) {
+        return res.status(400).json({ error: "Invalid step number" });
+      }
+
+      const versions = await storage.getPromptVersionsByStep(stepNumber);
+      const activePrompt = await storage.getActivePrompt(stepNumber);
+
+      res.json({
+        stepNumber,
+        versions,
+        activeVersion: activePrompt?.version ?? null,
+        activeId: activePrompt?.id ?? null,
+        defaultPrompt: DEFAULT_PROMPTS[stepNumber],
+      });
+    } catch (error) {
+      console.error("Error fetching prompt versions:", error);
+      res.status(500).json({ error: "Failed to fetch prompt versions" });
+    }
+  });
+
+  app.post("/api/prompts/:stepNumber", isAuthenticated, requireAgcDomain, async (req, res) => {
+    try {
+      const stepNumber = parseInt(req.params.stepNumber);
+      if (![2, 3, 4, 5].includes(stepNumber)) {
+        return res.status(400).json({ error: "Invalid step number" });
+      }
+
+      const parsed = insertPromptVersionSchema.safeParse({
+        ...req.body,
+        stepNumber,
+      });
+
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid input", details: parsed.error });
+      }
+
+      const created = await storage.createPromptVersion(parsed.data);
+      const activated = await storage.activatePromptVersion(created.id);
+      res.status(201).json(activated);
+    } catch (error) {
+      console.error("Error creating prompt version:", error);
+      res.status(500).json({ error: "Failed to create prompt version" });
+    }
+  });
+
+  app.post("/api/prompts/:stepNumber/activate/:id", isAuthenticated, requireAgcDomain, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const activated = await storage.activatePromptVersion(id);
+      
+      if (!activated) {
+        return res.status(404).json({ error: "Prompt version not found" });
+      }
+
+      res.json(activated);
+    } catch (error) {
+      console.error("Error activating prompt version:", error);
+      res.status(500).json({ error: "Failed to activate prompt version" });
+    }
+  });
+
+  app.post("/api/prompts/:stepNumber/reset", isAuthenticated, requireAgcDomain, async (req, res) => {
+    try {
+      const stepNumber = parseInt(req.params.stepNumber);
+      if (![2, 3, 4, 5].includes(stepNumber)) {
+        return res.status(400).json({ error: "Invalid step number" });
+      }
+
+      const versions = await storage.getPromptVersionsByStep(stepNumber);
+      for (const v of versions) {
+        if (v.isActive === 1) {
+          await storage.activatePromptVersion(v.id);
+          break;
+        }
+      }
+
+      res.json({ message: "Reset to default prompt (no active version)" });
+    } catch (error) {
+      console.error("Error resetting prompt:", error);
+      res.status(500).json({ error: "Failed to reset prompt" });
     }
   });
 

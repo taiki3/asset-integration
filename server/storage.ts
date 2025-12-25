@@ -7,13 +7,16 @@ import {
   type InsertHypothesisRun,
   type Hypothesis,
   type InsertHypothesis,
+  type PromptVersion,
+  type InsertPromptVersion,
   projects,
   resources,
   hypothesisRuns,
   hypotheses,
+  promptVersions,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, max, or } from "drizzle-orm";
+import { eq, desc, max, or, and } from "drizzle-orm";
 
 export interface IStorage {
   // Projects
@@ -41,6 +44,12 @@ export interface IStorage {
   createHypotheses(hypothesesData: InsertHypothesis[]): Promise<Hypothesis[]>;
   deleteHypothesis(id: number): Promise<void>;
   getNextHypothesisNumber(projectId: number): Promise<number>;
+
+  // Prompt Versions
+  getPromptVersionsByStep(stepNumber: number): Promise<PromptVersion[]>;
+  getActivePrompt(stepNumber: number): Promise<PromptVersion | undefined>;
+  createPromptVersion(prompt: InsertPromptVersion): Promise<PromptVersion>;
+  activatePromptVersion(id: number): Promise<PromptVersion | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -139,6 +148,51 @@ export class DatabaseStorage implements IStorage {
     
     const currentMax = result[0]?.maxNumber ?? 0;
     return currentMax + 1;
+  }
+
+  // Prompt Versions
+  async getPromptVersionsByStep(stepNumber: number): Promise<PromptVersion[]> {
+    return db.select().from(promptVersions)
+      .where(eq(promptVersions.stepNumber, stepNumber))
+      .orderBy(desc(promptVersions.version));
+  }
+
+  async getActivePrompt(stepNumber: number): Promise<PromptVersion | undefined> {
+    const [prompt] = await db.select().from(promptVersions)
+      .where(and(
+        eq(promptVersions.stepNumber, stepNumber),
+        eq(promptVersions.isActive, 1)
+      ));
+    return prompt;
+  }
+
+  async createPromptVersion(prompt: InsertPromptVersion): Promise<PromptVersion> {
+    const result = await db
+      .select({ maxVersion: max(promptVersions.version) })
+      .from(promptVersions)
+      .where(eq(promptVersions.stepNumber, prompt.stepNumber));
+    
+    const nextVersion = (result[0]?.maxVersion ?? 0) + 1;
+    
+    const [created] = await db.insert(promptVersions)
+      .values({ ...prompt, version: nextVersion, isActive: 0 })
+      .returning();
+    return created;
+  }
+
+  async activatePromptVersion(id: number): Promise<PromptVersion | undefined> {
+    const [target] = await db.select().from(promptVersions).where(eq(promptVersions.id, id));
+    if (!target) return undefined;
+
+    await db.update(promptVersions)
+      .set({ isActive: 0 })
+      .where(eq(promptVersions.stepNumber, target.stepNumber));
+
+    const [updated] = await db.update(promptVersions)
+      .set({ isActive: 1 })
+      .where(eq(promptVersions.id, id))
+      .returning();
+    return updated;
   }
 }
 

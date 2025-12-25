@@ -51,6 +51,16 @@ export const hypothesisRuns = pgTable("hypothesis_runs", {
   completedAt: timestamp("completed_at"),
 });
 
+// Prompt Versions - Version-controlled prompts for each step
+export const promptVersions = pgTable("prompt_versions", {
+  id: serial("id").primaryKey(),
+  stepNumber: integer("step_number").notNull(), // 2, 3, 4, or 5
+  version: integer("version").notNull().default(1),
+  content: text("content").notNull(),
+  isActive: integer("is_active").notNull().default(0), // 1 = active, 0 = inactive
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
 // Hypotheses - Stored hypotheses from completed runs for deduplication
 export const hypotheses = pgTable("hypotheses", {
   id: serial("id").primaryKey(),
@@ -151,6 +161,11 @@ export const insertHypothesisSchema = createInsertSchema(hypotheses).omit({
   createdAt: true,
 });
 
+export const insertPromptVersionSchema = createInsertSchema(promptVersions).omit({
+  id: true,
+  createdAt: true,
+});
+
 // ============= TYPES =============
 
 export type Project = typeof projects.$inferSelect;
@@ -161,6 +176,8 @@ export type HypothesisRun = typeof hypothesisRuns.$inferSelect;
 export type InsertHypothesisRun = z.infer<typeof insertHypothesisRunSchema>;
 export type Hypothesis = typeof hypotheses.$inferSelect;
 export type InsertHypothesis = z.infer<typeof insertHypothesisSchema>;
+export type PromptVersion = typeof promptVersions.$inferSelect;
+export type InsertPromptVersion = z.infer<typeof insertPromptVersionSchema>;
 
 // Re-export chat models for Gemini integration
 export * from "./models/chat";
