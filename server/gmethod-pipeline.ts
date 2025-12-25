@@ -1,6 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
 import { storage } from "./storage";
-import { STEP2_PROMPT, STEP2_DEEP_RESEARCH_PROMPT, STEP3_PROMPT, STEP4_PROMPT, STEP5_PROMPT } from "./prompts";
+import { STEP2_PROMPT, STEP2_DEEP_RESEARCH_PROMPT, STEP2_1_DEEP_RESEARCH_PROMPT, STEP2_2_DEEP_RESEARCH_PROMPT, STEP3_PROMPT, STEP4_PROMPT, STEP5_PROMPT } from "./prompts";
 import type { InsertHypothesis } from "@shared/schema";
 import * as fs from "fs";
 import * as path from "path";
@@ -86,6 +86,33 @@ async function getPromptForStep(stepNumber: number): Promise<string> {
 // Internal engineer's approach: prompt.md as-is, data files uploaded to File Search
 function getDeepResearchPrompt(): string {
   return STEP2_DEEP_RESEARCH_PROMPT;
+}
+
+// Get Deep Research prompts for 2-stage execution
+async function getDeepResearchPrompt2_1(): Promise<string> {
+  try {
+    const activePrompt = await storage.getActivePrompt(21);
+    if (activePrompt && activePrompt.content.trim()) {
+      console.log(`[Pipeline] Using custom prompt v${activePrompt.version} for Step 2-1`);
+      return activePrompt.content;
+    }
+  } catch (error) {
+    console.log(`[Pipeline] Error fetching custom prompt for Step 2-1, using default`);
+  }
+  return STEP2_1_DEEP_RESEARCH_PROMPT;
+}
+
+async function getDeepResearchPrompt2_2(): Promise<string> {
+  try {
+    const activePrompt = await storage.getActivePrompt(22);
+    if (activePrompt && activePrompt.content.trim()) {
+      console.log(`[Pipeline] Using custom prompt v${activePrompt.version} for Step 2-2`);
+      return activePrompt.content;
+    }
+  } catch (error) {
+    console.log(`[Pipeline] Error fetching custom prompt for Step 2-2, using default`);
+  }
+  return STEP2_2_DEEP_RESEARCH_PROMPT;
 }
 
 function checkAIConfiguration(): boolean {
@@ -394,181 +421,271 @@ async function updateStepDuration(
   await updateProgress(runId, { stepDurations });
 }
 
-async function executeDeepResearchStep2(context: PipelineContext, runId: number): Promise<DeepResearchResult> {
+// Extended DeepResearchResult to include 2-phase outputs
+interface TwoPhaseDeepResearchResult extends DeepResearchResult {
+  step2_1Output: string;
+  step2_2Output: string;
+}
+
+// Helper function to run a single Deep Research phase
+async function runDeepResearchPhase(
+  client: GoogleGenAI,
+  prompt: string,
+  storeName: string,
+  runId: number,
+  phaseName: string,
+  startTime: number
+): Promise<string> {
+  debugLog(`[Run ${runId}] Starting ${phaseName} with File Search Store: ${storeName}`);
+  debugLog(`[Run ${runId}] ${phaseName} Prompt length: ${prompt.length} chars`);
+  
+  await sharedWaitForRateLimit();
+  
+  let interactionId: string;
+  try {
+    debugLog(`[Run ${runId}] ${phaseName}: Calling interactions.create with stream: true`);
+    const stream = await (client as any).interactions.create({
+      input: prompt,
+      agent: DEEP_RESEARCH_AGENT,
+      background: true,
+      stream: true,
+      tools: [
+        { type: 'file_search', file_search_store_names: [storeName] }
+      ],
+      agent_config: {
+        type: 'deep-research',
+        thinking_summaries: 'auto'
+      }
+    });
+    
+    debugLog(`[Run ${runId}] ${phaseName}: Stream created, waiting for interaction.start event`);
+    
+    for await (const chunk of stream as AsyncIterable<any>) {
+      debugLog(`[Run ${runId}] ${phaseName}: Stream event: ${chunk.event_type}`);
+      if (chunk.event_type === 'interaction.start' && chunk.interaction?.id) {
+        interactionId = chunk.interaction.id;
+        debugLog(`[Run ${runId}] ${phaseName}: Stream started, Interaction ID: ${interactionId}`);
+        break;
+      }
+    }
+    
+    if (!interactionId!) {
+      throw new Error(`${phaseName}: Failed to get interaction ID from stream`);
+    }
+  } catch (apiError: any) {
+    debugLog(`[Run ${runId}] ${phaseName} API Error: ${apiError.message}`);
+    throw new Error(`${phaseName} APIの起動に失敗しました: ${apiError.message}`);
+  }
+  
+  debugLog(`[Run ${runId}] ${phaseName} Task Started. Interaction ID: ${interactionId}`);
+  
+  let report = "";
+  let pollCount = 0;
+  const maxPollTime = 30 * 60 * 1000;
+  const pollInterval = 15000;
+  const phaseStartTime = Date.now();
+  
+  while (Date.now() - phaseStartTime < maxPollTime) {
+    pollCount++;
+    await sleep(pollInterval);
+
+    try {
+      const currentStatus = await (client as any).interactions.get(interactionId);
+      const status = currentStatus.status;
+      console.log(`[Run ${runId}] ${phaseName} Status: ${status} (poll ${pollCount})`);
+
+      if (status === "completed") {
+        console.log(`[Run ${runId}] ${phaseName} Completed!`);
+        const outputs = currentStatus.outputs || [];
+        const finalOutput = outputs[outputs.length - 1];
+        report = finalOutput?.text || "";
+        break;
+      } else if (status === "failed") {
+        console.error(`[Run ${runId}] ${phaseName} Failed:`, currentStatus.error);
+        throw new Error(`${phaseName} が失敗しました: ${currentStatus.error || "Unknown error"}`);
+      }
+    } catch (pollError: any) {
+      if (pollError.message?.includes("が失敗")) {
+        throw pollError;
+      }
+      console.warn(`[Run ${runId}] ${phaseName} Poll error (continuing):`, pollError.message);
+    }
+  }
+
+  if (!report) {
+    throw new Error(`${phaseName} がタイムアウトしました（30分経過）`);
+  }
+  
+  return report;
+}
+
+async function executeDeepResearchStep2(context: PipelineContext, runId: number): Promise<TwoPhaseDeepResearchResult> {
   const stepTimings: { [key: string]: number } = {};
   const startTime = Date.now();
-  let fileSearchStoreName: string | null = null;
+  let fileSearchStoreName1: string | null = null;
+  let fileSearchStoreName2: string | null = null;
 
   await updateProgress(runId, { 
     currentPhase: "deep_research_starting", 
     currentIteration: 0, 
-    maxIterations: 1,
+    maxIterations: 2,
     stepTimings,
     stepStartTime: startTime,
   });
 
-  console.log(`[Run ${runId}] Starting Deep Research API with File Search...`);
+  console.log(`[Run ${runId}] Starting Two-Phase Deep Research API...`);
 
   const client = getAIClient();
+  let step2_1Output = "";
+  let step2_2Output = "";
   
   try {
+    // ===== PHASE 1: Step 2-1 (Divergent Selection) =====
+    console.log(`[Run ${runId}] === PHASE 1: Step 2-1 (発散・選定フェーズ) ===`);
+    
     await updateProgress(runId, { 
-      currentPhase: "uploading_files", 
-      currentIteration: 0, 
-      maxIterations: 1,
-      planningAnalysis: "データをFile Searchストアにアップロード中...",
+      currentPhase: "step2_1_uploading", 
+      currentIteration: 1, 
+      maxIterations: 2,
+      planningAnalysis: "Step 2-1: データをFile Searchストアにアップロード中...",
       stepTimings,
       stepStartTime: startTime,
     });
 
-    fileSearchStoreName = await createFileSearchStore(`gmethod-run-${runId}-${Date.now()}`);
-    console.log(`[Run ${runId}] Created File Search Store: ${fileSearchStoreName}`);
+    fileSearchStoreName1 = await createFileSearchStore(`gmethod-run-${runId}-step2-1-${Date.now()}`);
+    console.log(`[Run ${runId}] Created File Search Store for Step 2-1: ${fileSearchStoreName1}`);
 
-    await uploadTextToFileSearchStore(
-      fileSearchStoreName,
-      context.targetSpec,
-      "target_specification"
-    );
+    await uploadTextToFileSearchStore(fileSearchStoreName1, context.targetSpec, "target_specification");
     console.log(`[Run ${runId}] Uploaded target specification`);
 
-    await uploadTextToFileSearchStore(
-      fileSearchStoreName,
-      context.technicalAssets,
-      "technical_assets"
-    );
+    await uploadTextToFileSearchStore(fileSearchStoreName1, context.technicalAssets, "technical_assets");
     console.log(`[Run ${runId}] Uploaded technical assets`);
 
     if (context.previousHypotheses) {
-      await uploadTextToFileSearchStore(
-        fileSearchStoreName,
-        context.previousHypotheses,
-        "previous_hypotheses"
-      );
+      await uploadTextToFileSearchStore(fileSearchStoreName1, context.previousHypotheses, "previous_hypotheses");
       console.log(`[Run ${runId}] Uploaded previous hypotheses`);
     }
 
-    stepTimings["file_upload"] = Date.now() - startTime;
+    stepTimings["step2_1_file_upload"] = Date.now() - startTime;
 
-    // Use Deep Research prompt (no data embedding - File Search references attached files)
-    // Internal engineer's approach: 19KB prompt + File Search for data files
-    const researchPrompt = getDeepResearchPrompt();
-    console.log(`[Run ${runId}] Prompt: ${researchPrompt.length} chars, ${Buffer.byteLength(researchPrompt, 'utf-8')} bytes`);
+    // Get Step 2-1 prompt (divergent selection)
+    let researchPrompt2_1 = await getDeepResearchPrompt2_1();
+    researchPrompt2_1 = researchPrompt2_1
+      .replace(/{HYPOTHESIS_COUNT}/g, context.hypothesisCount.toString())
+      .replace("{PREVIOUS_HYPOTHESES}", context.previousHypotheses || "なし");
+    
+    console.log(`[Run ${runId}] Step 2-1 Prompt: ${researchPrompt2_1.length} chars`);
 
     await updateProgress(runId, { 
-      currentPhase: "deep_research_starting", 
-      currentIteration: 0, 
-      maxIterations: 1,
-      planningAnalysis: "Deep Research エージェントを起動中...",
+      currentPhase: "step2_1_running", 
+      currentIteration: 1, 
+      maxIterations: 2,
+      planningAnalysis: "Step 2-1: Deep Research エージェントが発散・選定フェーズを実行中...",
       stepTimings,
       stepStartTime: startTime,
     });
 
-    debugLog(`[Run ${runId}] Starting Deep Research with File Search Store: ${fileSearchStoreName}`);
-    debugLog(`[Run ${runId}] Prompt length: ${researchPrompt.length} chars`);
+    // Execute Step 2-1 Deep Research
+    step2_1Output = await runDeepResearchPhase(
+      client, 
+      researchPrompt2_1, 
+      fileSearchStoreName1, 
+      runId, 
+      "Step 2-1",
+      startTime
+    );
     
-    // Wait for rate limit before making Deep Research request (using shared module)
-    await sharedWaitForRateLimit();
-    
-    let interactionId: string;
-    try {
-      debugLog(`[Run ${runId}] Calling interactions.create with stream: true`);
-      // Use stream: true to avoid 400 errors (required by Deep Research API)
-      const stream = await (client as any).interactions.create({
-        input: researchPrompt,
-        agent: DEEP_RESEARCH_AGENT,
-        background: true,
-        stream: true,
-        tools: [
-          { type: 'file_search', file_search_store_names: [fileSearchStoreName] }
-        ],
-        agent_config: {
-          type: 'deep-research',
-          thinking_summaries: 'auto'
-        }
-      });
-      
-      debugLog(`[Run ${runId}] Stream created, waiting for interaction.start event`);
-      
-      // Get interaction ID from first stream event
-      for await (const chunk of stream as AsyncIterable<any>) {
-        debugLog(`[Run ${runId}] Stream event: ${chunk.event_type}`);
-        if (chunk.event_type === 'interaction.start' && chunk.interaction?.id) {
-          interactionId = chunk.interaction.id;
-          debugLog(`[Run ${runId}] Stream started, Interaction ID: ${interactionId}`);
-          break;
-        }
-      }
-      
-      if (!interactionId!) {
-        throw new Error('Failed to get interaction ID from stream');
-      }
-    } catch (apiError: any) {
-      debugLog(`[Run ${runId}] Deep Research API Error: ${apiError.message}`);
-      debugLog(`[Run ${runId}] Error details: ${JSON.stringify(apiError, null, 2)}`);
-      throw new Error(`Deep Research APIの起動に失敗しました: ${apiError.message}`);
-    }
-    debugLog(`[Run ${runId}] Deep Research Task Started. Interaction ID: ${interactionId}`);
+    stepTimings["step2_1_deep_research"] = Date.now() - startTime;
+    console.log(`[Run ${runId}] Step 2-1 completed. Output length: ${step2_1Output.length} chars`);
 
+    // Save Step 2-1 output to database
+    await storage.updateRun(runId, { step2_1Output });
+    
+    // Cleanup Step 2-1 File Search Store
+    if (fileSearchStoreName1) {
+      await deleteFileSearchStore(fileSearchStoreName1);
+      fileSearchStoreName1 = null;
+    }
+
+    // ===== PHASE 2: Step 2-2 (Convergent Deep-dive) =====
+    console.log(`[Run ${runId}] === PHASE 2: Step 2-2 (収束・深掘りフェーズ) ===`);
+    
+    const step2_2StartTime = Date.now();
+    
     await updateProgress(runId, { 
-      currentPhase: "deep_research_running", 
-      currentIteration: 0, 
-      maxIterations: 1,
-      planningAnalysis: "Deep Research エージェントが調査中です...",
+      currentPhase: "step2_2_uploading", 
+      currentIteration: 2, 
+      maxIterations: 2,
+      planningAnalysis: "Step 2-2: Step 2-1の結果をFile Searchストアにアップロード中...",
       stepTimings,
       stepStartTime: startTime,
     });
 
-    let report = "";
-    let pollCount = 0;
-    const maxPollTime = 30 * 60 * 1000;
-    const pollInterval = 15000;
+    fileSearchStoreName2 = await createFileSearchStore(`gmethod-run-${runId}-step2-2-${Date.now()}`);
+    console.log(`[Run ${runId}] Created File Search Store for Step 2-2: ${fileSearchStoreName2}`);
 
-    while (Date.now() - startTime < maxPollTime) {
-      pollCount++;
-      await sleep(pollInterval);
+    // Upload Step 2-1 result
+    await uploadTextToFileSearchStore(fileSearchStoreName2, step2_1Output, "step2_1_result");
+    console.log(`[Run ${runId}] Uploaded Step 2-1 result`);
 
-      try {
-        const currentStatus = await (client as any).interactions.get(interactionId);
-        const status = currentStatus.status;
-        console.log(`[Run ${runId}] Deep Research Status: ${status} (poll ${pollCount})`);
+    // Upload original resources too
+    await uploadTextToFileSearchStore(fileSearchStoreName2, context.targetSpec, "target_specification");
+    await uploadTextToFileSearchStore(fileSearchStoreName2, context.technicalAssets, "technical_assets");
+    console.log(`[Run ${runId}] Uploaded original resources for Step 2-2`);
 
-        await updateProgress(runId, { 
-          currentPhase: "deep_research_running", 
-          currentIteration: pollCount, 
-          maxIterations: Math.ceil(maxPollTime / pollInterval),
-          planningAnalysis: `Deep Research 実行中... (${Math.floor((Date.now() - startTime) / 1000)}秒経過)`,
-          stepTimings,
-          stepStartTime: startTime,
-        });
+    stepTimings["step2_2_file_upload"] = Date.now() - step2_2StartTime;
 
-        if (status === "completed") {
-          console.log(`[Run ${runId}] Deep Research Completed!`);
-          const outputs = currentStatus.outputs || [];
-          const finalOutput = outputs[outputs.length - 1];
-          report = finalOutput?.text || "";
-          stepTimings["deep_research"] = Date.now() - startTime;
-          break;
-        } else if (status === "failed") {
-          console.error(`[Run ${runId}] Deep Research Failed:`, currentStatus.error);
-          throw new Error(`Deep Research が失敗しました: ${currentStatus.error || "Unknown error"}`);
-        }
-      } catch (pollError: any) {
-        if (pollError.message?.includes("Deep Research が失敗")) {
-          throw pollError;
-        }
-        console.warn(`[Run ${runId}] Poll error (continuing):`, pollError.message);
-      }
+    // Get Step 2-2 prompt (convergent deep-dive)
+    let researchPrompt2_2 = await getDeepResearchPrompt2_2();
+    researchPrompt2_2 = researchPrompt2_2.replace(/{HYPOTHESIS_COUNT}/g, context.hypothesisCount.toString());
+    
+    console.log(`[Run ${runId}] Step 2-2 Prompt: ${researchPrompt2_2.length} chars`);
+
+    await updateProgress(runId, { 
+      currentPhase: "step2_2_running", 
+      currentIteration: 2, 
+      maxIterations: 2,
+      planningAnalysis: "Step 2-2: Deep Research エージェントが収束・深掘りフェーズを実行中...",
+      stepTimings,
+      stepStartTime: startTime,
+    });
+
+    // Execute Step 2-2 Deep Research
+    step2_2Output = await runDeepResearchPhase(
+      client, 
+      researchPrompt2_2, 
+      fileSearchStoreName2, 
+      runId, 
+      "Step 2-2",
+      startTime
+    );
+    
+    stepTimings["step2_2_deep_research"] = Date.now() - step2_2StartTime;
+    console.log(`[Run ${runId}] Step 2-2 completed. Output length: ${step2_2Output.length} chars`);
+
+    // Save Step 2-2 output to database
+    await storage.updateRun(runId, { step2_2Output });
+
+    // Cleanup Step 2-2 File Search Store
+    if (fileSearchStoreName2) {
+      await deleteFileSearchStore(fileSearchStoreName2);
+      fileSearchStoreName2 = null;
     }
 
-    if (!report) {
-      throw new Error("Deep Research がタイムアウトしました（30分経過）");
-    }
+    // ===== Combine outputs =====
+    const combinedReport = `【Step 2-1：発散・選定フェーズ（監査ストリップ）】
 
-    if (fileSearchStoreName) {
-      await deleteFileSearchStore(fileSearchStoreName);
-      fileSearchStoreName = null;
-    }
+${step2_1Output}
 
+${'='.repeat(80)}
+
+【Step 2-2：収束・深掘りフェーズ（詳細レポート）】
+
+${step2_2Output}`;
+
+    stepTimings["total"] = Date.now() - startTime;
+
+    // Validate combined report
     const validationStartTime = Date.now();
     await updateProgress(runId, { 
       currentPhase: "validating", 
@@ -579,58 +696,28 @@ async function executeDeepResearchStep2(context: PipelineContext, runId: number)
       stepStartTime: startTime,
     });
 
-    const validationResult = await validateHypotheses(report, context.hypothesisCount, runId);
+    const validationResult = await validateHypotheses(combinedReport, context.hypothesisCount, runId);
     stepTimings["validation"] = Date.now() - validationStartTime;
 
-    if (!validationResult.isValid) {
-      console.log(`[Run ${runId}] Validation failed, retrying...`);
-      
-      const retryStartTime = Date.now();
-      await updateProgress(runId, { 
-        currentPhase: "retrying", 
-        currentIteration: 0, 
-        maxIterations: 1,
-        planningAnalysis: `仮説数が不足（${validationResult.hypothesisCount}/${context.hypothesisCount}）。再生成中...`,
-        stepTimings,
-        stepStartTime: startTime,
-      });
-
-      const additionalNeeded = context.hypothesisCount - validationResult.hypothesisCount;
-      const retryPrompt = `前回の調査結果を踏まえて、追加で${additionalNeeded}件の仮説を生成してください。
-
-前回の結果:
-${report}
-
-追加で必要な仮説数: ${additionalNeeded}件
-
-上記と重複しない新しい仮説を生成してください。`;
-
-      const retryReport = await generateWithModel(retryPrompt, MODEL_PRO, true);
-      report = report + "\n\n【追加生成された仮説】\n" + retryReport;
-      
-      const finalValidation = await validateHypotheses(report, context.hypothesisCount, runId);
-      stepTimings["retry"] = Date.now() - retryStartTime;
-      
-      return {
-        report,
-        searchQueries: [],
-        iterationCount: 1,
-        validationResult: finalValidation
-      };
-    }
+    console.log(`[Run ${runId}] Two-Phase Deep Research completed. Total time: ${Math.floor(stepTimings["total"] / 1000)}s`);
 
     return {
-      report,
+      report: combinedReport,
       searchQueries: [],
-      iterationCount: 1,
-      validationResult
+      iterationCount: 2,
+      validationResult,
+      step2_1Output,
+      step2_2Output
     };
   } catch (error: any) {
-    console.error(`[Run ${runId}] Deep Research Step 2 failed:`, error);
+    console.error(`[Run ${runId}] Two-Phase Deep Research failed:`, error);
     throw new Error(`Deep Research APIの起動に失敗しました: ${error?.message || error}`);
   } finally {
-    if (fileSearchStoreName) {
-      await deleteFileSearchStore(fileSearchStoreName);
+    if (fileSearchStoreName1) {
+      await deleteFileSearchStore(fileSearchStoreName1);
+    }
+    if (fileSearchStoreName2) {
+      await deleteFileSearchStore(fileSearchStoreName2);
     }
   }
 }
