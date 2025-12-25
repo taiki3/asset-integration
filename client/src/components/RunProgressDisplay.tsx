@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
-import { Search, Brain, FileText, Loader2, Clock, Timer } from "lucide-react";
+import { Search, Brain, FileText, Loader2, Clock, Timer, Pause, Play, Square } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 
@@ -21,6 +22,11 @@ interface RunProgressDisplayProps {
   progressInfo?: ProgressInfo;
   status: string;
   runCreatedAt?: string;
+  runId?: number;
+  onPause?: (runId: number) => void;
+  onResume?: (runId: number) => void;
+  onStop?: (runId: number) => void;
+  isPauseRequested?: boolean;
 }
 
 const formatTime = (ms: number): string => {
@@ -63,11 +69,16 @@ export function RunProgressDisplay({
   progressInfo,
   status,
   runCreatedAt,
+  runId,
+  onPause,
+  onResume,
+  onStop,
+  isPauseRequested,
 }: RunProgressDisplayProps) {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   
   useEffect(() => {
-    if (status !== "running") {
+    if (status !== "running" && status !== "paused") {
       setElapsedSeconds(0);
       return;
     }
@@ -85,7 +96,9 @@ export function RunProgressDisplay({
     return () => clearInterval(interval);
   }, [status, progressInfo?.stepStartTime, runCreatedAt, currentStep]);
   
-  if (status !== "running") return null;
+  if (status !== "running" && status !== "paused") return null;
+  
+  const isPaused = status === "paused";
 
   const phases = ["deep_research_starting", "deep_research_running", "validating", "completed"];
   const phaseProgress = progressInfo?.currentPhase ? 
@@ -93,21 +106,68 @@ export function RunProgressDisplay({
     : 0;
 
   return (
-    <Card className="border-primary/20 bg-primary/5">
+    <Card className={`border-primary/20 ${isPaused ? "bg-yellow-500/10" : "bg-primary/5"}`}>
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between gap-2">
           <CardTitle className="text-base font-medium flex items-center gap-2 flex-wrap">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            実行中: {stepLabels[currentStep] || `Step ${currentStep}`}
+            {isPaused ? (
+              <Pause className="h-4 w-4 text-yellow-600" />
+            ) : (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            )}
+            {isPaused ? "一時停止中" : "実行中"}: {stepLabels[currentStep] || `Step ${currentStep}`}
             {totalLoops > 1 && (
               <Badge variant="secondary">
                 ループ {currentLoop}/{totalLoops}
               </Badge>
             )}
+            {isPauseRequested && !isPaused && (
+              <Badge variant="outline" className="text-yellow-600 border-yellow-600">
+                一時停止待機中
+              </Badge>
+            )}
           </CardTitle>
-          <div className="flex items-center gap-1 text-sm font-mono text-muted-foreground">
-            <Timer className="h-4 w-4" />
-            <span data-testid="text-elapsed-time">{formatElapsedTime(elapsedSeconds)}</span>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 text-sm font-mono text-muted-foreground">
+              <Timer className="h-4 w-4" />
+              <span data-testid="text-elapsed-time">{formatElapsedTime(elapsedSeconds)}</span>
+            </div>
+            {runId && (
+              <div className="flex items-center gap-1">
+                {isPaused ? (
+                  <Button
+                    size="icon"
+                    variant="outline"
+                    onClick={() => onResume?.(runId)}
+                    title="再開"
+                    data-testid="button-resume"
+                  >
+                    <Play className="h-4 w-4" />
+                  </Button>
+                ) : (
+                  <Button
+                    size="icon"
+                    variant="outline"
+                    onClick={() => onPause?.(runId)}
+                    disabled={isPauseRequested}
+                    title="一時停止（現在のステップ完了後）"
+                    data-testid="button-pause"
+                  >
+                    <Pause className="h-4 w-4" />
+                  </Button>
+                )}
+                <Button
+                  size="icon"
+                  variant="outline"
+                  onClick={() => onStop?.(runId)}
+                  title="停止（再開不可）"
+                  data-testid="button-stop"
+                  className="text-destructive hover:text-destructive"
+                >
+                  <Square className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
           </div>
         </div>
       </CardHeader>

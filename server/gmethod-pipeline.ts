@@ -767,7 +767,19 @@ async function executeStep2WithRetry(
   };
 }
 
-export async function executeGMethodPipeline(runId: number): Promise<void> {
+// Check if pipeline should pause or stop after a step
+async function checkPipelineControl(runId: number): Promise<"continue" | "pause" | "stop"> {
+  if (isStopRequested(runId)) {
+    clearControlRequests(runId);
+    return "stop";
+  }
+  if (isPauseRequested(runId)) {
+    return "pause";
+  }
+  return "continue";
+}
+
+export async function executeGMethodPipeline(runId: number, resumeFromStep?: number): Promise<void> {
   try {
     if (!checkAIConfiguration()) {
       await storage.updateRun(runId, {
@@ -796,47 +808,97 @@ export async function executeGMethodPipeline(runId: number): Promise<void> {
       technicalAssets: technicalAssets.content,
       hypothesisCount: run.hypothesisCount || 5,
       previousHypotheses,
+      step2Output: run.step2Output || undefined,
+      step3Output: run.step3Output || undefined,
+      step4Output: run.step4Output || undefined,
     };
 
-    await storage.updateRun(runId, { status: "running", currentStep: 2 });
+    const startStep = resumeFromStep || 2;
+    await storage.updateRun(runId, { status: "running", currentStep: startStep });
 
-    let deepResearchResult = await executeStep2WithRetry(context, runId);
-    context.step2Output = deepResearchResult.report;
-    
-    const validationMetadata = {
-      searchQueries: deepResearchResult.searchQueries,
-      iterationCount: deepResearchResult.iterationCount,
-      validation: deepResearchResult.validationResult,
-      validationPassed: deepResearchResult.validationResult.isValid,
-      retried: deepResearchResult.retried,
-    };
-    console.log(`[Run ${runId}] Step 2 completed: ${deepResearchResult.iterationCount} iterations, ${deepResearchResult.searchQueries.length} queries${deepResearchResult.retried ? " (retried)" : ""}`);
-    
-    if (!deepResearchResult.validationResult.isValid) {
-      const warningMessage = `品質検証警告: ${deepResearchResult.validationResult.errors.slice(0, 3).join("; ")}`;
-      console.warn(`[Run ${runId}] ${warningMessage}`);
-      await storage.updateRun(runId, { 
-        step2Output: context.step2Output, 
-        currentStep: 3,
-        validationMetadata,
-        errorMessage: warningMessage,
-      });
-    } else {
-      await storage.updateRun(runId, { 
-        step2Output: context.step2Output, 
-        currentStep: 3,
-        validationMetadata,
-      });
+    // Step 2: Deep Research
+    if (startStep <= 2) {
+      let deepResearchResult = await executeStep2WithRetry(context, runId);
+      context.step2Output = deepResearchResult.report;
+      
+      const validationMetadata = {
+        searchQueries: deepResearchResult.searchQueries,
+        iterationCount: deepResearchResult.iterationCount,
+        validation: deepResearchResult.validationResult,
+        validationPassed: deepResearchResult.validationResult.isValid,
+        retried: deepResearchResult.retried,
+      };
+      console.log(`[Run ${runId}] Step 2 completed: ${deepResearchResult.iterationCount} iterations, ${deepResearchResult.searchQueries.length} queries${deepResearchResult.retried ? " (retried)" : ""}`);
+      
+      if (!deepResearchResult.validationResult.isValid) {
+        const warningMessage = `品質検証警告: ${deepResearchResult.validationResult.errors.slice(0, 3).join("; ")}`;
+        console.warn(`[Run ${runId}] ${warningMessage}`);
+        await storage.updateRun(runId, { 
+          step2Output: context.step2Output, 
+          currentStep: 3,
+          validationMetadata,
+          errorMessage: warningMessage,
+        });
+      } else {
+        await storage.updateRun(runId, { 
+          step2Output: context.step2Output, 
+          currentStep: 3,
+          validationMetadata,
+        });
+      }
+
+      // Check pause/stop after step 2
+      const control = await checkPipelineControl(runId);
+      if (control === "stop") {
+        await storage.updateRun(runId, { status: "error", errorMessage: "ユーザーにより停止されました" });
+        return;
+      }
+      if (control === "pause") {
+        await storage.updateRun(runId, { status: "paused" });
+        console.log(`[Run ${runId}] Paused after step 2`);
+        return;
+      }
     }
 
-    console.log(`[Run ${runId}] Starting Step 3 (Scientific Evaluation with Pro)...`);
-    context.step3Output = await executeStep3(context);
-    await storage.updateRun(runId, { step3Output: context.step3Output, currentStep: 4 });
+    // Step 3: Scientific Evaluation
+    if (startStep <= 3) {
+      console.log(`[Run ${runId}] Starting Step 3 (Scientific Evaluation with Pro)...`);
+      context.step3Output = await executeStep3(context);
+      await storage.updateRun(runId, { step3Output: context.step3Output, currentStep: 4 });
 
-    console.log(`[Run ${runId}] Starting Step 4 (Strategic Audit with Pro)...`);
-    context.step4Output = await executeStep4(context);
-    await storage.updateRun(runId, { step4Output: context.step4Output, currentStep: 5 });
+      // Check pause/stop after step 3
+      const control = await checkPipelineControl(runId);
+      if (control === "stop") {
+        await storage.updateRun(runId, { status: "error", errorMessage: "ユーザーにより停止されました" });
+        return;
+      }
+      if (control === "pause") {
+        await storage.updateRun(runId, { status: "paused" });
+        console.log(`[Run ${runId}] Paused after step 3`);
+        return;
+      }
+    }
 
+    // Step 4: Strategic Audit
+    if (startStep <= 4) {
+      console.log(`[Run ${runId}] Starting Step 4 (Strategic Audit with Pro)...`);
+      context.step4Output = await executeStep4(context);
+      await storage.updateRun(runId, { step4Output: context.step4Output, currentStep: 5 });
+
+      // Check pause/stop after step 4
+      const control = await checkPipelineControl(runId);
+      if (control === "stop") {
+        await storage.updateRun(runId, { status: "error", errorMessage: "ユーザーにより停止されました" });
+        return;
+      }
+      if (control === "pause") {
+        await storage.updateRun(runId, { status: "paused" });
+        console.log(`[Run ${runId}] Paused after step 4`);
+        return;
+      }
+    }
+
+    // Step 5: Integration
     console.log(`[Run ${runId}] Starting Step 5 (Integration with Flash)...`);
     context.step5Output = await executeStep5(context);
     
@@ -861,6 +923,7 @@ export async function executeGMethodPipeline(runId: number): Promise<void> {
       console.log(`[Run ${runId}] Saved ${hypothesesData.length} hypotheses to database`);
     }
 
+    clearControlRequests(runId);
     console.log(`[Run ${runId}] Pipeline completed successfully`);
   } catch (error) {
     console.error(`[Run ${runId}] Pipeline error:`, error);
@@ -869,5 +932,20 @@ export async function executeGMethodPipeline(runId: number): Promise<void> {
       status: "error",
       errorMessage: errorMessage,
     });
+    clearControlRequests(runId);
   }
+}
+
+// Resume a paused pipeline
+export async function resumePipeline(runId: number): Promise<void> {
+  const run = await storage.getRun(runId);
+  if (!run || run.status !== "paused") {
+    throw new Error("Run not found or not paused");
+  }
+  
+  // Resume from the next step after where we paused
+  const resumeStep = (run.currentStep || 2) + 1;
+  console.log(`[Run ${runId}] Resuming from step ${resumeStep}`);
+  
+  await executeGMethodPipeline(runId, resumeStep);
 }

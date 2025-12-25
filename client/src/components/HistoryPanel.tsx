@@ -29,6 +29,7 @@ interface HistoryPanelProps {
 const statusConfig = {
   pending: { label: "待機中", icon: Clock, variant: "secondary" as const, animate: false },
   running: { label: "処理中", icon: Loader2, variant: "default" as const, animate: true },
+  paused: { label: "一時停止", icon: Clock, variant: "secondary" as const, animate: false },
   completed: { label: "完了", icon: CheckCircle, variant: "default" as const, animate: false },
   error: { label: "エラー", icon: XCircle, variant: "destructive" as const, animate: false },
   failed: { label: "失敗", icon: XCircle, variant: "destructive" as const, animate: false },

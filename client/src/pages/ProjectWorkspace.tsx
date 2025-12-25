@@ -42,6 +42,8 @@ export default function ProjectWorkspace({ projectId }: ProjectWorkspaceProps) {
   });
   
   const runningRun = runs.find((r) => r.status === "running");
+  const pausedRun = runs.find((r) => r.status === "paused");
+  const activeRun = runningRun || pausedRun;
 
   const { data: hypotheses = [], isLoading: hypothesesLoading } = useQuery<Hypothesis[]>({
     queryKey: ["/api/projects", id, "hypotheses"],
@@ -142,6 +144,66 @@ export default function ProjectWorkspace({ projectId }: ProjectWorkspaceProps) {
       toast({
         title: "エラー",
         description: "仮説の削除に失敗しました。もう一度お試しください。",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const pauseRunMutation = useMutation({
+    mutationFn: async (runId: number) => {
+      await apiRequest("POST", `/api/runs/${runId}/pause`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", id, "runs"] });
+      toast({
+        title: "一時停止をリクエストしました",
+        description: "現在のステップ完了後に一時停止します。",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "エラー",
+        description: "一時停止のリクエストに失敗しました。",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const resumeRunMutation = useMutation({
+    mutationFn: async (runId: number) => {
+      await apiRequest("POST", `/api/runs/${runId}/resume`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", id, "runs"] });
+      toast({
+        title: "再開しました",
+        description: "パイプラインの処理を再開しました。",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "エラー",
+        description: "再開に失敗しました。",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const stopRunMutation = useMutation({
+    mutationFn: async (runId: number) => {
+      await apiRequest("POST", `/api/runs/${runId}/stop`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", id, "runs"] });
+      toast({
+        title: "停止しました",
+        description: "パイプラインの処理を停止しました。",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "エラー",
+        description: "停止に失敗しました。",
         variant: "destructive",
       });
     },
@@ -266,15 +328,20 @@ export default function ProjectWorkspace({ projectId }: ProjectWorkspaceProps) {
           )}
         </div>
 
-        {runningRun && (
+        {activeRun && (
           <div className="mb-6">
             <RunProgressDisplay
-              currentStep={runningRun.currentStep || 2}
-              currentLoop={runningRun.currentLoop || 1}
-              totalLoops={runningRun.totalLoops || 1}
-              progressInfo={runningRun.progressInfo as any}
-              status={runningRun.status}
-              runCreatedAt={runningRun.createdAt instanceof Date ? runningRun.createdAt.toISOString() : runningRun.createdAt}
+              currentStep={activeRun.currentStep || 2}
+              currentLoop={activeRun.currentLoop || 1}
+              totalLoops={activeRun.totalLoops || 1}
+              progressInfo={activeRun.progressInfo as any}
+              status={activeRun.status}
+              runCreatedAt={activeRun.createdAt instanceof Date ? activeRun.createdAt.toISOString() : activeRun.createdAt}
+              runId={activeRun.id}
+              onPause={(runId) => pauseRunMutation.mutate(runId)}
+              onResume={(runId) => resumeRunMutation.mutate(runId)}
+              onStop={(runId) => stopRunMutation.mutate(runId)}
+              isPauseRequested={pauseRunMutation.isPending}
             />
           </div>
         )}

@@ -2,7 +2,7 @@ import type { Express, RequestHandler } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertProjectSchema, insertResourceSchema, insertHypothesisRunSchema } from "@shared/schema";
-import { executeGMethodPipeline } from "./gmethod-pipeline";
+import { executeGMethodPipeline, requestPause, requestResume, requestStop, resumePipeline } from "./gmethod-pipeline";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
 
 // Domain restriction middleware - only allow @agc.com emails (and gmail.com in development)
@@ -170,6 +170,71 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error fetching run:", error);
       res.status(500).json({ error: "Failed to fetch run" });
+    }
+  });
+
+  // Pause a running pipeline (will pause after current step completes)
+  app.post("/api/runs/:id/pause", isAuthenticated, requireAgcDomain, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const run = await storage.getRun(id);
+      if (!run) {
+        return res.status(404).json({ error: "Run not found" });
+      }
+      if (run.status !== "running") {
+        return res.status(400).json({ error: "Run is not running" });
+      }
+      requestPause(id);
+      res.json({ message: "Pause requested. Will pause after current step." });
+    } catch (error) {
+      console.error("Error pausing run:", error);
+      res.status(500).json({ error: "Failed to pause run" });
+    }
+  });
+
+  // Resume a paused pipeline
+  app.post("/api/runs/:id/resume", isAuthenticated, requireAgcDomain, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const run = await storage.getRun(id);
+      if (!run) {
+        return res.status(404).json({ error: "Run not found" });
+      }
+      if (run.status !== "paused") {
+        return res.status(400).json({ error: "Run is not paused" });
+      }
+      requestResume(id);
+      // Resume pipeline execution
+      resumePipeline(run.id).catch((error) => {
+        console.error("Pipeline resume error:", error);
+      });
+      res.json({ message: "Pipeline resumed" });
+    } catch (error) {
+      console.error("Error resuming run:", error);
+      res.status(500).json({ error: "Failed to resume run" });
+    }
+  });
+
+  // Stop a running or paused pipeline (cannot be resumed)
+  app.post("/api/runs/:id/stop", isAuthenticated, requireAgcDomain, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const run = await storage.getRun(id);
+      if (!run) {
+        return res.status(404).json({ error: "Run not found" });
+      }
+      if (run.status !== "running" && run.status !== "paused") {
+        return res.status(400).json({ error: "Run is not running or paused" });
+      }
+      requestStop(id);
+      // If paused, update status immediately
+      if (run.status === "paused") {
+        await storage.updateRun(id, { status: "error", errorMessage: "ユーザーにより停止されました" });
+      }
+      res.json({ message: "Stop requested" });
+    } catch (error) {
+      console.error("Error stopping run:", error);
+      res.status(500).json({ error: "Failed to stop run" });
     }
   });
 
