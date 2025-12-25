@@ -13,7 +13,7 @@ import {
   hypotheses,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, max } from "drizzle-orm";
+import { eq, desc, max, or } from "drizzle-orm";
 
 export interface IStorage {
   // Projects
@@ -33,6 +33,7 @@ export interface IStorage {
   getRun(id: number): Promise<HypothesisRun | undefined>;
   createRun(run: InsertHypothesisRun): Promise<HypothesisRun>;
   updateRun(id: number, updates: Partial<HypothesisRun>): Promise<HypothesisRun | undefined>;
+  getInterruptedRuns(): Promise<HypothesisRun[]>;
 
   // Hypotheses
   getHypothesesByProject(projectId: number): Promise<Hypothesis[]>;
@@ -99,6 +100,15 @@ export class DatabaseStorage implements IStorage {
   async updateRun(id: number, updates: Partial<HypothesisRun>): Promise<HypothesisRun | undefined> {
     const [updated] = await db.update(hypothesisRuns).set(updates).where(eq(hypothesisRuns.id, id)).returning();
     return updated;
+  }
+
+  async getInterruptedRuns(): Promise<HypothesisRun[]> {
+    return db.select().from(hypothesisRuns).where(
+      or(
+        eq(hypothesisRuns.status, "running"),
+        eq(hypothesisRuns.status, "paused")
+      )
+    );
   }
 
   // Hypotheses

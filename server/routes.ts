@@ -29,10 +29,41 @@ const requireAgcDomain: RequestHandler = (req, res, next) => {
   next();
 };
 
+async function recoverInterruptedRuns(): Promise<void> {
+  try {
+    const interruptedRuns = await storage.getInterruptedRuns();
+    if (interruptedRuns.length === 0) {
+      console.log("[Recovery] No interrupted runs found");
+      return;
+    }
+    
+    console.log(`[Recovery] Found ${interruptedRuns.length} interrupted run(s)`);
+    
+    for (const run of interruptedRuns) {
+      const wasRunning = run.status === "running";
+      const errorMessage = wasRunning 
+        ? "サーバー再起動により中断されました。再実行してください。"
+        : "一時停止中にサーバーが再起動しました。再実行してください。";
+      
+      await storage.updateRun(run.id, {
+        status: "interrupted",
+        errorMessage,
+      });
+      
+      console.log(`[Recovery] Run ${run.id} marked as interrupted (was ${run.status}, step ${run.currentStep}, loop ${run.currentLoop})`);
+    }
+  } catch (error) {
+    console.error("[Recovery] Error recovering interrupted runs:", error);
+  }
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+  // Recover any runs that were interrupted by server restart
+  await recoverInterruptedRuns();
+  
   // Setup auth BEFORE other routes
   await setupAuth(app);
   registerAuthRoutes(app);

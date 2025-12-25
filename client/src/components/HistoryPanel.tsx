@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { History, ChevronRight, Download, Loader2, CheckCircle, XCircle, Clock, FileSpreadsheet } from "lucide-react";
+import { History, ChevronRight, Download, Loader2, CheckCircle, XCircle, Clock, FileSpreadsheet, AlertTriangle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -26,14 +26,17 @@ interface HistoryPanelProps {
   onDownloadExcel: (runId: number) => void;
 }
 
-const statusConfig = {
-  pending: { label: "待機中", icon: Clock, variant: "secondary" as const, animate: false },
-  running: { label: "処理中", icon: Loader2, variant: "default" as const, animate: true },
-  paused: { label: "一時停止", icon: Clock, variant: "secondary" as const, animate: false },
-  completed: { label: "完了", icon: CheckCircle, variant: "default" as const, animate: false },
-  error: { label: "エラー", icon: XCircle, variant: "destructive" as const, animate: false },
-  failed: { label: "失敗", icon: XCircle, variant: "destructive" as const, animate: false },
+const statusConfig: Record<string, { label: string; icon: typeof Clock; variant: "default" | "secondary" | "destructive"; animate: boolean }> = {
+  pending: { label: "待機中", icon: Clock, variant: "secondary", animate: false },
+  running: { label: "処理中", icon: Loader2, variant: "default", animate: true },
+  paused: { label: "一時停止", icon: Clock, variant: "secondary", animate: false },
+  completed: { label: "完了", icon: CheckCircle, variant: "default", animate: false },
+  error: { label: "エラー", icon: XCircle, variant: "destructive", animate: false },
+  failed: { label: "失敗", icon: XCircle, variant: "destructive", animate: false },
+  interrupted: { label: "中断", icon: AlertTriangle, variant: "secondary", animate: false },
 };
+
+const defaultStatus = { label: "不明", icon: Clock, variant: "secondary" as const, animate: false };
 
 export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel }: HistoryPanelProps) {
   const [selectedRun, setSelectedRun] = useState<HypothesisRun | null>(null);
@@ -79,7 +82,7 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel }
             ) : (
               <div className="space-y-2">
                 {runs.map((run) => {
-                  const status = statusConfig[run.status as keyof typeof statusConfig];
+                  const status = statusConfig[run.status] || defaultStatus;
                   const StatusIcon = status.icon;
                   return (
                     <div
@@ -138,7 +141,7 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel }
             <>
               <div className="flex items-center gap-2 mb-2">
                 {(() => {
-                  const status = statusConfig[selectedRun.status as keyof typeof statusConfig];
+                  const status = statusConfig[selectedRun.status] || defaultStatus;
                   const StatusIcon = status.icon;
                   return (
                     <Badge variant={status.variant} className="gap-1">
