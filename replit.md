@@ -22,7 +22,10 @@ A web application for automating the "G-Method" business hypothesis generation p
 - **projects**: Project management (id, name, description, createdAt)
 - **resources**: Input data storage (id, projectId, type, name, content, createdAt)
   - Types: `target_spec` (target specifications) and `technical_assets` (technical asset lists)
-- **hypothesis_runs**: G-Method execution history (id, projectId, targetSpecId, technicalAssetsId, status, step outputs, integratedList)
+- **hypothesis_runs**: G-Method execution history
+  - Core fields: id, projectId, targetSpecId, technicalAssetsId, status, step outputs, integratedList
+  - Job naming: `jobName` (default YYMMDDHHMM format), `loopIndex` for multi-loop batches
+  - Loop tracking: `loopCount`, `currentLoop`, `totalLoops` for multi-loop execution
 
 ## G-Method Pipeline
 The pipeline consists of 4 steps (numbered 2-5):

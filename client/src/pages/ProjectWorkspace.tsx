@@ -144,11 +144,12 @@ export default function ProjectWorkspace({ projectId }: ProjectWorkspaceProps) {
   });
 
   const executeRunMutation = useMutation({
-    mutationFn: async ({ targetSpecId, technicalAssetsId, hypothesisCount, loopCount, existingFilter }: {
+    mutationFn: async ({ targetSpecId, technicalAssetsId, hypothesisCount, loopCount, jobName, existingFilter }: {
       targetSpecId: number;
       technicalAssetsId: number;
       hypothesisCount: number;
       loopCount: number;
+      jobName: string;
       existingFilter?: { enabled: boolean; targetSpecIds: number[]; technicalAssetsIds: number[] };
     }) => {
       const res = await apiRequest("POST", `/api/projects/${id}/runs`, {
@@ -157,6 +158,7 @@ export default function ProjectWorkspace({ projectId }: ProjectWorkspaceProps) {
         technicalAssetsId,
         hypothesisCount,
         loopCount,
+        jobName,
         existingFilter,
       });
       return res.json();
@@ -279,9 +281,10 @@ export default function ProjectWorkspace({ projectId }: ProjectWorkspaceProps) {
     technicalAssetsId: number,
     hypothesisCount: number,
     loopCount: number,
+    jobName: string,
     existingFilter?: { enabled: boolean; targetSpecIds: number[]; technicalAssetsIds: number[] }
   ) => {
-    executeRunMutation.mutate({ targetSpecId, technicalAssetsId, hypothesisCount, loopCount, existingFilter });
+    executeRunMutation.mutate({ targetSpecId, technicalAssetsId, hypothesisCount, loopCount, jobName, existingFilter });
   };
 
   const handleDeleteHypothesis = (hypothesisId: number) => {

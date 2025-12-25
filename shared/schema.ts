@@ -33,6 +33,8 @@ export const hypothesisRuns = pgTable("hypothesis_runs", {
   projectId: integer("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
   targetSpecId: integer("target_spec_id").notNull().references(() => resources.id),
   technicalAssetsId: integer("technical_assets_id").notNull().references(() => resources.id),
+  jobName: text("job_name"), // Job name for identification (default: YYMMDDHHMM, with -n suffix for loops)
+  loopIndex: integer("loop_index").default(0), // This run's loop index (0 for single, 1-N for multi-loop batches)
   hypothesisCount: integer("hypothesis_count").notNull().default(5), // Number of hypotheses per loop
   loopCount: integer("loop_count").notNull().default(1), // Number of generation loops
   status: text("status").notNull().default("pending"), // 'pending', 'running', 'completed', 'error'

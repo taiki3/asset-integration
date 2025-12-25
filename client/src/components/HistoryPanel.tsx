@@ -117,13 +117,19 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, 
                       data-testid={`run-item-${run.id}`}
                     >
                       <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <Badge variant={status.variant} className="gap-1 text-xs">
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
+                          {run.jobName && (
+                            <span className="text-sm font-medium truncate" data-testid={`text-job-name-${run.id}`}>
+                              {run.jobName}
+                              {run.totalLoops && run.totalLoops > 1 && run.currentLoop ? ` (${run.currentLoop}/${run.totalLoops})` : ""}
+                            </span>
+                          )}
+                          <Badge variant={status.variant} className="gap-1 text-xs shrink-0">
                             <StatusIcon className={`h-3 w-3 ${status.animate ? "animate-spin" : ""}`} />
                             {status.label}
                           </Badge>
                           {run.currentStep && run.currentStep > 0 && run.status === "running" && (
-                            <span className="text-xs text-muted-foreground">
+                            <span className="text-xs text-muted-foreground shrink-0">
                               ステップ {run.currentStep}/5
                             </span>
                           )}
@@ -155,6 +161,12 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, 
             <DialogDescription>
               {selectedRun && (
                 <>
+                  {selectedRun.jobName && (
+                    <span className="font-medium">
+                      {selectedRun.jobName}
+                      {selectedRun.totalLoops && selectedRun.totalLoops > 1 && selectedRun.currentLoop ? ` (${selectedRun.currentLoop}/${selectedRun.totalLoops})` : ""} ・{" "}
+                    </span>
+                  )}
                   {getResourceName(selectedRun.targetSpecId)} x {getResourceName(selectedRun.technicalAssetsId)} ・{" "}
                   {format(new Date(selectedRun.createdAt), "yyyy/MM/dd HH:mm")}
                 </>

@@ -69,13 +69,23 @@ interface ExecutionPanelProps {
   technicalAssets: Resource[];
   hypotheses: Hypothesis[];
   projectId: number;
-  onExecute: (targetSpecId: number, technicalAssetsId: number, hypothesisCount: number, loopCount: number, existingFilter?: ExistingHypothesisFilter) => void;
+  onExecute: (targetSpecId: number, technicalAssetsId: number, hypothesisCount: number, loopCount: number, jobName: string, existingFilter?: ExistingHypothesisFilter) => void;
   onAddResource: (type: "target_spec" | "technical_assets", name: string, content: string) => Promise<void>;
   onUpdateResource: (id: number, name: string, content: string) => Promise<void>;
   onDeleteResource: (id: number) => void;
   onImportResources: (resourceIds: number[]) => Promise<void>;
   isExecuting?: boolean;
   isPending?: boolean;
+}
+
+function generateDefaultJobName(): string {
+  const now = new Date();
+  const yy = String(now.getFullYear()).slice(-2);
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const dd = String(now.getDate()).padStart(2, '0');
+  const hh = String(now.getHours()).padStart(2, '0');
+  const min = String(now.getMinutes()).padStart(2, '0');
+  return `${yy}${mm}${dd}${hh}${min}`;
 }
 
 export function ExecutionPanel({
@@ -95,6 +105,7 @@ export function ExecutionPanel({
   const [selectedTechnicalAssets, setSelectedTechnicalAssets] = useState<string>("");
   const [hypothesisCount, setHypothesisCount] = useState<number>(5);
   const [loopCount, setLoopCount] = useState<number>(1);
+  const [jobName, setJobName] = useState<string>(generateDefaultJobName());
   const [resourceModalOpen, setResourceModalOpen] = useState(false);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [addType, setAddType] = useState<"target_spec" | "technical_assets">("target_spec");
@@ -187,7 +198,8 @@ export function ExecutionPanel({
       targetSpecIds: Array.from(filterTargetSpecIds),
       technicalAssetsIds: Array.from(filterAssetIds),
     };
-    onExecute(parseInt(selectedTargetSpec), parseInt(selectedTechnicalAssets), hypothesisCount, loopCount, existingFilter);
+    onExecute(parseInt(selectedTargetSpec), parseInt(selectedTechnicalAssets), hypothesisCount, loopCount, jobName, existingFilter);
+    setJobName(generateDefaultJobName());
   };
   
   const totalHypotheses = hypothesisCount * loopCount;
@@ -594,6 +606,18 @@ export function ExecutionPanel({
                 生成設定
               </Label>
               <div className="space-y-3 p-3 rounded-md bg-muted/30">
+                <div className="flex items-center gap-3">
+                  <span className="text-sm w-24">ジョブ名:</span>
+                  <Input
+                    type="text"
+                    value={jobName}
+                    onChange={(e) => setJobName(e.target.value)}
+                    disabled={isExecuting}
+                    className="flex-1"
+                    placeholder="YYMMDDHHMM形式"
+                    data-testid="input-job-name"
+                  />
+                </div>
                 <div className="flex items-center gap-3">
                   <span className="text-sm w-24">1回あたり:</span>
                   <Input
