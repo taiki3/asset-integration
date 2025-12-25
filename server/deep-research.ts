@@ -2,11 +2,6 @@
  * Deep Research API Module
  * File Search Store + Deep Research の共通実装
  * 本番コードとテストで共通して使用する
- * 
- * 重要な制限:
- * - Deep Research APIのプロンプトは約65文字以下にする必要がある（400エラー回避）
- * - 詳細な指示はファイルとしてアップロードする
- * - レート制限: 1リクエスト/分
  */
 
 import { GoogleGenAI } from "@google/genai";
@@ -97,12 +92,7 @@ export async function startDeepResearch(
   client: GoogleGenAI,
   config: DeepResearchConfig
 ): Promise<string> {
-  // CRITICAL: Prompt must be ~65 chars or less to avoid 400 error
-  if (config.prompt.length > 65) {
-    console.warn(`[DeepResearch] WARNING: Prompt length ${config.prompt.length} may cause 400 error (recommended: <=65)`);
-  }
-  
-  console.log(`[DeepResearch] Starting with prompt: "${config.prompt}" (${config.prompt.length} chars)`);
+  console.log(`[DeepResearch] Starting with prompt: "${config.prompt.substring(0, 100)}..." (${config.prompt.length} chars)`);
   console.log(`[DeepResearch] File Search Store: ${config.fileSearchStoreName}`);
   
   await waitForDeepResearchRateLimit();
@@ -169,7 +159,6 @@ export async function pollDeepResearchCompletion(
 
 /**
  * Build the instruction document to upload (contains detailed task instructions)
- * This is uploaded as a file because the API prompt has a ~65 char limit
  */
 export function buildInstructionDocument(hypothesisCount: number, hasPreviousHypotheses: boolean): string {
   return `【タスク】
@@ -197,9 +186,6 @@ ${hasPreviousHypotheses ? '4. 過去に生成した仮説と重複しないこ�
 
 /**
  * Full Deep Research flow - used by both production and test
- * 
- * CRITICAL: The prompt to interactions.create must be SHORT (~65 chars max)
- * All detailed instructions are uploaded as a file named "task_instructions"
  */
 export interface FullDeepResearchParams {
   client: GoogleGenAI;
@@ -243,10 +229,9 @@ export async function executeFullDeepResearch(params: FullDeepResearchParams): P
     await uploadTextToFileSearchStore(client, fileSearchStoreName, instructions, "task_instructions");
     console.log(`${logPrefix} Uploaded task instructions (${instructions.length} chars)`);
     
-    // 4. SHORT prompt (CRITICAL: must be ~65 chars or less to avoid 400 error)
-    // This prompt tells the agent to read the uploaded instructions file
+    // 4. Send prompt to Deep Research agent
     const shortPrompt = "task_instructionsの指示に従い事業仮説を生成してください。";
-    console.log(`${logPrefix} Prompt: "${shortPrompt}" (${shortPrompt.length} chars)`);
+    console.log(`${logPrefix} Prompt: "${shortPrompt}"`);
     
     // 5. Start Deep Research
     onProgress?.("deep_research_starting", "Deep Research エージェントを起動中...");

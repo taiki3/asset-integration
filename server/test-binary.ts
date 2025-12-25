@@ -43,8 +43,7 @@ async function testPrompt(client: any, prompt: string): Promise<boolean> {
 async function main() {
   const client = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
   
-  // 成功: 65文字 (単一行), 失敗: 116文字 (複数行)
-  // 問題は長さではなく、改行の有無かもしれない
+  // Test prompts with different lengths
   
   // Test 1: 90文字の単一行
   const test1 = "添付ファイルの技術資産を分析し、半導体市場向けの事業仮説を2件生成してください。各仮説には仮説タイトル、対象業界、事業概要、顧客の課題を含めてください。";
