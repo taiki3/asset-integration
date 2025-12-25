@@ -225,6 +225,38 @@ function getAIClient(): GoogleGenAI {
   return ai;
 }
 
+// Debug prompts structure for storing actual prompts sent to AI
+interface DebugPromptEntry {
+  step: string;
+  prompt: string;
+  attachments: string[];  // List of file names uploaded to File Search Store
+  timestamp: string;
+}
+
+interface DebugPrompts {
+  entries: DebugPromptEntry[];
+}
+
+// Helper function to add a debug prompt entry
+async function addDebugPrompt(runId: number, step: string, prompt: string, attachments: string[]): Promise<void> {
+  try {
+    const run = await storage.getRun(runId);
+    if (!run) return;
+    
+    const debugPrompts: DebugPrompts = (run.debugPrompts as DebugPrompts) || { entries: [] };
+    debugPrompts.entries.push({
+      step,
+      prompt,
+      attachments,
+      timestamp: new Date().toISOString(),
+    });
+    
+    await storage.updateRun(runId, { debugPrompts });
+  } catch (error) {
+    console.warn(`[Run ${runId}] Failed to save debug prompt for ${step}:`, error);
+  }
+}
+
 interface PipelineContext {
   targetSpec: string;
   technicalAssets: string;
@@ -626,6 +658,9 @@ async function mergeIndividualReports(
     .replace(/{REFERENCES}/g, referencesSection)
     .replace(/{HYPOTHESIS_COUNT}/g, hypothesisCount.toString());
 
+  // Save debug prompt for Step 2-3 merge
+  await addDebugPrompt(runId, "Step 2-3 (統合)", mergePrompt, []);
+
   const mergedReport = await generateWithPro(mergePrompt);
   console.log(`[Run ${runId}] Merge completed. Output length: ${mergedReport.length} chars`);
   return mergedReport;
@@ -789,6 +824,11 @@ async function executeDeepResearchStep2(context: PipelineContext, runId: number)
     
     console.log(`[Run ${runId}] Step 2-1 Prompt: ${researchPrompt2_1.length} chars`);
 
+    // Save debug prompt for Step 2-1
+    const step2_1Attachments = ["target_specification", "technical_assets"];
+    if (context.previousHypotheses) step2_1Attachments.push("previous_hypotheses");
+    await addDebugPrompt(runId, "Step 2-1 (発散・選定)", researchPrompt2_1, step2_1Attachments);
+
     await updateProgress(runId, { 
       currentPhase: "step2_1_running", 
       currentIteration: 1, 
@@ -894,6 +934,10 @@ ${step2_1Output}`;
         .replace(/{HYPOTHESIS_COUNT}/g, "1")
         .replace(/{HYPOTHESIS_NUMBER}/g, hypothesisNum.toString())
         .replace(/{HYPOTHESIS_TITLE}/g, hypothesis.title);
+      
+      // Save debug prompt for each Step 2-2 hypothesis
+      await addDebugPrompt(runId, `Step 2-2 仮説${hypothesisNum} (${hypothesis.title})`, individualPrompt, 
+        ["hypothesis_context", "target_specification", "technical_assets"]);
       
       try {
         // Execute Deep Research for this hypothesis
@@ -1089,17 +1133,20 @@ async function validateHypotheses(
   return result;
 }
 
-async function executeStep3(context: PipelineContext): Promise<string> {
+async function executeStep3(context: PipelineContext, runId: number): Promise<string> {
   const basePrompt = await getPromptForStep(3);
   const prompt = basePrompt
     .replace(/{HYPOTHESIS_COUNT}/g, context.hypothesisCount.toString())
     .replace("{TECHNICAL_ASSETS}", context.technicalAssets)
     .replace("{STEP2_OUTPUT}", context.step2Output || "");
   
+  // Save debug prompt for Step 3
+  await addDebugPrompt(runId, "Step 3 (科学的評価)", prompt, []);
+  
   return generateWithPro(prompt);
 }
 
-async function executeStep4(context: PipelineContext): Promise<string> {
+async function executeStep4(context: PipelineContext, runId: number): Promise<string> {
   const basePrompt = await getPromptForStep(4);
   const prompt = basePrompt
     .replace(/{HYPOTHESIS_COUNT}/g, context.hypothesisCount.toString())
@@ -1107,16 +1154,22 @@ async function executeStep4(context: PipelineContext): Promise<string> {
     .replace("{STEP2_OUTPUT}", context.step2Output || "")
     .replace("{STEP3_OUTPUT}", context.step3Output || "");
   
+  // Save debug prompt for Step 4
+  await addDebugPrompt(runId, "Step 4 (戦略監査)", prompt, []);
+  
   return generateWithPro(prompt);
 }
 
-async function executeStep5(context: PipelineContext): Promise<string> {
+async function executeStep5(context: PipelineContext, runId: number): Promise<string> {
   const basePrompt = await getPromptForStep(5);
   const prompt = basePrompt
     .replace(/{HYPOTHESIS_COUNT}/g, context.hypothesisCount.toString())
     .replace("{STEP2_OUTPUT}", context.step2Output || "")
     .replace("{STEP3_OUTPUT}", context.step3Output || "")
     .replace("{STEP4_OUTPUT}", context.step4Output || "");
+  
+  // Save debug prompt for Step 5
+  await addDebugPrompt(runId, "Step 5 (統合出力)", prompt, []);
   
   return generateWithFlash(prompt);
 }
@@ -1428,7 +1481,7 @@ export async function executeGMethodPipeline(
         await updateStepDuration(runId, 'step3', { startTime: step3StartTime });
         
         console.log(`[Run ${runId}] Loop ${loopIndex} Starting Step 3 (Scientific Evaluation with Pro)...`);
-        context.step3Output = await executeStep3(context);
+        context.step3Output = await executeStep3(context, runId);
         
         const step3EndTime = Date.now();
         await updateStepDuration(runId, 'step3', { 
@@ -1460,7 +1513,7 @@ export async function executeGMethodPipeline(
         await updateStepDuration(runId, 'step4', { startTime: step4StartTime });
         
         console.log(`[Run ${runId}] Loop ${loopIndex} Starting Step 4 (Strategic Audit with Pro)...`);
-        context.step4Output = await executeStep4(context);
+        context.step4Output = await executeStep4(context, runId);
         
         const step4EndTime = Date.now();
         await updateStepDuration(runId, 'step4', { 
@@ -1491,7 +1544,7 @@ export async function executeGMethodPipeline(
       await updateStepDuration(runId, 'step5', { startTime: step5StartTime });
       
       console.log(`[Run ${runId}] Loop ${loopIndex} Starting Step 5 (Integration with Flash)...`);
-      context.step5Output = await executeStep5(context);
+      context.step5Output = await executeStep5(context, runId);
       
       const step5EndTime = Date.now();
       await updateStepDuration(runId, 'step5', { 
