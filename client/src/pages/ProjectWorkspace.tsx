@@ -144,13 +144,20 @@ export default function ProjectWorkspace({ projectId }: ProjectWorkspaceProps) {
   });
 
   const executeRunMutation = useMutation({
-    mutationFn: async ({ targetSpecId, technicalAssetsId, hypothesisCount, loopCount }: { targetSpecId: number; technicalAssetsId: number; hypothesisCount: number; loopCount: number }) => {
+    mutationFn: async ({ targetSpecId, technicalAssetsId, hypothesisCount, loopCount, existingFilter }: {
+      targetSpecId: number;
+      technicalAssetsId: number;
+      hypothesisCount: number;
+      loopCount: number;
+      existingFilter?: { enabled: boolean; targetSpecIds: number[]; technicalAssetsIds: number[] };
+    }) => {
       const res = await apiRequest("POST", `/api/projects/${id}/runs`, {
         projectId: id,
         targetSpecId,
         technicalAssetsId,
         hypothesisCount,
         loopCount,
+        existingFilter,
       });
       return res.json();
     },
@@ -267,8 +274,14 @@ export default function ProjectWorkspace({ projectId }: ProjectWorkspaceProps) {
     await importResourcesMutation.mutateAsync(resourceIds);
   };
 
-  const handleExecute = (targetSpecId: number, technicalAssetsId: number, hypothesisCount: number, loopCount: number) => {
-    executeRunMutation.mutate({ targetSpecId, technicalAssetsId, hypothesisCount, loopCount });
+  const handleExecute = (
+    targetSpecId: number,
+    technicalAssetsId: number,
+    hypothesisCount: number,
+    loopCount: number,
+    existingFilter?: { enabled: boolean; targetSpecIds: number[]; technicalAssetsIds: number[] }
+  ) => {
+    executeRunMutation.mutate({ targetSpecId, technicalAssetsId, hypothesisCount, loopCount, existingFilter });
   };
 
   const handleDeleteHypothesis = (hypothesisId: number) => {
@@ -401,6 +414,7 @@ export default function ProjectWorkspace({ projectId }: ProjectWorkspaceProps) {
             <ExecutionPanel
               targetSpecs={targetSpecs}
               technicalAssets={technicalAssets}
+              hypotheses={hypotheses}
               projectId={Number(id) || 0}
               onExecute={handleExecute}
               onAddResource={handleAddResource}

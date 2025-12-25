@@ -1,7 +1,9 @@
 import { useState, useCallback, useMemo } from "react";
-import { Play, Loader2, Target, Cpu, Settings2, Plus, Pencil, Trash2, Upload, FileText, X, Files, FolderInput, ChevronRight, ChevronDown } from "lucide-react";
+import { Play, Loader2, Target, Cpu, Settings2, Plus, Pencil, Trash2, Upload, FileText, X, Files, FolderInput, ChevronRight, ChevronDown, Filter } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import mammoth from "mammoth";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -42,7 +44,7 @@ import {
   TabsTrigger,
 } from "@/components/ui/tabs";
 import { format } from "date-fns";
-import type { Resource } from "@shared/schema";
+import type { Resource, Hypothesis } from "@shared/schema";
 
 const resourceFormSchema = z.object({
   name: z.string().min(1, "名前は必須です").max(200, "名前が長すぎます"),
@@ -56,11 +58,18 @@ interface ImportableProject {
   resources: Resource[];
 }
 
+interface ExistingHypothesisFilter {
+  enabled: boolean;
+  targetSpecIds: number[];
+  technicalAssetsIds: number[];
+}
+
 interface ExecutionPanelProps {
   targetSpecs: Resource[];
   technicalAssets: Resource[];
+  hypotheses: Hypothesis[];
   projectId: number;
-  onExecute: (targetSpecId: number, technicalAssetsId: number, hypothesisCount: number, loopCount: number) => void;
+  onExecute: (targetSpecId: number, technicalAssetsId: number, hypothesisCount: number, loopCount: number, existingFilter?: ExistingHypothesisFilter) => void;
   onAddResource: (type: "target_spec" | "technical_assets", name: string, content: string) => Promise<void>;
   onUpdateResource: (id: number, name: string, content: string) => Promise<void>;
   onDeleteResource: (id: number) => void;
@@ -72,6 +81,7 @@ interface ExecutionPanelProps {
 export function ExecutionPanel({
   targetSpecs,
   technicalAssets,
+  hypotheses,
   projectId,
   onExecute,
   onAddResource,
@@ -100,6 +110,10 @@ export function ExecutionPanel({
   const [selectedImportResources, setSelectedImportResources] = useState<Set<number>>(new Set());
   const [expandedProjects, setExpandedProjects] = useState<Set<number>>(new Set());
   const [importSubmitting, setImportSubmitting] = useState(false);
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [filterEnabled, setFilterEnabled] = useState(false);
+  const [filterTargetSpecIds, setFilterTargetSpecIds] = useState<Set<number>>(new Set());
+  const [filterAssetIds, setFilterAssetIds] = useState<Set<number>>(new Set());
 
   const { data: importableProjects = [], isLoading: importableLoading } = useQuery<ImportableProject[]>({
     queryKey: [`/api/projects/${projectId}/importable-resources`],
@@ -112,6 +126,46 @@ export function ExecutionPanel({
       resources: p.resources.filter((r) => r.type === addType),
     })).filter((p) => p.resources.length > 0);
   }, [importableProjects, addType]);
+
+  const availableFilterTargets = useMemo(() => {
+    const uniqueIds = new Set<number>();
+    hypotheses.forEach((h) => {
+      if (h.targetSpecId) uniqueIds.add(h.targetSpecId);
+    });
+    return targetSpecs.filter((r) => uniqueIds.has(r.id));
+  }, [hypotheses, targetSpecs]);
+
+  const availableFilterAssets = useMemo(() => {
+    const uniqueIds = new Set<number>();
+    hypotheses.forEach((h) => {
+      if (h.technicalAssetsId) uniqueIds.add(h.technicalAssetsId);
+    });
+    return technicalAssets.filter((r) => uniqueIds.has(r.id));
+  }, [hypotheses, technicalAssets]);
+
+  const toggleFilterTarget = (id: number) => {
+    setFilterTargetSpecIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const toggleFilterAsset = (id: number) => {
+    setFilterAssetIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
 
   const form = useForm<ResourceFormValues>({
     resolver: zodResolver(resourceFormSchema),
@@ -128,7 +182,12 @@ export function ExecutionPanel({
 
   const handleExecute = () => {
     if (!canExecute) return;
-    onExecute(parseInt(selectedTargetSpec), parseInt(selectedTechnicalAssets), hypothesisCount, loopCount);
+    const existingFilter: ExistingHypothesisFilter = {
+      enabled: filterEnabled,
+      targetSpecIds: Array.from(filterTargetSpecIds),
+      technicalAssetsIds: Array.from(filterAssetIds),
+    };
+    onExecute(parseInt(selectedTargetSpec), parseInt(selectedTechnicalAssets), hypothesisCount, loopCount, existingFilter);
   };
   
   const totalHypotheses = hypothesisCount * loopCount;
@@ -424,6 +483,109 @@ export function ExecutionPanel({
                 リソースの編集
               </button>
             </div>
+
+            <Collapsible open={filterOpen} onOpenChange={setFilterOpen}>
+              <CollapsibleTrigger asChild>
+                <button
+                  type="button"
+                  className="flex items-center gap-2 w-full text-left py-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                  data-testid="button-toggle-existing-filter"
+                >
+                  {filterOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                  <Filter className="h-4 w-4" />
+                  既出仮説のフィルタリング
+                  {filterEnabled && (
+                    <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full ml-auto">
+                      有効
+                    </span>
+                  )}
+                </button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="space-y-4 pt-2 pb-4">
+                <div className="flex items-center justify-between p-3 rounded-md bg-muted/30">
+                  <div className="space-y-1">
+                    <span className="text-sm font-medium">フィルタリングを有効化</span>
+                    <p className="text-xs text-muted-foreground">
+                      オフ: 全ての既出仮説を読み込み
+                    </p>
+                  </div>
+                  <Switch
+                    checked={filterEnabled}
+                    onCheckedChange={setFilterEnabled}
+                    disabled={isExecuting}
+                    data-testid="switch-filter-enabled"
+                  />
+                </div>
+
+                {filterEnabled && (
+                  <div className="space-y-4 p-3 rounded-md border border-border/50">
+                    <div className="space-y-2">
+                      <Label className="text-sm flex items-center gap-2">
+                        <Target className="h-3 w-3" />
+                        ターゲット仕様で絞り込み
+                      </Label>
+                      {availableFilterTargets.length === 0 ? (
+                        <p className="text-xs text-muted-foreground py-2">
+                          既出仮説に紐づくターゲット仕様がありません
+                        </p>
+                      ) : (
+                        <div className="space-y-1 max-h-32 overflow-y-auto">
+                          {availableFilterTargets.map((target) => (
+                            <label
+                              key={target.id}
+                              className="flex items-center gap-2 py-1.5 px-2 rounded hover-elevate cursor-pointer"
+                            >
+                              <Checkbox
+                                checked={filterTargetSpecIds.has(target.id)}
+                                onCheckedChange={() => toggleFilterTarget(target.id)}
+                                disabled={isExecuting}
+                                data-testid={`checkbox-filter-target-${target.id}`}
+                              />
+                              <span className="text-sm truncate">{target.name}</span>
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label className="text-sm flex items-center gap-2">
+                        <Cpu className="h-3 w-3" />
+                        技術アセットで絞り込み
+                      </Label>
+                      {availableFilterAssets.length === 0 ? (
+                        <p className="text-xs text-muted-foreground py-2">
+                          既出仮説に紐づく技術アセットがありません
+                        </p>
+                      ) : (
+                        <div className="space-y-1 max-h-32 overflow-y-auto">
+                          {availableFilterAssets.map((asset) => (
+                            <label
+                              key={asset.id}
+                              className="flex items-center gap-2 py-1.5 px-2 rounded hover-elevate cursor-pointer"
+                            >
+                              <Checkbox
+                                checked={filterAssetIds.has(asset.id)}
+                                onCheckedChange={() => toggleFilterAsset(asset.id)}
+                                disabled={isExecuting}
+                                data-testid={`checkbox-filter-asset-${asset.id}`}
+                              />
+                              <span className="text-sm truncate">{asset.name}</span>
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {(filterTargetSpecIds.size > 0 || filterAssetIds.size > 0) && (
+                      <p className="text-xs text-muted-foreground pt-2 border-t border-border/50">
+                        選択したリソースに紐づく既出仮説のみを読み込みます
+                      </p>
+                    )}
+                  </div>
+                )}
+              </CollapsibleContent>
+            </Collapsible>
 
             <div className="space-y-3">
               <Label className="flex items-center gap-2">

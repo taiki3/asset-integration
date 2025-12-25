@@ -734,8 +734,31 @@ function extractHypothesesFromTSV(
   });
 }
 
-async function getPreviousHypothesesSummary(projectId: number): Promise<string> {
-  const hypotheses = await storage.getHypothesesByProject(projectId);
+export interface ExistingHypothesisFilter {
+  enabled: boolean;
+  targetSpecIds: number[];
+  technicalAssetsIds: number[];
+}
+
+async function getPreviousHypothesesSummary(
+  projectId: number,
+  filter?: ExistingHypothesisFilter
+): Promise<string> {
+  let hypotheses = await storage.getHypothesesByProject(projectId);
+  
+  // Apply filter if enabled
+  if (filter?.enabled) {
+    const hasTargetFilter = filter.targetSpecIds.length > 0;
+    const hasAssetFilter = filter.technicalAssetsIds.length > 0;
+    
+    if (hasTargetFilter || hasAssetFilter) {
+      hypotheses = hypotheses.filter((h) => {
+        const matchesTarget = !hasTargetFilter || (h.targetSpecId && filter.targetSpecIds.includes(h.targetSpecId));
+        const matchesAsset = !hasAssetFilter || (h.technicalAssetsId && filter.technicalAssetsIds.includes(h.technicalAssetsId));
+        return matchesTarget && matchesAsset;
+      });
+    }
+  }
   
   if (hypotheses.length === 0) {
     return "";
@@ -812,7 +835,11 @@ async function checkPipelineControl(runId: number): Promise<"continue" | "pause"
   return "continue";
 }
 
-export async function executeGMethodPipeline(runId: number, resumeFromStep?: number): Promise<void> {
+export async function executeGMethodPipeline(
+  runId: number,
+  resumeFromStep?: number,
+  existingFilter?: ExistingHypothesisFilter
+): Promise<void> {
   try {
     if (!checkAIConfiguration()) {
       await storage.updateRun(runId, {
@@ -845,7 +872,8 @@ export async function executeGMethodPipeline(runId: number, resumeFromStep?: num
       console.log(`[Run ${runId}] Starting loop ${loopIndex}/${totalLoops}`);
       
       // Get fresh previous hypotheses for each loop (includes hypotheses from previous loops)
-      const previousHypotheses = await getPreviousHypothesesSummary(run.projectId);
+      // Apply existing hypothesis filter if provided
+      const previousHypotheses = await getPreviousHypothesesSummary(run.projectId, existingFilter);
 
       const context: PipelineContext = {
         targetSpec: targetSpec.content,

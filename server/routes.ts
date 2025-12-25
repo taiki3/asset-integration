@@ -228,15 +228,29 @@ export async function registerRoutes(
   app.post("/api/projects/:projectId/runs", isAuthenticated, requireAgcDomain, async (req, res) => {
     try {
       const projectId = parseInt(req.params.projectId);
-      const result = insertHypothesisRunSchema.safeParse({ ...req.body, projectId });
+      const { existingFilter, ...runData } = req.body;
+      const result = insertHypothesisRunSchema.safeParse({ ...runData, projectId });
       if (!result.success) {
         return res.status(400).json({ error: "Invalid run data", details: result.error });
       }
       
+      // Validate existingFilter structure if provided
+      let validatedFilter = undefined;
+      if (existingFilter && typeof existingFilter === "object") {
+        const enabled = typeof existingFilter.enabled === "boolean" ? existingFilter.enabled : false;
+        const targetSpecIds = Array.isArray(existingFilter.targetSpecIds) 
+          ? existingFilter.targetSpecIds.filter((id: unknown): id is number => typeof id === "number")
+          : [];
+        const technicalAssetsIds = Array.isArray(existingFilter.technicalAssetsIds)
+          ? existingFilter.technicalAssetsIds.filter((id: unknown): id is number => typeof id === "number")
+          : [];
+        validatedFilter = { enabled, targetSpecIds, technicalAssetsIds };
+      }
+      
       const run = await storage.createRun(result.data);
       
-      // Start pipeline execution asynchronously
-      executeGMethodPipeline(run.id).catch((error) => {
+      // Start pipeline execution asynchronously with optional existing hypothesis filter
+      executeGMethodPipeline(run.id, undefined, validatedFilter).catch((error) => {
         console.error("Pipeline execution error:", error);
       });
       
