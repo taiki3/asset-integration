@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { Play, Loader2, Target, Cpu, Settings2, Plus, Eye, Trash2, Upload, FileText, X, Files } from "lucide-react";
+import { Play, Loader2, Target, Cpu, Settings2, Plus, Pencil, Trash2, Upload, FileText, X, Files } from "lucide-react";
 import mammoth from "mammoth";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -52,8 +52,10 @@ type ResourceFormValues = z.infer<typeof resourceFormSchema>;
 interface ExecutionPanelProps {
   targetSpecs: Resource[];
   technicalAssets: Resource[];
+  projectId: number;
   onExecute: (targetSpecId: number, technicalAssetsId: number, hypothesisCount: number, loopCount: number) => void;
   onAddResource: (type: "target_spec" | "technical_assets", name: string, content: string) => Promise<void>;
+  onUpdateResource: (id: number, name: string, content: string) => Promise<void>;
   onDeleteResource: (id: number) => void;
   isExecuting?: boolean;
   isPending?: boolean;
@@ -62,8 +64,10 @@ interface ExecutionPanelProps {
 export function ExecutionPanel({
   targetSpecs,
   technicalAssets,
+  projectId,
   onExecute,
   onAddResource,
+  onUpdateResource,
   onDeleteResource,
   isExecuting,
   isPending,
@@ -75,8 +79,11 @@ export function ExecutionPanel({
   const [resourceModalOpen, setResourceModalOpen] = useState(false);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [addType, setAddType] = useState<"target_spec" | "technical_assets">("target_spec");
-  const [previewResource, setPreviewResource] = useState<Resource | null>(null);
-  const [previewDialogOpen, setPreviewDialogOpen] = useState(false);
+  const [editResource, setEditResource] = useState<Resource | null>(null);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editContent, setEditContent] = useState("");
+  const [editSubmitting, setEditSubmitting] = useState(false);
   const [addMode, setAddMode] = useState<"single" | "bulk">("single");
   const [bulkFiles, setBulkFiles] = useState<Array<{ id: string; file: File; name: string; content: string }>>([]);
   const [bulkUploading, setBulkUploading] = useState(false);
@@ -208,9 +215,24 @@ export function ExecutionPanel({
     }
   };
 
-  const handlePreview = (resource: Resource) => {
-    setPreviewResource(resource);
-    setPreviewDialogOpen(true);
+  const handleEdit = (resource: Resource) => {
+    setEditResource(resource);
+    setEditName(resource.name);
+    setEditContent(resource.content);
+    setEditDialogOpen(true);
+  };
+
+  const handleEditSubmit = async () => {
+    if (!editResource || !editName.trim() || !editContent.trim()) return;
+    setEditSubmitting(true);
+    try {
+      await onUpdateResource(editResource.id, editName.trim(), editContent.trim());
+      setEditDialogOpen(false);
+      setEditResource(null);
+    } catch (error) {
+    } finally {
+      setEditSubmitting(false);
+    }
   };
 
   const handleDelete = (id: number) => {
@@ -447,7 +469,7 @@ export function ExecutionPanel({
                       <ResourceItem
                         key={resource.id}
                         resource={resource}
-                        onPreview={handlePreview}
+                        onEdit={handleEdit}
                         onDelete={handleDelete}
                       />
                     ))}
@@ -482,7 +504,7 @@ export function ExecutionPanel({
                       <ResourceItem
                         key={resource.id}
                         resource={resource}
-                        onPreview={handlePreview}
+                        onEdit={handleEdit}
                         onDelete={handleDelete}
                       />
                     ))}
@@ -688,26 +710,52 @@ export function ExecutionPanel({
         </DialogContent>
       </Dialog>
 
-      <Dialog open={previewDialogOpen} onOpenChange={setPreviewDialogOpen}>
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
         <DialogContent className="sm:max-w-2xl max-h-[80vh]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <FileText className="h-5 w-5" />
-              {previewResource?.name}
+              <Pencil className="h-5 w-5" />
+              リソースを編集
             </DialogTitle>
             <DialogDescription>
-              {previewResource?.type === "target_spec" ? "ターゲット仕様" : "技術アセット"} ・{" "}
-              {previewResource?.createdAt && format(new Date(previewResource.createdAt), "yyyy/MM/dd HH:mm")}
+              {editResource?.type === "target_spec" ? "ターゲット仕様" : "技術アセット"} / ID: {editResource?.id}
             </DialogDescription>
           </DialogHeader>
-          <ScrollArea className="max-h-[50vh] rounded-md border bg-muted/30 p-4">
-            <pre className="text-sm font-mono whitespace-pre-wrap break-words">
-              {previewResource?.content}
-            </pre>
-          </ScrollArea>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-name">名前</Label>
+              <Input
+                id="edit-name"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                placeholder="リソース名"
+                data-testid="input-edit-resource-name"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-content">内容</Label>
+              <Textarea
+                id="edit-content"
+                value={editContent}
+                onChange={(e) => setEditContent(e.target.value)}
+                placeholder="内容"
+                rows={12}
+                className="font-mono text-sm"
+                data-testid="input-edit-resource-content"
+              />
+            </div>
+          </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setPreviewDialogOpen(false)}>
-              閉じる
+            <Button variant="outline" onClick={() => setEditDialogOpen(false)} disabled={editSubmitting}>
+              キャンセル
+            </Button>
+            <Button onClick={handleEditSubmit} disabled={editSubmitting || !editName.trim() || !editContent.trim()} data-testid="button-save-resource">
+              {editSubmitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  保存中...
+                </>
+              ) : "保存"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -718,11 +766,11 @@ export function ExecutionPanel({
 
 function ResourceItem({
   resource,
-  onPreview,
+  onEdit,
   onDelete,
 }: {
   resource: Resource;
-  onPreview: (r: Resource) => void;
+  onEdit: (r: Resource) => void;
   onDelete: (id: number) => void;
 }) {
   return (
@@ -735,17 +783,17 @@ function ResourceItem({
           {resource.name}
         </p>
         <p className="text-xs text-muted-foreground">
-          {format(new Date(resource.createdAt), "yyyy/MM/dd")}
+          ID: {resource.id} / {format(new Date(resource.createdAt), "yyyy/MM/dd")}
         </p>
       </div>
       <div className="flex items-center gap-1">
         <Button
           variant="ghost"
           size="icon"
-          onClick={() => onPreview(resource)}
-          data-testid={`button-preview-resource-${resource.id}`}
+          onClick={() => onEdit(resource)}
+          data-testid={`button-edit-resource-${resource.id}`}
         >
-          <Eye className="h-4 w-4" />
+          <Pencil className="h-4 w-4" />
         </Button>
         <Button
           variant="ghost"

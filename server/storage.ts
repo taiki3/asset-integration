@@ -29,6 +29,7 @@ export interface IStorage {
   getResourcesByProject(projectId: number): Promise<Resource[]>;
   getResource(id: number): Promise<Resource | undefined>;
   createResource(resource: InsertResource): Promise<Resource>;
+  updateResource(id: number, projectId: number, data: { name?: string; content?: string }): Promise<Resource | undefined>;
   deleteResource(id: number): Promise<void>;
 
   // Hypothesis Runs
@@ -85,6 +86,13 @@ export class DatabaseStorage implements IStorage {
   async createResource(resource: InsertResource): Promise<Resource> {
     const [created] = await db.insert(resources).values(resource).returning();
     return created;
+  }
+
+  async updateResource(id: number, projectId: number, data: { name?: string; content?: string }): Promise<Resource | undefined> {
+    const [updated] = await db.update(resources).set(data).where(
+      and(eq(resources.id, id), eq(resources.projectId, projectId))
+    ).returning();
+    return updated;
   }
 
   async deleteResource(id: number): Promise<void> {

@@ -81,6 +81,27 @@ export default function ProjectWorkspace({ projectId }: ProjectWorkspaceProps) {
     },
   });
 
+  const updateResourceMutation = useMutation({
+    mutationFn: async ({ resourceId, name, content }: { resourceId: number; name: string; content: string }) => {
+      const res = await apiRequest("PATCH", `/api/projects/${id}/resources/${resourceId}`, { name, content });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", id, "resources"] });
+      toast({
+        title: "リソースを更新しました",
+        description: "リソースが正常に更新されました。",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "エラー",
+        description: "リソースの更新に失敗しました。もう一度お試しください。",
+        variant: "destructive",
+      });
+    },
+  });
+
   const deleteResourceMutation = useMutation({
     mutationFn: async (resourceId: number) => {
       await apiRequest("DELETE", `/api/projects/${id}/resources/${resourceId}`);
@@ -211,6 +232,10 @@ export default function ProjectWorkspace({ projectId }: ProjectWorkspaceProps) {
 
   const handleAddResource = async (type: "target_spec" | "technical_assets", name: string, content: string) => {
     await addResourceMutation.mutateAsync({ type, name, content });
+  };
+
+  const handleUpdateResource = async (resourceId: number, name: string, content: string) => {
+    await updateResourceMutation.mutateAsync({ resourceId, name, content });
   };
 
   const handleDeleteResource = (resourceId: number) => {
@@ -351,8 +376,10 @@ export default function ProjectWorkspace({ projectId }: ProjectWorkspaceProps) {
             <ExecutionPanel
               targetSpecs={targetSpecs}
               technicalAssets={technicalAssets}
+              projectId={Number(id) || 0}
               onExecute={handleExecute}
               onAddResource={handleAddResource}
+              onUpdateResource={handleUpdateResource}
               onDeleteResource={handleDeleteResource}
               isExecuting={isExecuting || executeRunMutation.isPending}
               isPending={addResourceMutation.isPending}

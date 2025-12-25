@@ -146,6 +146,30 @@ export async function registerRoutes(
     }
   });
 
+  app.patch("/api/projects/:projectId/resources/:id", isAuthenticated, requireAgcDomain, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const projectId = parseInt(req.params.projectId);
+      const { name, content } = req.body;
+      
+      if (!name || typeof name !== "string" || !name.trim()) {
+        return res.status(400).json({ error: "Name is required and must be non-empty" });
+      }
+      if (!content || typeof content !== "string" || !content.trim()) {
+        return res.status(400).json({ error: "Content is required and must be non-empty" });
+      }
+      
+      const updated = await storage.updateResource(id, projectId, { name: name.trim(), content: content.trim() });
+      if (!updated) {
+        return res.status(404).json({ error: "Resource not found or does not belong to this project" });
+      }
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating resource:", error);
+      res.status(500).json({ error: "Failed to update resource" });
+    }
+  });
+
   app.delete("/api/projects/:projectId/resources/:id", isAuthenticated, requireAgcDomain, async (req, res) => {
     try {
       const id = parseInt(req.params.id);
