@@ -465,6 +465,11 @@ export async function registerRoutes(
         runData.jobName = `${yy}${mm}${dd}${hh}${min}`;
       }
       
+      // Set totalLoops from loopCount for pipeline execution
+      if (runData.loopCount && runData.loopCount > 1) {
+        runData.totalLoops = runData.loopCount;
+      }
+      
       const result = insertHypothesisRunSchema.safeParse({ ...runData, projectId });
       if (!result.success) {
         return res.status(400).json({ error: "Invalid run data", details: result.error });
