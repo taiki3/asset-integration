@@ -125,7 +125,10 @@ async function uploadTextToFileSearchStore(
     let operation = await (client as any).fileSearchStores.uploadToFileSearchStore({
       file: tempFile,
       fileSearchStoreName: storeName,
-      config: { displayName }
+      config: { 
+        displayName,
+        mimeType: 'text/plain'
+      }
     });
     
     while (!operation.done) {
