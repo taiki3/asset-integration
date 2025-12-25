@@ -26,6 +26,7 @@ A web application for automating the "G-Method" business hypothesis generation p
   - Core fields: id, projectId, targetSpecId, technicalAssetsId, status, step outputs, integratedList
   - Job naming: `jobName` (default YYMMDDHHMM format), `loopIndex` for multi-loop batches
   - Loop tracking: `loopCount`, `currentLoop`, `totalLoops` for multi-loop execution
+  - Individual reports: `step2_2IndividualOutputs` (jsonb array) stores each STEP2-2 hypothesis report separately for individual download
 
 ## G-Method Pipeline
 The pipeline consists of 4 steps (numbered 2-5):
@@ -65,6 +66,9 @@ Key implementation details:
 - `POST /api/projects/:projectId/runs` - Start new run
 - `GET /api/runs/:id` - Get run details
 - `GET /api/runs/:id/download?format=tsv|xlsx` - Download results
+- `GET /api/runs/:id/download-step2-word` - Download STEP2 report as Word document
+- `GET /api/runs/:id/individual-reports` - List available STEP2-2 individual hypothesis reports
+- `GET /api/runs/:id/download-individual-report/:hypothesisIndex` - Download individual hypothesis report as Word document
 
 ## Running the Application
 ```bash

@@ -357,6 +357,35 @@ export default function ProjectWorkspace({ projectId }: ProjectWorkspaceProps) {
     }
   };
 
+  const handleDownloadIndividualReport = async (runId: number, hypothesisIndex: number) => {
+    try {
+      const response = await fetch(`/api/runs/${runId}/download-individual-report/${hypothesisIndex}`);
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: "Download failed" }));
+        throw new Error(errorData.error || "Download failed");
+      }
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `hypothesis-${hypothesisIndex + 1}-report-run${runId}.docx`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      toast({
+        title: "ダウンロード完了",
+        description: `仮説${hypothesisIndex + 1}のレポートをダウンロードしました。`,
+      });
+    } catch (error) {
+      toast({
+        title: "エラー",
+        description: error instanceof Error ? error.message : "個別レポートのダウンロードに失敗しました。",
+        variant: "destructive",
+      });
+    }
+  };
+
   useEffect(() => {
     if (projectError) {
       navigate("/");
@@ -459,6 +488,7 @@ export default function ProjectWorkspace({ projectId }: ProjectWorkspaceProps) {
               onDownloadTSV={handleDownloadTSV}
               onDownloadExcel={handleDownloadExcel}
               onDownloadStep2Word={handleDownloadStep2Word}
+              onDownloadIndividualReport={handleDownloadIndividualReport}
             />
           </div>
         </div>

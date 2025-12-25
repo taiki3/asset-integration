@@ -1243,6 +1243,9 @@ interface Step2ResultWithRetry {
   iterationCount: number;
   validationResult: ValidationResultWithAction;
   retried: boolean;
+  step2_1Output?: string;
+  step2_2Output?: string;
+  step2_2IndividualOutputs?: string[];
 }
 
 async function executeStep2WithRetry(
@@ -1273,6 +1276,9 @@ async function executeStep2WithRetry(
       iterationCount: result.iterationCount,
       validationResult: retryValidation,
       retried,
+      step2_1Output: result.step2_1Output,
+      step2_2Output: result.step2_2Output,
+      step2_2IndividualOutputs: result.step2_2IndividualOutputs,
     };
   }
 
@@ -1286,6 +1292,9 @@ async function executeStep2WithRetry(
     iterationCount: result.iterationCount,
     validationResult,
     retried,
+    step2_1Output: result.step2_1Output,
+    step2_2Output: result.step2_2Output,
+    step2_2IndividualOutputs: result.step2_2IndividualOutputs,
   };
 }
 
@@ -1385,6 +1394,7 @@ export async function executeGMethodPipeline(
           console.warn(`[Run ${runId}] ${warningMessage}`);
           await storage.updateRun(runId, { 
             step2Output: context.step2Output, 
+            step2_2IndividualOutputs: deepResearchResult.step2_2IndividualOutputs,
             currentStep: 3,
             validationMetadata,
             errorMessage: warningMessage,
@@ -1392,6 +1402,7 @@ export async function executeGMethodPipeline(
         } else {
           await storage.updateRun(runId, { 
             step2Output: context.step2Output, 
+            step2_2IndividualOutputs: deepResearchResult.step2_2IndividualOutputs,
             currentStep: 3,
             validationMetadata,
           });

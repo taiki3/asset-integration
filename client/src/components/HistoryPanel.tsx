@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { History, ChevronRight, Download, Loader2, CheckCircle, XCircle, Clock, FileSpreadsheet, AlertTriangle, Timer, FileText } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,11 +13,24 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { format } from "date-fns";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { HypothesisRun, Resource } from "@shared/schema";
+
+interface IndividualReport {
+  index: number;
+  title: string;
+  previewLength: number;
+}
 
 interface HistoryPanelProps {
   runs: HypothesisRun[];
@@ -25,6 +38,7 @@ interface HistoryPanelProps {
   onDownloadTSV: (runId: number) => void;
   onDownloadExcel: (runId: number) => void;
   onDownloadStep2Word: (runId: number) => void;
+  onDownloadIndividualReport: (runId: number, hypothesisIndex: number) => void;
 }
 
 const statusConfig: Record<string, { label: string; icon: typeof Clock; variant: "default" | "secondary" | "destructive"; animate: boolean }> = {
@@ -62,19 +76,54 @@ function formatDuration(ms: number): string {
   return `${seconds}秒`;
 }
 
-export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, onDownloadStep2Word }: HistoryPanelProps) {
+export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, onDownloadStep2Word, onDownloadIndividualReport }: HistoryPanelProps) {
   const [selectedRun, setSelectedRun] = useState<HypothesisRun | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("step2Output");
+  const [individualReports, setIndividualReports] = useState<IndividualReport[]>([]);
+  const [selectedHypothesisIndex, setSelectedHypothesisIndex] = useState<string>("");
+  const [loadingReports, setLoadingReports] = useState(false);
 
   const getResourceName = (id: number) => {
     return resources.find((r) => r.id === id)?.name || "不明";
   };
 
+  const fetchIndividualReports = async (runId: number) => {
+    setLoadingReports(true);
+    try {
+      const response = await fetch(`/api/runs/${runId}/individual-reports`, { credentials: "include" });
+      if (response.ok) {
+        const data = await response.json();
+        if (data.available) {
+          setIndividualReports(data.reports);
+        } else {
+          setIndividualReports([]);
+        }
+      } else {
+        setIndividualReports([]);
+      }
+    } catch {
+      setIndividualReports([]);
+    } finally {
+      setLoadingReports(false);
+    }
+  };
+
   const handleRunClick = (run: HypothesisRun) => {
     setSelectedRun(run);
     setDetailsOpen(true);
+    setSelectedHypothesisIndex("");
+    if (run.status === "completed") {
+      fetchIndividualReports(run.id);
+    }
   };
+
+  useEffect(() => {
+    if (!detailsOpen) {
+      setIndividualReports([]);
+      setSelectedHypothesisIndex("");
+    }
+  }, [detailsOpen]);
 
   const stepLabels = [
     { key: "step2Output", label: "ステップ2: 提案", step: 2 },
@@ -281,15 +330,48 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, 
           <Separator />
           <DialogFooter className="gap-2 sm:gap-2 flex-wrap">
             {selectedRun?.status === "completed" && activeTab === "step2Output" && selectedRun.step2Output && (
-              <Button
-                variant="outline"
-                className="gap-2"
-                onClick={() => onDownloadStep2Word(selectedRun.id)}
-                data-testid="button-download-step2-word"
-              >
-                <FileText className="h-4 w-4" />
-                STEP2をWord出力
-              </Button>
+              <>
+                <Button
+                  variant="outline"
+                  className="gap-2"
+                  onClick={() => onDownloadStep2Word(selectedRun.id)}
+                  data-testid="button-download-step2-word"
+                >
+                  <FileText className="h-4 w-4" />
+                  STEP2をWord出力
+                </Button>
+                {loadingReports ? (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    個別レポート読込中...
+                  </div>
+                ) : individualReports.length > 0 && (
+                  <div className="flex items-center gap-2">
+                    <Select value={selectedHypothesisIndex} onValueChange={setSelectedHypothesisIndex}>
+                      <SelectTrigger className="w-[200px]" data-testid="select-individual-report">
+                        <SelectValue placeholder="仮説を選択" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {individualReports.map((report) => (
+                          <SelectItem key={report.index} value={report.index.toString()}>
+                            仮説{report.index + 1}: {report.title.slice(0, 30)}...
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      variant="outline"
+                      className="gap-2"
+                      disabled={!selectedHypothesisIndex}
+                      onClick={() => selectedRun && onDownloadIndividualReport(selectedRun.id, parseInt(selectedHypothesisIndex))}
+                      data-testid="button-download-individual-report"
+                    >
+                      <FileText className="h-4 w-4" />
+                      個別Word出力
+                    </Button>
+                  </div>
+                )}
+              </>
             )}
             {selectedRun?.status === "completed" && activeTab === "step5Output" && (
               <>

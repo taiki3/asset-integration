@@ -42,7 +42,8 @@ export const hypothesisRuns = pgTable("hypothesis_runs", {
   currentLoop: integer("current_loop").default(0), // Current loop iteration (1-based)
   totalLoops: integer("total_loops").default(1), // Total loops to run
   step2_1Output: text("step2_1_output"), // Step 2-1: Divergent selection phase
-  step2_2Output: text("step2_2_output"), // Step 2-2: Convergent deep-dive phase
+  step2_2Output: text("step2_2_output"), // Step 2-2: Convergent deep-dive phase (merged)
+  step2_2IndividualOutputs: jsonb("step2_2_individual_outputs"), // Step 2-2: Individual hypothesis reports array
   step2Output: text("step2_output"), // Combined output of 2-1 and 2-2
   step3Output: text("step3_output"),
   step4Output: text("step4_output"),

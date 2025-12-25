@@ -684,6 +684,70 @@ export async function registerRoutes(
     }
   });
 
+  // Individual hypothesis report Word export endpoint (from STEP2-2)
+  app.get("/api/runs/:id/download-individual-report/:hypothesisIndex", isAuthenticated, requireAgcDomain, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const hypothesisIndex = parseInt(req.params.hypothesisIndex);
+      const run = await storage.getRun(id);
+      
+      if (!run) {
+        return res.status(404).json({ error: "Run not found" });
+      }
+      
+      const individualOutputs = run.step2_2IndividualOutputs as string[] | null;
+      if (!individualOutputs || !Array.isArray(individualOutputs) || individualOutputs.length === 0) {
+        return res.status(400).json({ error: "個別レポートが利用できません。このRunはSTEP2-2個別レポート機能追加前に実行された可能性があります。" });
+      }
+      
+      if (hypothesisIndex < 0 || hypothesisIndex >= individualOutputs.length) {
+        return res.status(400).json({ error: `仮説インデックスが無効です。範囲: 0-${individualOutputs.length - 1}` });
+      }
+
+      const report = individualOutputs[hypothesisIndex];
+      const docBuffer = await convertMarkdownToWord(report, `仮説${hypothesisIndex + 1} 個別レポート - Run #${id}`);
+      
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+      res.setHeader("Content-Disposition", `attachment; filename="hypothesis-${hypothesisIndex + 1}-report-run${id}.docx"`);
+      res.send(docBuffer);
+    } catch (error) {
+      console.error("Error downloading individual report:", error);
+      res.status(500).json({ error: "Failed to download individual report" });
+    }
+  });
+
+  // Get available individual reports for a run
+  app.get("/api/runs/:id/individual-reports", isAuthenticated, requireAgcDomain, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const run = await storage.getRun(id);
+      
+      if (!run) {
+        return res.status(404).json({ error: "Run not found" });
+      }
+      
+      const individualOutputs = run.step2_2IndividualOutputs as string[] | null;
+      if (!individualOutputs || !Array.isArray(individualOutputs)) {
+        return res.json({ available: false, count: 0, reports: [] });
+      }
+      
+      const reports = individualOutputs.map((report, index) => {
+        const titleMatch = report.match(/(?:^|\n)#+\s*(?:仮説\s*\d+[:\s]*)?(.+?)(?:\n|$)/);
+        const title = titleMatch ? titleMatch[1].trim().slice(0, 100) : `仮説${index + 1}`;
+        return {
+          index,
+          title,
+          previewLength: report.length,
+        };
+      });
+      
+      res.json({ available: true, count: individualOutputs.length, reports });
+    } catch (error) {
+      console.error("Error fetching individual reports:", error);
+      res.status(500).json({ error: "Failed to fetch individual reports" });
+    }
+  });
+
   // Prompt Management API
   const DEFAULT_PROMPTS: Record<number, string> = {
     21: STEP2_1_DEEP_RESEARCH_PROMPT,
