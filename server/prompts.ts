@@ -219,8 +219,16 @@ export const STEP5_PROMPT = `# システム指令：事業仮説データベー�
 
 
 // Deep Research prompt (used with File Search - no data embedding)
-// This prompt expects attached files: target.md (Role A) and tech_prop.md (Role B)
-export const STEP2_DEEP_RESEARCH_PROMPT = `【マスタープロンプト】新規素材ビジネス戦略仮説の構築
+// This prompt expects attached files: target_specification (Role A) and technical_assets (Role B)
+export const STEP2_DEEP_RESEARCH_PROMPT = `【入力データの参照指示】
+以下の添付ファイルを必ず読み込んで分析してください：
+1. 「target_specification」ファイル：ターゲット市場・顧客の定義（Role A）
+2. 「technical_assets」ファイル：自社の技術資産・Cap-IDリスト（Role B）
+3. 「previous_hypotheses」ファイル（存在する場合）：過去に生成した仮説リスト（Role C：重複回避用）
+
+これらのファイルの内容を深く分析し、target_specificationで定義されたターゲット市場において、technical_assetsの技術資産を活用した事業仮説を生成してください。previous_hypothesesが存在する場合は、それらと重複しない新規仮説のみを生成してください。
+
+【マスタープロンプト】新規素材ビジネス戦略仮説の構築
  
 P0 契約（Non-negotiables：5項）
 1) 出力順序（開始アンカー＋区切り線含む）
