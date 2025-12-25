@@ -65,6 +65,7 @@ function formatDuration(ms: number): string {
 export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, onDownloadStep2Word }: HistoryPanelProps) {
   const [selectedRun, setSelectedRun] = useState<HypothesisRun | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState("step2Output");
 
   const getResourceName = (id: number) => {
     return resources.find((r) => r.id === id)?.name || "不明";
@@ -180,7 +181,7 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, 
               </div>
 
               {selectedRun.status === "completed" && (
-                <Tabs defaultValue="step2Output" className="flex-1 min-w-0">
+                <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 min-w-0">
                   <TabsList className="grid w-full grid-cols-4 shrink-0">
                     {stepLabels.map(({ key, step }) => (
                       <TabsTrigger key={key} value={key} disabled={!selectedRun[key]}>
@@ -267,19 +268,19 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, 
 
           <Separator />
           <DialogFooter className="gap-2 sm:gap-2 flex-wrap">
-            {selectedRun?.status === "completed" && (
+            {selectedRun?.status === "completed" && activeTab === "step2Output" && selectedRun.step2Output && (
+              <Button
+                variant="outline"
+                className="gap-2"
+                onClick={() => onDownloadStep2Word(selectedRun.id)}
+                data-testid="button-download-step2-word"
+              >
+                <FileText className="h-4 w-4" />
+                STEP2をWord出力
+              </Button>
+            )}
+            {selectedRun?.status === "completed" && activeTab === "step5Output" && (
               <>
-                {selectedRun.step2Output && (
-                  <Button
-                    variant="outline"
-                    className="gap-2"
-                    onClick={() => onDownloadStep2Word(selectedRun.id)}
-                    data-testid="button-download-step2-word"
-                  >
-                    <FileText className="h-4 w-4" />
-                    STEP2をWord出力
-                  </Button>
-                )}
                 <Button
                   variant="outline"
                   className="gap-2"
