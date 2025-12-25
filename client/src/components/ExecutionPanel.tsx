@@ -621,7 +621,7 @@ export function ExecutionPanel({
                         クリックしてファイルを選択
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        複数ファイルを選択可能（.txt, .json, .md）
+                        複数ファイルを選択可能（.txt, .json, .md, .docx）
                       </p>
                     </div>
                   </label>
