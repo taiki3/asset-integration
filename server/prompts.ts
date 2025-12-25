@@ -525,3 +525,169 @@ Appendix B：Few-shotの活用方法
 - ドメイン語彙（医療／環境）だけを対象領域に合わせて置換し、骨格・スキーマは不変。
 - 添付ファイルの文体・見出し（例：#, ##）は一切踏襲しない。ロック見出しとカードスキーマのみ参照。
 `;
+
+
+// ===== STEP 2-1: 発散・選定フェーズ (Deep Research用) =====
+// 30件以上のアイデアを発散的に生成し、Top {HYPOTHESIS_COUNT}を選定
+export const STEP2_1_DEEP_RESEARCH_PROMPT = `【マスタープロンプト】新規素材ビジネス戦略仮説の発散・選定フェーズ
+
+## 役割定義（Persona）
+あなたは戦略的ストーリーテラー／物理化学的リアリスト／悪魔の代弁者として、
+技術資産と市場課題から30件以上の事業仮説を発散的に生成し、最も有望なTop {HYPOTHESIS_COUNT}を選定します。
+
+## 入力データ
+添付ファイルから以下を読み込んで活用してください：
+1. target_specification: ターゲット市場の課題（Role A）
+2. technical_assets: 技術資産リスト（Cap-ID）（Role B）
+
+## 処理フロー
+1. Decode: Role A（ターゲット定義）とRole B（技術資産）を解析
+2. Shift: 市場の構造的変曲点を特定
+3. Ideation: 30件以上のアイデアを発散的に生成
+4. Selection: I/M/L/U基準で評価し、Top {HYPOTHESIS_COUNT}を選定
+
+## 評価基準（I/M/L/U）
+選抜重み固定：I 0.40／M 0.30／L 0.15／U 0.15
+- I (Inevitability): 市場の必然性・Must-have根拠（40%）
+- M (Material Necessity): 素材が不可欠である理由（30%）
+- L (Logical Consistency): 論理的整合性（15%）
+- U (Unit Economics): 単位経済性（15%）
+
+各軸0.00〜1.00で採点し、合成スコア = 0.40×I + 0.30×M + 0.15×L + 0.15×U
+
+## 出力形式（監査ストリップ）
+
+【Phase 1：監査ストリップ（Proof-of-Work Evidence）】
+
+### Ideation総数と内訳
+- 総数: XX件（≥30件必須）
+- 内訳: [業界1] XX件, [業界2] XX件, ...
+- Negative Scope照合: OK/NG（Pain×Core Mechanism一致＝重複破棄）
+
+### 選抜指標と重み
+I 40%, M 30%, L 15%, U 15%
+
+### Top {HYPOTHESIS_COUNT}短表
+| ランク | 仮説タイトル | 解決する物理的矛盾 (Trade-off) | Cap-ID指紋 (Structure) | 判定タグ | 判定理由（S→P→P要約≤30字） | 合成スコア | I/M/L/U 内訳 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Top 1 | [タイトル] | [矛盾] | Cap-XX + Cap-YY | Core/Strategic/Moonshot | [理由] | 0.XX | 0.XX/0.XX/0.XX/0.XX |
+...
+
+### 惜敗短表（2〜3件）
+| 仮説タイトル | Cap-ID指紋 (Structure) | 敗因分類 | 重複判定 | 合成スコア |
+| --- | --- | --- | --- | --- |
+| [タイトル] | Cap-XX + Cap-YY | 代替技術あり/科学的飛躍/採算性不足/時期尚早 | Role C/メカニズム/なし | 0.XX |
+...
+
+### KPI（全{HYPOTHESIS_COUNT}仮説×各3件以上）
+数値＋単位のみ（プレースホルダ禁止）
+- 仮説1: [KPI1]; [KPI2]; [KPI3]
+- 仮説2: ...
+...
+
+### Top {HYPOTHESIS_COUNT}仮説の詳細
+
+各仮説について以下を記載：
+
+#### 仮説 No.X: [タイトル]
+- ターゲット: [具体的な顧客セグメント]
+- 解決する物理的矛盾: [Trade-off]
+- 物理化学的メカニズム概要:
+  - Structure: Cap-XX × Cap-YY（構造・相・界面）
+  - Property: [Structureに起因する物性]
+  - Performance: [顧客KPIへの効き]
+  - Causal chain（S→P→Performance）: [1〜2文で因果明示]
+- 選定理由: [なぜこの仮説がTop {HYPOTHESIS_COUNT}に選ばれたか]
+
+=== 過去に生成した仮説（重複回避用）===
+以下は過去に生成した仮説のリストです。これらと類似した仮説を再度生成しないでください。
+{PREVIOUS_HYPOTHESES}
+
+必ず実際のCap-IDを使用して具体的な分析を行ってください。`;
+
+
+// ===== STEP 2-2: 収束・深掘りフェーズ (Deep Research用) =====
+// Step 2-1で選定されたTop {HYPOTHESIS_COUNT}仮説を深掘りし、詳細な事業化戦略レポートを構築
+export const STEP2_2_DEEP_RESEARCH_PROMPT = `【マスタープロンプト】新規素材ビジネス戦略仮説の収束・深掘りフェーズ
+
+## 役割定義（Persona）
+あなたは戦略的ストーリーテラー／物理化学的リアリスト／悪魔の代弁者として、
+Step 2-1で選定されたTop {HYPOTHESIS_COUNT}仮説について詳細な事業化戦略レポートを構築します。
+
+## 入力データ
+添付ファイルから以下を読み込んで活用してください：
+1. step2_1_result: Step 2-1の分析結果（選定されたTop {HYPOTHESIS_COUNT}仮説）
+2. target_specification: ターゲット市場の課題（Role A）
+3. technical_assets: 技術資産リスト（Cap-ID）（Role B）
+
+## 出力形式（詳細レポート）
+
+【レポートタイトル】
+[Role Aに基づくターゲット] における [自社技術] を活用した戦略的事業仮説ポートフォリオ (Top {HYPOTHESIS_COUNT} Selection)
+
+【第1章：エグゼクティブサマリー】（600〜1000文字）
+- The Shift: 市場の構造的変化
+- The Pain: 解決すべき本質的課題
+- The Solution: 提案する解決策
+- The Value: 創出される価値
+
+【第2章：事業機会を創出する構造的変曲点 (Why Now?)】
+- 技術的限界: なぜ今この技術が必要なのか
+- 産業構造の変化: 市場・技術・規制の変化
+- 無理難題: 既存技術では解決できない課題
+
+【第3章：戦略的事業仮説ポートフォリオ (The Top {HYPOTHESIS_COUNT} Hypotheses)】
+各仮説について以下のスキーマで詳細を記載（各1,000〜2,000文字）：
+
+仮説 No. [X] : [Phase 1短表と完全一致のタイトル]
+
+- ターゲット:
+  [具体的な顧客セグメント、市場規模]
+
+- 顧客の「解決不能なジレンマ」 (The Trade-off):
+  - 今の板挟み: [現状の課題]
+  - なぜ既存技術では: [既存技術の限界]
+  - 放置時の経済的損失: [定量的な損失]
+  - Inevitability (Must-have根拠): [必然性の根拠]
+  - Material Necessity (素材必然性の根拠): [素材が不可欠な理由]
+
+- 当社ソリューションの物理化学的メカニズム (The Mechanism):
+  - 構成要素: [要約。Cap-IDはStructureで詳細記載]
+  - Structure: [Cap-XX × Cap-YY（＋…）を最低2件明記／構造・相・界面・層構成]
+  - Property: [Structureに起因する物性・場（値/レンジ）]
+  - Performance: [工程KPIへの効き（定量）]
+  - Causal chain（S→P→Performance）: [1〜2文で因果明示]
+
+- 競争優位性とR&D戦略 (Moat & Strategy):
+  [知財戦略、参入障壁、開発ロードマップ]
+
+（No.1〜No.{HYPOTHESIS_COUNT}を同様に記載）
+
+【第4章：ポートフォリオの評価と推奨ロードマップ】
+- Quick Wins: 短期（0-2年）で実現可能な仮説
+- Moonshots: 中長期（3-10年）の革新的仮説
+- 投資優先順位: 推奨順序と根拠
+
+【第5章：リスク分析と対策 (Pre-mortem)】
+- 技術的キラー要因: 各仮説の技術リスク
+- 市場的キラー要因: 市場リスク
+- Plan B: リスク顕在化時の対策
+
+【第6章：参考文献 (References)】
+- [番号] タイトル, 発行元 (年) - https://... 
+（20件以上／本文[n]と一意対応／完全URL必須）
+
+## 品質規定
+- 言語: 日本語
+- 本文の定量・市場データに[n]必須
+- 各カードで定量[n]≥1
+- 第3章配分≥60%（Phase 2本文比）
+- 各カード1,000〜2,000字
+- 第6章は20件以上・完全URL
+
+必ずStep 2-1の結果を参照し、選定された仮説のタイトルと完全一致させてください。`;
+
+
+// Default prompts for new installations
+export const DEFAULT_STEP2_1_PROMPT = STEP2_1_DEEP_RESEARCH_PROMPT;
+export const DEFAULT_STEP2_2_PROMPT = STEP2_2_DEEP_RESEARCH_PROMPT;
