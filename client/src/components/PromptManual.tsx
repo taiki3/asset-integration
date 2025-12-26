@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { HelpCircle } from "lucide-react";
+import { HelpCircle, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -247,6 +247,89 @@ const STEP_INFO: Record<string, StepInfo> = {
   },
 };
 
+function generateMarkdown(): string {
+  const lines: string[] = [];
+  lines.push("# G-Method プロンプトマニュアル");
+  lines.push("");
+  lines.push("各ステップで使用可能なプレースホルダー、入力データ、データフローの説明");
+  lines.push("");
+  lines.push("---");
+  lines.push("");
+
+  Object.entries(STEP_INFO).forEach(([, info]) => {
+    lines.push(`## ${info.name}`);
+    lines.push("");
+    lines.push(info.description);
+    lines.push("");
+    
+    lines.push(`### 使用モデル`);
+    lines.push("");
+    lines.push(`\`${info.model}\``);
+    lines.push("");
+
+    lines.push(`### データフロー`);
+    lines.push("");
+    lines.push(info.dataFlow);
+    lines.push("");
+
+    if (info.files && info.files.length > 0) {
+      lines.push(`### アップロードされるファイル（File Search用）`);
+      lines.push("");
+      info.files.forEach((file) => {
+        lines.push(`- **\`${file.name}\`**: ${file.description}`);
+      });
+      lines.push("");
+    }
+
+    lines.push(`### 使用可能なプレースホルダー`);
+    lines.push("");
+    info.placeholders.forEach((placeholder) => {
+      lines.push(`#### \`${placeholder.name}\``);
+      lines.push("");
+      if (placeholder.source) {
+        lines.push(`> ${placeholder.source}`);
+        lines.push("");
+      }
+      lines.push(placeholder.description);
+      lines.push("");
+      if (placeholder.example) {
+        lines.push("**例:**");
+        lines.push("```");
+        lines.push(placeholder.example);
+        lines.push("```");
+        lines.push("");
+      }
+    });
+
+    if (info.notes && info.notes.length > 0) {
+      lines.push(`### 備考`);
+      lines.push("");
+      info.notes.forEach((note) => {
+        lines.push(`- ${note}`);
+      });
+      lines.push("");
+    }
+
+    lines.push("---");
+    lines.push("");
+  });
+
+  return lines.join("\n");
+}
+
+function downloadMarkdown() {
+  const content = generateMarkdown();
+  const blob = new Blob([content], { type: "text/markdown;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "gmethod-prompt-manual.md";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 export function PromptManual() {
   const [open, setOpen] = useState(false);
 
@@ -260,7 +343,19 @@ export function PromptManual() {
       </DialogTrigger>
       <DialogContent className="max-w-4xl max-h-[85vh]">
         <DialogHeader>
-          <DialogTitle>プロンプトマニュアル</DialogTitle>
+          <div className="flex items-center justify-between gap-4">
+            <DialogTitle>プロンプトマニュアル</DialogTitle>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="gap-2 shrink-0" 
+              onClick={downloadMarkdown}
+              data-testid="button-download-prompt-manual"
+            >
+              <Download className="h-4 w-4" />
+              Markdown
+            </Button>
+          </div>
           <DialogDescription>
             各ステップで使用可能なプレースホルダー、入力データ、データフローの説明
           </DialogDescription>
