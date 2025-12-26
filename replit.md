@@ -64,10 +64,11 @@ All steps (2-1, 2-2, 3, 4, 5) support configurable File Search (file attachment 
 - **Settings Page**: "File Searchファイル添付設定" section with checkboxes per step
 - **Default Behavior**:
   - Steps 2-1, 2-2: Use File Search by default (Deep Research agent requires it)
-  - Steps 3, 4, 5: Use prompt embedding by default (faster, cheaper); File Search is optional
+  - Steps 3, 4, 5: Use prompt embedding by default (faster, cheaper); File attachment is optional
 - **File Attachment vs Prompt Embedding**:
-  - If any files are configured for a step → Uses Deep Research with File Search
-  - If no files configured → Uses inline prompt embedding (generateWithPro/generateWithFlash)
+  - Steps 2-1, 2-2: Always use Deep Research with File Search (uploads to fileSearchStores)
+  - Steps 3, 4, 5: If files configured → Uses regular model (gemini-3-pro/flash) with file uploads (ai.files.upload)
+  - Steps 3, 4, 5: If no files configured → Uses inline prompt embedding (generateWithPro/generateWithFlash)
 - **Available Files by Step**:
   - Step 2-1: target_specification, technical_assets, previous_hypotheses
   - Step 2-2: target_specification, technical_assets, hypothesis_context

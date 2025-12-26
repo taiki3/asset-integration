@@ -249,6 +249,81 @@ async function deleteFileSearchStore(storeName: string): Promise<void> {
   }
 }
 
+// Upload text content as a file and return file info for regular model use
+interface UploadedFile {
+  name: string;
+  uri: string;
+  mimeType: string;
+}
+
+async function uploadTextFile(content: string, displayName: string): Promise<UploadedFile> {
+  const client = getAIClient();
+  
+  const tempDir = os.tmpdir();
+  const tempFile = path.join(tempDir, `${displayName.replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}.txt`);
+  fs.writeFileSync(tempFile, content, 'utf-8');
+  
+  try {
+    const file = await client.files.upload({
+      file: tempFile,
+      config: {
+        displayName,
+        mimeType: 'text/plain'
+      }
+    });
+    
+    console.log(`Uploaded file: ${displayName} as ${file.name}`);
+    return {
+      name: file.name || '',
+      uri: file.uri || '',
+      mimeType: file.mimeType || 'text/plain'
+    };
+  } finally {
+    if (fs.existsSync(tempFile)) {
+      fs.unlinkSync(tempFile);
+    }
+  }
+}
+
+async function deleteUploadedFile(fileName: string): Promise<void> {
+  try {
+    const client = getAIClient();
+    await client.files.delete({ name: fileName });
+    console.log(`Deleted file: ${fileName}`);
+  } catch (error) {
+    console.warn(`Failed to delete file ${fileName}:`, error);
+  }
+}
+
+// Generate content with uploaded files using regular model (not Deep Research)
+async function generateWithFilesAttached(
+  prompt: string,
+  files: UploadedFile[],
+  model: 'pro' | 'flash' = 'pro'
+): Promise<string> {
+  const client = getAIClient();
+  const modelName = model === 'pro' ? MODEL_PRO : MODEL_FLASH;
+  
+  // Build content parts: files first, then text prompt
+  const parts: any[] = [];
+  for (const file of files) {
+    parts.push({
+      fileData: {
+        mimeType: file.mimeType,
+        fileUri: file.uri
+      }
+    });
+  }
+  parts.push({ text: prompt });
+  
+  const response = await client.models.generateContent({
+    model: modelName,
+    contents: [{ role: 'user', parts }]
+  });
+  
+  return response.text || '';
+}
+
 function getAIClient(): GoogleGenAI {
   if (!checkAIConfiguration()) {
     throw new Error("GEMINI_API_KEY not configured. Please set your API key in secrets.");
@@ -1285,51 +1360,49 @@ async function executeStep3Individual(
   
   // Check file attachment settings for Step 3
   const step3FileConfig = await getFileAttachments(3);
-  const useFileSearch = step3FileConfig.length > 0;
+  const useFileAttachments = step3FileConfig.length > 0;
   
-  if (useFileSearch) {
-    // File Search mode
-    let storeName: string | null = null;
+  if (useFileAttachments) {
+    // File attachment mode with regular model
+    const uploadedFiles: UploadedFile[] = [];
+    const step3Attachments: string[] = [];
+    
     try {
-      storeName = await createFileSearchStore(`gmethod-run-${runId}-h${hypothesisNumber}-step3-${Date.now()}`);
-      console.log(`[Run ${runId}] Created File Search Store for Step 3 Hypothesis ${hypothesisNumber}: ${storeName}`);
-      
-      const step3Attachments: string[] = [];
-      
       if (step3FileConfig.includes('target_specification')) {
-        await uploadTextToFileSearchStore(storeName, targetSpec, "target_specification");
+        const file = await uploadTextFile(targetSpec, `h${hypothesisNumber}_target_specification`);
+        uploadedFiles.push(file);
         step3Attachments.push("target_specification");
       }
       if (step3FileConfig.includes('technical_assets')) {
-        await uploadTextToFileSearchStore(storeName, technicalAssets, "technical_assets");
+        const file = await uploadTextFile(technicalAssets, `h${hypothesisNumber}_technical_assets`);
+        uploadedFiles.push(file);
         step3Attachments.push("technical_assets");
       }
       if (step3FileConfig.includes('step2_2_report')) {
-        await uploadTextToFileSearchStore(storeName, step2_2Report, "step2_2_report");
+        const file = await uploadTextFile(step2_2Report, `h${hypothesisNumber}_step2_2_report`);
+        uploadedFiles.push(file);
         step3Attachments.push("step2_2_report");
       }
       
+      console.log(`[Run ${runId}] Uploaded ${uploadedFiles.length} files for Step 3 Hypothesis ${hypothesisNumber}`);
       await addDebugPrompt(runId, `Step 3 仮説${hypothesisNumber} (${hypothesisTitle})`, prompt, step3Attachments);
       
-      const result = await runDeepResearchPhase(
-        client,
-        prompt,
-        storeName,
-        runId,
-        `Step 3 Hypothesis ${hypothesisNumber}`,
-        startTime
-      );
+      const result = await generateWithFilesAttached(prompt, uploadedFiles, 'pro');
       
-      await deleteFileSearchStore(storeName);
+      // Cleanup uploaded files
+      for (const file of uploadedFiles) {
+        await deleteUploadedFile(file.name);
+      }
       return result;
     } catch (error: any) {
-      if (storeName) {
-        await deleteFileSearchStore(storeName).catch(e => console.error("Failed to cleanup store:", e));
+      // Cleanup on error
+      for (const file of uploadedFiles) {
+        await deleteUploadedFile(file.name).catch(e => console.error("Failed to cleanup file:", e));
       }
       throw error;
     }
   } else {
-    // Prompt embedding mode (fallback)
+    // Prompt embedding mode (default)
     const fullPrompt = `${prompt}
 
 === ターゲット仕様書 ===
@@ -1364,55 +1437,54 @@ async function executeStep4Individual(
   
   // Check file attachment settings for Step 4
   const step4FileConfig = await getFileAttachments(4);
-  const useFileSearch = step4FileConfig.length > 0;
+  const useFileAttachments = step4FileConfig.length > 0;
   
-  if (useFileSearch) {
-    // File Search mode
-    let storeName: string | null = null;
+  if (useFileAttachments) {
+    // File attachment mode with regular model
+    const uploadedFiles: UploadedFile[] = [];
+    const step4Attachments: string[] = [];
+    
     try {
-      storeName = await createFileSearchStore(`gmethod-run-${runId}-h${hypothesisNumber}-step4-${Date.now()}`);
-      console.log(`[Run ${runId}] Created File Search Store for Step 4 Hypothesis ${hypothesisNumber}: ${storeName}`);
-      
-      const step4Attachments: string[] = [];
-      
       if (step4FileConfig.includes('target_specification')) {
-        await uploadTextToFileSearchStore(storeName, targetSpec, "target_specification");
+        const file = await uploadTextFile(targetSpec, `h${hypothesisNumber}_target_specification`);
+        uploadedFiles.push(file);
         step4Attachments.push("target_specification");
       }
       if (step4FileConfig.includes('technical_assets')) {
-        await uploadTextToFileSearchStore(storeName, technicalAssets, "technical_assets");
+        const file = await uploadTextFile(technicalAssets, `h${hypothesisNumber}_technical_assets`);
+        uploadedFiles.push(file);
         step4Attachments.push("technical_assets");
       }
       if (step4FileConfig.includes('step2_2_report')) {
-        await uploadTextToFileSearchStore(storeName, step2_2Report, "step2_2_report");
+        const file = await uploadTextFile(step2_2Report, `h${hypothesisNumber}_step2_2_report`);
+        uploadedFiles.push(file);
         step4Attachments.push("step2_2_report");
       }
       if (step4FileConfig.includes('step3_output')) {
-        await uploadTextToFileSearchStore(storeName, step3Output, "step3_output");
+        const file = await uploadTextFile(step3Output, `h${hypothesisNumber}_step3_output`);
+        uploadedFiles.push(file);
         step4Attachments.push("step3_output");
       }
       
+      console.log(`[Run ${runId}] Uploaded ${uploadedFiles.length} files for Step 4 Hypothesis ${hypothesisNumber}`);
       await addDebugPrompt(runId, `Step 4 仮説${hypothesisNumber} (${hypothesisTitle})`, prompt, step4Attachments);
       
-      const result = await runDeepResearchPhase(
-        client,
-        prompt,
-        storeName,
-        runId,
-        `Step 4 Hypothesis ${hypothesisNumber}`,
-        startTime
-      );
+      const result = await generateWithFilesAttached(prompt, uploadedFiles, 'pro');
       
-      await deleteFileSearchStore(storeName);
+      // Cleanup uploaded files
+      for (const file of uploadedFiles) {
+        await deleteUploadedFile(file.name);
+      }
       return result;
     } catch (error: any) {
-      if (storeName) {
-        await deleteFileSearchStore(storeName).catch(e => console.error("Failed to cleanup store:", e));
+      // Cleanup on error
+      for (const file of uploadedFiles) {
+        await deleteUploadedFile(file.name).catch(e => console.error("Failed to cleanup file:", e));
       }
       throw error;
     }
   } else {
-    // Prompt embedding mode (fallback)
+    // Prompt embedding mode (default)
     const fullPrompt = `${prompt}
 
 === ターゲット仕様書 ===
@@ -1449,51 +1521,49 @@ async function executeStep5Individual(
   
   // Check file attachment settings for Step 5
   const step5FileConfig = await getFileAttachments(5);
-  const useFileSearch = step5FileConfig.length > 0;
+  const useFileAttachments = step5FileConfig.length > 0;
   
-  if (useFileSearch) {
-    // File Search mode
-    let storeName: string | null = null;
+  if (useFileAttachments) {
+    // File attachment mode with regular model
+    const uploadedFiles: UploadedFile[] = [];
+    const step5Attachments: string[] = [];
+    
     try {
-      storeName = await createFileSearchStore(`gmethod-run-${runId}-h${hypothesisNumber}-step5-${Date.now()}`);
-      console.log(`[Run ${runId}] Created File Search Store for Step 5 Hypothesis ${hypothesisNumber}: ${storeName}`);
-      
-      const step5Attachments: string[] = [];
-      
       if (step5FileConfig.includes('step2_2_report')) {
-        await uploadTextToFileSearchStore(storeName, step2_2Report, "step2_2_report");
+        const file = await uploadTextFile(step2_2Report, `h${hypothesisNumber}_step2_2_report`);
+        uploadedFiles.push(file);
         step5Attachments.push("step2_2_report");
       }
       if (step5FileConfig.includes('step3_output')) {
-        await uploadTextToFileSearchStore(storeName, step3Output, "step3_output");
+        const file = await uploadTextFile(step3Output, `h${hypothesisNumber}_step3_output`);
+        uploadedFiles.push(file);
         step5Attachments.push("step3_output");
       }
       if (step5FileConfig.includes('step4_output')) {
-        await uploadTextToFileSearchStore(storeName, step4Output, "step4_output");
+        const file = await uploadTextFile(step4Output, `h${hypothesisNumber}_step4_output`);
+        uploadedFiles.push(file);
         step5Attachments.push("step4_output");
       }
       
+      console.log(`[Run ${runId}] Uploaded ${uploadedFiles.length} files for Step 5 Hypothesis ${hypothesisNumber}`);
       await addDebugPrompt(runId, `Step 5 仮説${hypothesisNumber} (${hypothesisTitle})`, prompt, step5Attachments);
       
-      const result = await runDeepResearchPhase(
-        client,
-        prompt,
-        storeName,
-        runId,
-        `Step 5 Hypothesis ${hypothesisNumber}`,
-        startTime
-      );
+      const result = await generateWithFilesAttached(prompt, uploadedFiles, 'flash');
       
-      await deleteFileSearchStore(storeName);
+      // Cleanup uploaded files
+      for (const file of uploadedFiles) {
+        await deleteUploadedFile(file.name);
+      }
       return result;
     } catch (error: any) {
-      if (storeName) {
-        await deleteFileSearchStore(storeName).catch(e => console.error("Failed to cleanup store:", e));
+      // Cleanup on error
+      for (const file of uploadedFiles) {
+        await deleteUploadedFile(file.name).catch(e => console.error("Failed to cleanup file:", e));
       }
       throw error;
     }
   } else {
-    // Prompt embedding mode (fallback)
+    // Prompt embedding mode (default)
     const fullPrompt = `${prompt}
 
 === Step 2-2 仮説レポート ===
