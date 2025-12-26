@@ -52,6 +52,7 @@ export const hypothesisRuns = pgTable("hypothesis_runs", {
   validationMetadata: jsonb("validation_metadata"), // Deep Research validation results
   progressInfo: jsonb("progress_info"), // Detailed progress info (planning result, step timings, etc.)
   debugPrompts: jsonb("debug_prompts"), // Debug: actual prompts sent (after parameter substitution) and attachments
+  resumeCount: integer("resume_count").default(0), // Number of times this run has been resumed
   errorMessage: text("error_message"),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
   completedAt: timestamp("completed_at"),
