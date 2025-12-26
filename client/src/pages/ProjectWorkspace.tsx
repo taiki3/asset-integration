@@ -357,6 +357,31 @@ export default function ProjectWorkspace({ projectId }: ProjectWorkspaceProps) {
     }
   };
 
+  const resumeInterruptedMutation = useMutation({
+    mutationFn: async (runId: number) => {
+      const res = await apiRequest("POST", `/api/runs/${runId}/resume-interrupted`);
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", id, "runs"] });
+      toast({
+        title: "再開しました",
+        description: data.message || "パイプラインを再開しました。",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "エラー",
+        description: "パイプラインの再開に失敗しました。",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleResumeInterrupted = (runId: number) => {
+    resumeInterruptedMutation.mutate(runId);
+  };
+
   const handleDownloadIndividualReport = async (runId: number, hypothesisIndex: number) => {
     try {
       const response = await fetch(`/api/runs/${runId}/download-individual-report/${hypothesisIndex}`);
@@ -489,6 +514,8 @@ export default function ProjectWorkspace({ projectId }: ProjectWorkspaceProps) {
               onDownloadExcel={handleDownloadExcel}
               onDownloadStep2Word={handleDownloadStep2Word}
               onDownloadIndividualReport={handleDownloadIndividualReport}
+              onResumeInterrupted={handleResumeInterrupted}
+              isResuming={resumeInterruptedMutation.isPending}
             />
           </div>
         </div>

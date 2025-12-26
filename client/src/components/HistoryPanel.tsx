@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { History, ChevronRight, Download, Loader2, CheckCircle, XCircle, Clock, FileSpreadsheet, AlertTriangle, Timer, FileText, Bug, Paperclip } from "lucide-react";
+import { History, ChevronRight, Download, Loader2, CheckCircle, XCircle, Clock, FileSpreadsheet, AlertTriangle, Timer, FileText, Bug, Paperclip, RotateCcw } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -46,6 +46,8 @@ interface HistoryPanelProps {
   onDownloadExcel: (runId: number) => void;
   onDownloadStep2Word: (runId: number) => void;
   onDownloadIndividualReport: (runId: number, hypothesisIndex: number) => void;
+  onResumeInterrupted?: (runId: number) => void;
+  isResuming?: boolean;
 }
 
 const statusConfig: Record<string, { label: string; icon: typeof Clock; variant: "default" | "secondary" | "destructive"; animate: boolean }> = {
@@ -83,7 +85,7 @@ function formatDuration(ms: number): string {
   return `${seconds}秒`;
 }
 
-export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, onDownloadStep2Word, onDownloadIndividualReport }: HistoryPanelProps) {
+export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, onDownloadStep2Word, onDownloadIndividualReport, onResumeInterrupted, isResuming }: HistoryPanelProps) {
   const [selectedRun, setSelectedRun] = useState<HypothesisRun | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("step2Output");
@@ -376,6 +378,45 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, 
                   <p className="text-sm text-destructive">
                     {selectedRun.errorMessage || "処理中にエラーが発生しました"}
                   </p>
+                </div>
+              )}
+
+              {selectedRun.status === "interrupted" && (
+                <div className="flex flex-col items-center justify-center py-12">
+                  <AlertTriangle className="h-12 w-12 text-amber-500 mb-4" />
+                  <p className="text-sm text-muted-foreground mb-2">
+                    {selectedRun.errorMessage || "サーバー再起動により中断されました"}
+                  </p>
+                  <p className="text-xs text-muted-foreground mb-4">
+                    完了済みステップ: {selectedRun.step4Output ? "4/5" : selectedRun.step3Output ? "3/5" : selectedRun.step2Output ? "2/5" : "0/5"}
+                    {selectedRun.resumeCount && selectedRun.resumeCount > 0 && (
+                      <span className="ml-2">(再開回数: {selectedRun.resumeCount})</span>
+                    )}
+                  </p>
+                  {onResumeInterrupted && (
+                    <Button
+                      variant="default"
+                      className="gap-2"
+                      onClick={() => {
+                        onResumeInterrupted(selectedRun.id);
+                        setDetailsOpen(false);
+                      }}
+                      disabled={isResuming}
+                      data-testid="button-resume-interrupted"
+                    >
+                      {isResuming ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          再開中...
+                        </>
+                      ) : (
+                        <>
+                          <RotateCcw className="h-4 w-4" />
+                          途中から再開
+                        </>
+                      )}
+                    </Button>
+                  )}
                 </div>
               )}
             </>
