@@ -16,13 +16,15 @@ import {
   promptVersions,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, max, or, and, ne, inArray } from "drizzle-orm";
+import { eq, desc, max, or, and, ne, inArray, isNull } from "drizzle-orm";
 
 export interface IStorage {
   // Projects
   getProjects(): Promise<Project[]>;
   getProject(id: number): Promise<Project | undefined>;
   createProject(project: InsertProject): Promise<Project>;
+  updateProject(id: number, updates: { name?: string; description?: string }): Promise<Project | undefined>;
+  softDeleteProject(id: number): Promise<void>;
   deleteProject(id: number): Promise<void>;
 
   // Resources
@@ -59,17 +61,26 @@ export interface IStorage {
 export class DatabaseStorage implements IStorage {
   // Projects
   async getProjects(): Promise<Project[]> {
-    return db.select().from(projects).orderBy(desc(projects.createdAt));
+    return db.select().from(projects).where(isNull(projects.deletedAt)).orderBy(desc(projects.createdAt));
   }
 
   async getProject(id: number): Promise<Project | undefined> {
-    const [project] = await db.select().from(projects).where(eq(projects.id, id));
+    const [project] = await db.select().from(projects).where(and(eq(projects.id, id), isNull(projects.deletedAt)));
     return project;
   }
 
   async createProject(project: InsertProject): Promise<Project> {
     const [created] = await db.insert(projects).values(project).returning();
     return created;
+  }
+
+  async updateProject(id: number, updates: { name?: string; description?: string }): Promise<Project | undefined> {
+    const [updated] = await db.update(projects).set(updates).where(and(eq(projects.id, id), isNull(projects.deletedAt))).returning();
+    return updated;
+  }
+
+  async softDeleteProject(id: number): Promise<void> {
+    await db.update(projects).set({ deletedAt: new Date() }).where(eq(projects.id, id));
   }
 
   async deleteProject(id: number): Promise<void> {
@@ -108,7 +119,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getProjectsWithResourcesExcept(excludeProjectId: number): Promise<{ project: Project; resources: Resource[] }[]> {
-    const otherProjects = await db.select().from(projects).where(ne(projects.id, excludeProjectId)).orderBy(desc(projects.createdAt));
+    const otherProjects = await db.select().from(projects).where(and(ne(projects.id, excludeProjectId), isNull(projects.deletedAt))).orderBy(desc(projects.createdAt));
     const result: { project: Project; resources: Resource[] }[] = [];
     for (const project of otherProjects) {
       const projectResources = await db.select().from(resources).where(eq(resources.projectId, project.id)).orderBy(desc(resources.createdAt));

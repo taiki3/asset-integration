@@ -15,6 +15,7 @@ export const projects = pgTable("projects", {
   name: text("name").notNull(),
   description: text("description"),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  deletedAt: timestamp("deleted_at"), // Soft delete timestamp
 });
 
 // Resources - Input data (Target Specs and Technical Assets)
