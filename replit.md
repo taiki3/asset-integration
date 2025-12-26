@@ -19,7 +19,9 @@ A web application for automating the "G-Method" business hypothesis generation p
 - **AI Integration**: Google Gemini via Replit AI Integrations
 
 ### Database Schema
-- **projects**: Project management (id, name, description, createdAt)
+- **projects**: Project management (id, name, description, createdAt, deletedAt)
+  - Soft delete: Uses `deletedAt` timestamp for logical deletion (preserves data integrity)
+  - Rename: Projects can be renamed inline via pencil icon
 - **resources**: Input data storage (id, projectId, type, name, content, createdAt)
   - Types: `target_spec` (target specifications) and `technical_assets` (technical asset lists)
 - **hypothesis_runs**: G-Method execution history
@@ -51,10 +53,11 @@ Key implementation details:
 ## API Endpoints
 
 ### Projects
-- `GET /api/projects` - List all projects
+- `GET /api/projects` - List all projects (excludes soft-deleted)
 - `GET /api/projects/:id` - Get single project
 - `POST /api/projects` - Create project
-- `DELETE /api/projects/:id` - Delete project
+- `PATCH /api/projects/:id` - Update project (rename)
+- `DELETE /api/projects/:id` - Soft delete project (sets deletedAt)
 
 ### Resources
 - `GET /api/projects/:projectId/resources` - List resources for project
