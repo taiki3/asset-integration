@@ -13,6 +13,7 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import type { PromptVersion } from "@shared/schema";
+import { PromptManual } from "@/components/PromptManual";
 
 interface PromptData {
   stepNumber: number;
@@ -139,20 +140,23 @@ export default function Settings() {
     <div className="min-h-screen bg-background">
       <Header />
       <main className="max-w-6xl mx-auto px-6 py-8">
-        <div className="flex items-center gap-4 mb-8">
-          <Link href="/">
-            <Button variant="ghost" size="icon" data-testid="button-back-dashboard">
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-          </Link>
-          <div>
-            <h1 className="text-3xl font-light tracking-tight" data-testid="text-settings-title">
-              設定
-            </h1>
-            <p className="text-muted-foreground mt-1">
-              G-Methodパイプラインのプロンプトを管理
-            </p>
+        <div className="flex items-center justify-between gap-4 mb-8">
+          <div className="flex items-center gap-4">
+            <Link href="/">
+              <Button variant="ghost" size="icon" data-testid="button-back-dashboard">
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+            </Link>
+            <div>
+              <h1 className="text-3xl font-light tracking-tight" data-testid="text-settings-title">
+                設定
+              </h1>
+              <p className="text-muted-foreground mt-1">
+                G-Methodパイプラインのプロンプトを管理
+              </p>
+            </div>
           </div>
+          <PromptManual />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
