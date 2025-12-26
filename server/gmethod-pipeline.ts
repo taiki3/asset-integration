@@ -113,14 +113,15 @@ async function getFileAttachments(stepNumber: number): Promise<string[]> {
   } catch (error) {
     console.log(`[Pipeline] Error fetching file attachment settings for Step ${stepNumber}, using defaults`);
   }
-  // Default: attach all available files if no settings configured (backward compatible)
-  // Note: previous_hypotheses for Step 2-1 is handled separately in the pipeline
+  // Default: Only Steps 2-1 and 2-2 use File Search by default
+  // Steps 3, 4, 5 use prompt embedding by default (faster, cheaper)
+  // Users can enable File Search for Steps 3-5 via Settings
   const defaults: Record<number, string[]> = {
     21: ['target_specification', 'technical_assets', 'previous_hypotheses'],
     22: ['target_specification', 'technical_assets', 'hypothesis_context'],
-    3: ['target_specification', 'technical_assets', 'step2_output'],
-    4: ['target_specification', 'technical_assets', 'step2_output', 'step3_output'],
-    5: ['target_specification', 'technical_assets', 'step2_output', 'step3_output', 'step4_output'],
+    3: [],  // Prompt embedding by default
+    4: [],  // Prompt embedding by default
+    5: [],  // Prompt embedding by default
   };
   return defaults[stepNumber] || [];
 }
@@ -1010,6 +1011,7 @@ async function executeDeepResearchStep2(context: PipelineContext, runId: number)
       });
       
       const result = await processSteps3to5ForHypothesis(
+        client,
         hypothesisNumber,
         hypothesisTitle,
         step2_2OutputForThisHypothesis,
@@ -1264,14 +1266,15 @@ interface PerHypothesisResult {
 }
 
 async function executeStep3Individual(
+  client: GoogleGenAI,
   hypothesisNumber: number,
   hypothesisTitle: string,
   step2_2Report: string,
   targetSpec: string,
   technicalAssets: string,
-  runId: number
+  runId: number,
+  startTime: number
 ): Promise<string> {
-  // Debug: Log what Step 2-2 report is being used
   console.log(`[Run ${runId}] executeStep3Individual for hypothesis ${hypothesisNumber}`);
   console.log(`[Run ${runId}] Received step2_2Report length: ${step2_2Report.length} chars`);
   console.log(`[Run ${runId}] step2_2Report first 200 chars: ${step2_2Report.substring(0, 200)}`);
@@ -1280,8 +1283,54 @@ async function executeStep3Individual(
     .replace(/{HYPOTHESIS_NUMBER}/g, hypothesisNumber.toString())
     .replace(/{HYPOTHESIS_TITLE}/g, hypothesisTitle);
   
-  // For now, embed data directly in prompt (can be enhanced to use File Search later)
-  const fullPrompt = `${prompt}
+  // Check file attachment settings for Step 3
+  const step3FileConfig = await getFileAttachments(3);
+  const useFileSearch = step3FileConfig.length > 0;
+  
+  if (useFileSearch) {
+    // File Search mode
+    let storeName: string | null = null;
+    try {
+      storeName = await createFileSearchStore(`gmethod-run-${runId}-h${hypothesisNumber}-step3-${Date.now()}`);
+      console.log(`[Run ${runId}] Created File Search Store for Step 3 Hypothesis ${hypothesisNumber}: ${storeName}`);
+      
+      const step3Attachments: string[] = [];
+      
+      if (step3FileConfig.includes('target_specification')) {
+        await uploadTextToFileSearchStore(storeName, targetSpec, "target_specification");
+        step3Attachments.push("target_specification");
+      }
+      if (step3FileConfig.includes('technical_assets')) {
+        await uploadTextToFileSearchStore(storeName, technicalAssets, "technical_assets");
+        step3Attachments.push("technical_assets");
+      }
+      if (step3FileConfig.includes('step2_2_report')) {
+        await uploadTextToFileSearchStore(storeName, step2_2Report, "step2_2_report");
+        step3Attachments.push("step2_2_report");
+      }
+      
+      await addDebugPrompt(runId, `Step 3 仮説${hypothesisNumber} (${hypothesisTitle})`, prompt, step3Attachments);
+      
+      const result = await runDeepResearchPhase(
+        client,
+        prompt,
+        storeName,
+        runId,
+        `Step 3 Hypothesis ${hypothesisNumber}`,
+        startTime
+      );
+      
+      await deleteFileSearchStore(storeName);
+      return result;
+    } catch (error: any) {
+      if (storeName) {
+        await deleteFileSearchStore(storeName).catch(e => console.error("Failed to cleanup store:", e));
+      }
+      throw error;
+    }
+  } else {
+    // Prompt embedding mode (fallback)
+    const fullPrompt = `${prompt}
 
 === ターゲット仕様書 ===
 ${targetSpec}
@@ -1291,26 +1340,80 @@ ${technicalAssets}
 
 === Step 2-2 仮説レポート ===
 ${step2_2Report}`;
-  
-  await addDebugPrompt(runId, `Step 3 仮説${hypothesisNumber} (${hypothesisTitle})`, fullPrompt, []);
-  
-  return generateWithPro(fullPrompt);
+    
+    await addDebugPrompt(runId, `Step 3 仮説${hypothesisNumber} (${hypothesisTitle})`, fullPrompt, []);
+    
+    return generateWithPro(fullPrompt);
+  }
 }
 
 async function executeStep4Individual(
+  client: GoogleGenAI,
   hypothesisNumber: number,
   hypothesisTitle: string,
   step2_2Report: string,
   step3Output: string,
   targetSpec: string,
   technicalAssets: string,
-  runId: number
+  runId: number,
+  startTime: number
 ): Promise<string> {
   const prompt = STEP4_INDIVIDUAL_PROMPT
     .replace(/{HYPOTHESIS_NUMBER}/g, hypothesisNumber.toString())
     .replace(/{HYPOTHESIS_TITLE}/g, hypothesisTitle);
   
-  const fullPrompt = `${prompt}
+  // Check file attachment settings for Step 4
+  const step4FileConfig = await getFileAttachments(4);
+  const useFileSearch = step4FileConfig.length > 0;
+  
+  if (useFileSearch) {
+    // File Search mode
+    let storeName: string | null = null;
+    try {
+      storeName = await createFileSearchStore(`gmethod-run-${runId}-h${hypothesisNumber}-step4-${Date.now()}`);
+      console.log(`[Run ${runId}] Created File Search Store for Step 4 Hypothesis ${hypothesisNumber}: ${storeName}`);
+      
+      const step4Attachments: string[] = [];
+      
+      if (step4FileConfig.includes('target_specification')) {
+        await uploadTextToFileSearchStore(storeName, targetSpec, "target_specification");
+        step4Attachments.push("target_specification");
+      }
+      if (step4FileConfig.includes('technical_assets')) {
+        await uploadTextToFileSearchStore(storeName, technicalAssets, "technical_assets");
+        step4Attachments.push("technical_assets");
+      }
+      if (step4FileConfig.includes('step2_2_report')) {
+        await uploadTextToFileSearchStore(storeName, step2_2Report, "step2_2_report");
+        step4Attachments.push("step2_2_report");
+      }
+      if (step4FileConfig.includes('step3_output')) {
+        await uploadTextToFileSearchStore(storeName, step3Output, "step3_output");
+        step4Attachments.push("step3_output");
+      }
+      
+      await addDebugPrompt(runId, `Step 4 仮説${hypothesisNumber} (${hypothesisTitle})`, prompt, step4Attachments);
+      
+      const result = await runDeepResearchPhase(
+        client,
+        prompt,
+        storeName,
+        runId,
+        `Step 4 Hypothesis ${hypothesisNumber}`,
+        startTime
+      );
+      
+      await deleteFileSearchStore(storeName);
+      return result;
+    } catch (error: any) {
+      if (storeName) {
+        await deleteFileSearchStore(storeName).catch(e => console.error("Failed to cleanup store:", e));
+      }
+      throw error;
+    }
+  } else {
+    // Prompt embedding mode (fallback)
+    const fullPrompt = `${prompt}
 
 === ターゲット仕様書 ===
 ${targetSpec}
@@ -1323,25 +1426,75 @@ ${step2_2Report}
 
 === Step 3 科学的評価結果 ===
 ${step3Output}`;
-  
-  await addDebugPrompt(runId, `Step 4 仮説${hypothesisNumber} (${hypothesisTitle})`, fullPrompt, []);
-  
-  return generateWithPro(fullPrompt);
+    
+    await addDebugPrompt(runId, `Step 4 仮説${hypothesisNumber} (${hypothesisTitle})`, fullPrompt, []);
+    
+    return generateWithPro(fullPrompt);
+  }
 }
 
 async function executeStep5Individual(
+  client: GoogleGenAI,
   hypothesisNumber: number,
   hypothesisTitle: string,
   step2_2Report: string,
   step3Output: string,
   step4Output: string,
-  runId: number
+  runId: number,
+  startTime: number
 ): Promise<string> {
   const prompt = STEP5_INDIVIDUAL_PROMPT
     .replace(/{HYPOTHESIS_NUMBER}/g, hypothesisNumber.toString())
     .replace(/{HYPOTHESIS_TITLE}/g, hypothesisTitle);
   
-  const fullPrompt = `${prompt}
+  // Check file attachment settings for Step 5
+  const step5FileConfig = await getFileAttachments(5);
+  const useFileSearch = step5FileConfig.length > 0;
+  
+  if (useFileSearch) {
+    // File Search mode
+    let storeName: string | null = null;
+    try {
+      storeName = await createFileSearchStore(`gmethod-run-${runId}-h${hypothesisNumber}-step5-${Date.now()}`);
+      console.log(`[Run ${runId}] Created File Search Store for Step 5 Hypothesis ${hypothesisNumber}: ${storeName}`);
+      
+      const step5Attachments: string[] = [];
+      
+      if (step5FileConfig.includes('step2_2_report')) {
+        await uploadTextToFileSearchStore(storeName, step2_2Report, "step2_2_report");
+        step5Attachments.push("step2_2_report");
+      }
+      if (step5FileConfig.includes('step3_output')) {
+        await uploadTextToFileSearchStore(storeName, step3Output, "step3_output");
+        step5Attachments.push("step3_output");
+      }
+      if (step5FileConfig.includes('step4_output')) {
+        await uploadTextToFileSearchStore(storeName, step4Output, "step4_output");
+        step5Attachments.push("step4_output");
+      }
+      
+      await addDebugPrompt(runId, `Step 5 仮説${hypothesisNumber} (${hypothesisTitle})`, prompt, step5Attachments);
+      
+      const result = await runDeepResearchPhase(
+        client,
+        prompt,
+        storeName,
+        runId,
+        `Step 5 Hypothesis ${hypothesisNumber}`,
+        startTime
+      );
+      
+      await deleteFileSearchStore(storeName);
+      return result;
+    } catch (error: any) {
+      if (storeName) {
+        await deleteFileSearchStore(storeName).catch(e => console.error("Failed to cleanup store:", e));
+      }
+      throw error;
+    }
+  } else {
+    // Prompt embedding mode (fallback)
+    const fullPrompt = `${prompt}
 
 === Step 2-2 仮説レポート ===
 ${step2_2Report}
@@ -1351,10 +1504,11 @@ ${step3Output}
 
 === Step 4 戦略監査結果 ===
 ${step4Output}`;
-  
-  await addDebugPrompt(runId, `Step 5 仮説${hypothesisNumber} (${hypothesisTitle})`, fullPrompt, []);
-  
-  return generateWithFlash(fullPrompt);
+    
+    await addDebugPrompt(runId, `Step 5 仮説${hypothesisNumber} (${hypothesisTitle})`, fullPrompt, []);
+    
+    return generateWithFlash(fullPrompt);
+  }
 }
 
 // Execute Step 2-2 Deep Research for a single hypothesis (can be run in parallel)
@@ -1461,6 +1615,7 @@ ${step2_1Output}`;
 
 // Process Steps 3 → 4 → 5 for a single hypothesis (after Step 2-2 is complete)
 async function processSteps3to5ForHypothesis(
+  client: GoogleGenAI,
   hypothesisNumber: number,
   hypothesisTitle: string,
   step2_2Output: string,
@@ -1484,12 +1639,14 @@ async function processSteps3to5ForHypothesis(
     });
     
     step3Output = await executeStep3Individual(
+      client,
       hypothesisNumber,
       hypothesisTitle,
       step2_2Output,
       context.targetSpec,
       context.technicalAssets,
-      runId
+      runId,
+      startTime
     );
     
     stepTimings[`h${hypothesisNumber}_step3`] = Date.now() - step3Start;
@@ -1512,13 +1669,15 @@ async function processSteps3to5ForHypothesis(
     });
     
     step4Output = await executeStep4Individual(
+      client,
       hypothesisNumber,
       hypothesisTitle,
       step2_2Output,
       step3Output,
       context.targetSpec,
       context.technicalAssets,
-      runId
+      runId,
+      startTime
     );
     
     stepTimings[`h${hypothesisNumber}_step4`] = Date.now() - step4Start;
@@ -1541,12 +1700,14 @@ async function processSteps3to5ForHypothesis(
     });
     
     step5Output = await executeStep5Individual(
+      client,
       hypothesisNumber,
       hypothesisTitle,
       step2_2Output,
       step3Output,
       step4Output,
-      runId
+      runId,
+      startTime
     );
     
     stepTimings[`h${hypothesisNumber}_step5`] = Date.now() - step5Start;

@@ -947,18 +947,16 @@ export async function registerRoutes(
     3: [
       { id: 'target_specification', name: 'ターゲット仕様書', description: '対象市場・顧客要件の仕様書', category: 'input' },
       { id: 'technical_assets', name: '技術資産リスト', description: '保有技術・素材のリスト', category: 'input' },
-      { id: 'step2_output', name: 'STEP2出力', description: 'STEP2で生成された仮説レポート', category: 'step_output' },
+      { id: 'step2_2_report', name: 'STEP2-2レポート', description: 'この仮説のDeep Researchレポート', category: 'step_output' },
     ],
     4: [
       { id: 'target_specification', name: 'ターゲット仕様書', description: '対象市場・顧客要件の仕様書', category: 'input' },
       { id: 'technical_assets', name: '技術資産リスト', description: '保有技術・素材のリスト', category: 'input' },
-      { id: 'step2_output', name: 'STEP2出力', description: 'STEP2で生成された仮説レポート', category: 'step_output' },
+      { id: 'step2_2_report', name: 'STEP2-2レポート', description: 'この仮説のDeep Researchレポート', category: 'step_output' },
       { id: 'step3_output', name: 'STEP3出力', description: 'STEP3の科学的評価結果', category: 'step_output' },
     ],
     5: [
-      { id: 'target_specification', name: 'ターゲット仕様書', description: '対象市場・顧客要件の仕様書', category: 'input' },
-      { id: 'technical_assets', name: '技術資産リスト', description: '保有技術・素材のリスト', category: 'input' },
-      { id: 'step2_output', name: 'STEP2出力', description: 'STEP2で生成された仮説レポート', category: 'step_output' },
+      { id: 'step2_2_report', name: 'STEP2-2レポート', description: 'この仮説のDeep Researchレポート', category: 'step_output' },
       { id: 'step3_output', name: 'STEP3出力', description: 'STEP3の科学的評価結果', category: 'step_output' },
       { id: 'step4_output', name: 'STEP4出力', description: 'STEP4の戦略監査結果', category: 'step_output' },
     ],
