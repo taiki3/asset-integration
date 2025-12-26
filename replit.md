@@ -111,6 +111,16 @@ Accessible from Settings page header. Documents for each step:
 - File uploads (target_specification, technical_assets, hypothesis_context, previous_hypotheses)
 - Placeholders with sources ({HYPOTHESIS_COUNT}, {PREVIOUS_HYPOTHESES}, {STEP2_OUTPUT}, etc.)
 
+## File Search Configuration
+Each step can be configured to attach specific files to File Search:
+- **Settings Page**: "File Searchファイル添付設定" section with checkboxes per step
+- **step_file_attachments table**: Stores per-step file attachment configurations
+- **API Endpoints**: 
+  - GET `/api/file-attachments/:stepNumber` - Get available files and current settings
+  - PUT `/api/file-attachments/:stepNumber` - Update attachment settings
+- **Pipeline Integration**: `getFileAttachments()` helper reads DB settings with backward-compatible defaults
+- **Coexistence**: File Search attachments work alongside placeholder embedding (both can be used together)
+
 ## Design System
 - Typography: IBM Plex Sans (body), IBM Plex Mono (code/data)
 - Uses Carbon Design System principles for data-intensive enterprise applications
