@@ -45,10 +45,13 @@ export const hypothesisRuns = pgTable("hypothesis_runs", {
   step2_1Output: text("step2_1_output"), // Step 2-1: Divergent selection phase
   step2_2Output: text("step2_2_output"), // Step 2-2: Convergent deep-dive phase (merged)
   step2_2IndividualOutputs: jsonb("step2_2_individual_outputs"), // Step 2-2: Individual hypothesis reports array
-  step2Output: text("step2_output"), // Combined output of 2-1 and 2-2
-  step3Output: text("step3_output"),
-  step4Output: text("step4_output"),
-  step5Output: text("step5_output"),
+  step2Output: text("step2_output"), // Combined output of 2-1 and 2-2 (legacy, kept for backward compatibility)
+  step3Output: text("step3_output"), // Legacy batch output (kept for backward compatibility)
+  step3IndividualOutputs: jsonb("step3_individual_outputs"), // Step 3: Per-hypothesis scientific evaluation
+  step4Output: text("step4_output"), // Legacy batch output (kept for backward compatibility)
+  step4IndividualOutputs: jsonb("step4_individual_outputs"), // Step 4: Per-hypothesis strategic audit
+  step5Output: text("step5_output"), // Legacy batch output (kept for backward compatibility)
+  step5IndividualOutputs: jsonb("step5_individual_outputs"), // Step 5: Per-hypothesis TSV row output
   integratedList: jsonb("integrated_list"), // Parsed TSV data
   validationMetadata: jsonb("validation_metadata"), // Deep Research validation results
   progressInfo: jsonb("progress_info"), // Detailed progress info (planning result, step timings, etc.)

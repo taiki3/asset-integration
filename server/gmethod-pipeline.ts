@@ -1,6 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
 import { storage } from "./storage";
-import { STEP2_PROMPT, STEP2_DEEP_RESEARCH_PROMPT, STEP2_1_DEEP_RESEARCH_PROMPT, STEP2_2_DEEP_RESEARCH_PROMPT, STEP2_3_MERGE_PROMPT, STEP2_3_SUMMARIZE_PROMPT, STEP3_PROMPT, STEP4_PROMPT, STEP5_PROMPT } from "./prompts";
+import { STEP2_PROMPT, STEP2_DEEP_RESEARCH_PROMPT, STEP2_1_DEEP_RESEARCH_PROMPT, STEP2_2_DEEP_RESEARCH_PROMPT, STEP2_3_MERGE_PROMPT, STEP2_3_SUMMARIZE_PROMPT, STEP3_PROMPT, STEP4_PROMPT, STEP5_PROMPT, STEP3_INDIVIDUAL_PROMPT, STEP4_INDIVIDUAL_PROMPT, STEP5_INDIVIDUAL_PROMPT } from "./prompts";
 import type { InsertHypothesis } from "@shared/schema";
 import * as fs from "fs";
 import * as path from "path";
@@ -506,6 +506,13 @@ interface TwoPhaseDeepResearchResult extends DeepResearchResult {
   step2_1Output: string;
   step2_2Output: string;
   step2_2IndividualOutputs?: string[];
+  // New pipeline: individual outputs for Steps 3, 4, 5 per hypothesis
+  step3Output?: string;
+  step4Output?: string;
+  step5Output?: string;
+  step3IndividualOutputs?: string[];
+  step4IndividualOutputs?: string[];
+  step5IndividualOutputs?: string[];
 }
 
 // Interface for extracted hypothesis from STEP2-1 output
@@ -893,172 +900,108 @@ async function executeDeepResearchStep2(context: PipelineContext, runId: number)
       fileSearchStoreName1 = null;
     }
 
-    // ===== PHASE 2: Step 2-2 Parallel (N個のDeep Researchを1分間隔で投入・並列実行) =====
-    console.log(`[Run ${runId}] === PHASE 2: Step 2-2 Parallel (${context.hypothesisCount}個の仮説を1分間隔で投入・並列実行) ===`);
+    // ===== PHASE 2: Per-Hypothesis Full Pipeline (Step 2-2 → 3 → 4 → 5 for each) =====
+    console.log(`[Run ${runId}] === PHASE 2: Per-Hypothesis Full Pipeline (${context.hypothesisCount}仮説を順次処理: 2-2→3→4→5) ===`);
     
-    const step2_2StartTime = Date.now();
-    const LAUNCH_INTERVAL_MS = 60 * 1000; // 1分間隔
+    const phase2StartTime = Date.now();
     
     // Extract individual hypotheses from Step 2-1 output
     await updateProgress(runId, { 
-      currentPhase: "step2_2_extracting", 
-      currentIteration: 2, 
-      maxIterations: context.hypothesisCount + 2,
-      planningAnalysis: "Step 2-2: Step 2-1の結果から個別仮説を抽出中...",
+      currentPhase: "extracting_hypotheses", 
+      currentIteration: 1, 
+      maxIterations: context.hypothesisCount * 4 + 1, // 4 steps per hypothesis + extraction
+      planningAnalysis: "Step 2-1の結果から個別仮説を抽出中...",
       stepTimings,
       stepStartTime: startTime,
     });
 
     const extractedHypotheses = await extractHypothesesFromStep2_1(step2_1Output, context.hypothesisCount);
-    console.log(`[Run ${runId}] Extracted ${extractedHypotheses.length} hypotheses for parallel processing`);
+    console.log(`[Run ${runId}] Extracted ${extractedHypotheses.length} hypotheses for sequential processing`);
 
-    // Get Step 2-2 prompt template (individual hypothesis deep-dive)
-    const researchPrompt2_2Template = await getDeepResearchPrompt2_2();
+    // Process each hypothesis through the full pipeline (2-2 → 3 → 4 → 5) sequentially
+    const allResults: PerHypothesisResult[] = [];
+    const step2_2IndividualOutputs: string[] = [];
+    const step3IndividualOutputs: string[] = [];
+    const step4IndividualOutputs: string[] = [];
+    const step5IndividualOutputs: string[] = [];
     
-    // Prepare all Deep Research tasks with staggered launch (1 minute intervals)
-    const fileSearchStores: string[] = [];
-    
-    // Create a task runner function for each hypothesis
-    const createHypothesisTask = async (hypothesis: ExtractedHypothesisFromStep2_1, index: number): Promise<{ index: number; report: string }> => {
-      const hypothesisNum = index + 1;
-      
-      // Wait for staggered launch (hypothesis 1 starts immediately, 2 waits 1 min, 3 waits 2 min, etc.)
-      const delayMs = index * LAUNCH_INTERVAL_MS;
-      if (delayMs > 0) {
-        console.log(`[Run ${runId}] Hypothesis ${hypothesisNum} waiting ${index} minute(s) before launch...`);
-        await new Promise(resolve => setTimeout(resolve, delayMs));
-      }
-      
-      console.log(`[Run ${runId}] Launching Deep Research for Hypothesis ${hypothesisNum}/${extractedHypotheses.length}: ${hypothesis.title}`);
+    for (let i = 0; i < extractedHypotheses.length; i++) {
+      const hypothesisNumber = i + 1;
+      const hypothesis = extractedHypotheses[i];
       
       await updateProgress(runId, { 
-        currentPhase: `step2_2_hypothesis_${hypothesisNum}`, 
-        currentIteration: hypothesisNum + 1, 
-        maxIterations: context.hypothesisCount + 2,
-        planningAnalysis: `Step 2-2: 仮説${hypothesisNum}「${hypothesis.title}」をDeep Research中... (${hypothesisNum}/${extractedHypotheses.length}並列実行中)`,
+        currentPhase: `hypothesis_${hypothesisNumber}_processing`, 
+        currentIteration: i * 4 + 2, 
+        maxIterations: context.hypothesisCount * 4 + 1,
+        planningAnalysis: `仮説${hypothesisNumber}/${extractedHypotheses.length}「${hypothesis.title}」を処理中...`,
         stepTimings,
         stepStartTime: startTime,
       });
-
-      // Create File Search Store for this hypothesis
-      const storeName = await createFileSearchStore(`gmethod-run-${runId}-step2-2-h${hypothesisNum}-${Date.now()}`);
-      fileSearchStores.push(storeName);
-      console.log(`[Run ${runId}] Created File Search Store for Hypothesis ${hypothesisNum}: ${storeName}`);
-
-      // Upload context for this specific hypothesis based on file attachment settings
-      const hypothesisContext = `【対象仮説】
-仮説番号: ${hypothesisNum}
-タイトル: ${hypothesis.title}
-カテゴリ: ${hypothesis.category}
-スコア: I=${hypothesis.scores.I}, M=${hypothesis.scores.M}, L=${hypothesis.scores.L}, U=${hypothesis.scores.U}, Total=${hypothesis.scores.total}
-
-【Step 2-1からの詳細情報】
-${hypothesis.rawText}
-
-【Step 2-1全体の監査ストリップ（参考）】
-${step2_1Output}`;
-
-      // Get configured file attachments for Step 2-2
-      const step2_2FileConfig = await getFileAttachments(22);
-      const step2_2Attachments: string[] = [];
-
-      if (step2_2FileConfig.includes('hypothesis_context')) {
-        await uploadTextToFileSearchStore(storeName, hypothesisContext, "hypothesis_context");
-        step2_2Attachments.push("hypothesis_context");
-      }
-      if (step2_2FileConfig.includes('target_specification')) {
-        await uploadTextToFileSearchStore(storeName, context.targetSpec, "target_specification");
-        step2_2Attachments.push("target_specification");
-      }
-      if (step2_2FileConfig.includes('technical_assets')) {
-        await uploadTextToFileSearchStore(storeName, context.technicalAssets, "technical_assets");
-        step2_2Attachments.push("technical_assets");
-      }
       
-      // Customize prompt for this specific hypothesis
-      const individualPrompt = researchPrompt2_2Template
-        .replace(/{HYPOTHESIS_COUNT}/g, "1")
-        .replace(/{HYPOTHESIS_NUMBER}/g, hypothesisNum.toString())
-        .replace(/{HYPOTHESIS_TITLE}/g, hypothesis.title);
+      const result = await processHypothesisFull(
+        client,
+        hypothesis,
+        hypothesisNumber,
+        step2_1Output,
+        context,
+        runId,
+        startTime,
+        stepTimings
+      );
       
-      // Save debug prompt for each Step 2-2 hypothesis
-      await addDebugPrompt(runId, `Step 2-2 仮説${hypothesisNum} (${hypothesis.title})`, individualPrompt, step2_2Attachments);
+      allResults.push(result);
+      step2_2IndividualOutputs.push(result.step2_2Output);
+      step3IndividualOutputs.push(result.step3Output);
+      step4IndividualOutputs.push(result.step4Output);
+      step5IndividualOutputs.push(result.step5Output);
       
-      try {
-        // Execute Deep Research for this hypothesis
-        const hypothesisReport = await runDeepResearchPhase(
-          client, 
-          individualPrompt, 
-          storeName, 
-          runId, 
-          `Step 2-2 Hypothesis ${hypothesisNum}`,
-          startTime
-        );
-        
-        console.log(`[Run ${runId}] Hypothesis ${hypothesisNum} completed. Output length: ${hypothesisReport.length} chars`);
-        stepTimings[`step2_2_hypothesis_${hypothesisNum}`] = Date.now() - step2_2StartTime;
-        
-        // Cleanup this hypothesis's File Search Store
-        await deleteFileSearchStore(storeName);
-        
-        return { index, report: hypothesisReport };
-      } catch (error: any) {
-        console.error(`[Run ${runId}] Hypothesis ${hypothesisNum} failed:`, error);
-        
-        // Cleanup on error
-        await deleteFileSearchStore(storeName);
-        
-        return { index, report: `【仮説${hypothesisNum}: ${hypothesis.title}】\nDeep Researchの実行に失敗しました: ${error?.message || error}` };
-      }
-    };
+      console.log(`[Run ${runId}] Hypothesis ${hypothesisNumber}/${extractedHypotheses.length} fully processed`);
+    }
     
-    // Launch all tasks with staggered starts (1 minute intervals) and run in parallel
-    console.log(`[Run ${runId}] Starting ${extractedHypotheses.length} parallel Deep Research tasks with 1-minute staggered launch...`);
-    
-    const taskPromises = extractedHypotheses.map((hypothesis, index) => 
-      createHypothesisTask(hypothesis, index)
-    );
-    
-    // Wait for all tasks to complete
-    const results = await Promise.all(taskPromises);
-    
-    // Sort results by index to maintain order
-    results.sort((a, b) => a.index - b.index);
-    const individualReports = results.map(r => r.report);
-    
-    stepTimings["step2_2_all_hypotheses"] = Date.now() - step2_2StartTime;
-    console.log(`[Run ${runId}] All ${individualReports.length} parallel Deep Research tasks completed`);
+    stepTimings["phase2_all_hypotheses"] = Date.now() - phase2StartTime;
+    console.log(`[Run ${runId}] All ${allResults.length} hypotheses processed through full pipeline`);
 
-    // ===== PHASE 3: Merge individual reports using Gemini 3.0 Pro =====
-    console.log(`[Run ${runId}] === PHASE 3: Step 2-3 (統合レポート生成 - Gemini 3.0 Pro) ===`);
+    // ===== Aggregate outputs =====
+    // Combine Step 2-2 outputs into a single report (for backward compatibility and display)
+    step2_2Output = allResults.map((r, i) => 
+      `${'='.repeat(60)}\n【仮説${i + 1}: ${r.hypothesisTitle}】\n${'='.repeat(60)}\n\n${r.step2_2Output}`
+    ).join('\n\n');
     
-    const step2_3StartTime = Date.now();
+    // Combine all Step 3 outputs
+    const aggregatedStep3Output = allResults.map((r, i) => 
+      `${r.step3Output}`
+    ).join('\n\n');
     
-    await updateProgress(runId, { 
-      currentPhase: "step2_3_merging", 
-      currentIteration: context.hypothesisCount + 2, 
-      maxIterations: context.hypothesisCount + 2,
-      planningAnalysis: "Step 2-3: 個別レポートを統合中（Gemini 3.0 Pro）...",
-      stepTimings,
-      stepStartTime: startTime,
+    // Combine all Step 4 outputs
+    const aggregatedStep4Output = allResults.map((r, i) => 
+      `${r.step4Output}`
+    ).join('\n\n');
+    
+    // Combine Step 5 outputs into final TSV (with header)
+    const tsvHeader = "仮説番号\t仮説タイトル\t業界\t分野\t素材が活躍する舞台\t素材の役割\t使用する技術資産\t原料(物質)\t成型体/モジュール形態\t事業仮説概要\t顧客の解決不能な課題\tデバイス・プロセスLvのソリューション\t素材・部材Lvのソリューション\t科学×経済判定\t条件\t総合スコア\t総評\tミッションクリティカリティ判定\t素材の必然性(Refutation)\t主要リスク\t補足\t科学的妥当性\t製造実現性\t性能優位\t単位経済\t市場魅力度\t規制・EHS\tIP防衛\t戦略適合\t戦略判定\t戦略勝算ランク\t結論\t撤退ライン\t顧客アクセス\t資本的持久力\t製造基盤\t対象競合\tMoat係数\tMake期間\tMakeコスト\tBuy期間\tBuyコスト\t非対称戦の勝算";
+    const tsvRows = allResults.map(r => r.step5Output).filter(row => row.trim().length > 0);
+    const aggregatedStep5Output = tsvHeader + '\n' + tsvRows.join('\n');
+
+    // Save all outputs to database (both individual and aggregated for backward compatibility)
+    await storage.updateRun(runId, { 
+      step2_2Output,
+      step2_2IndividualOutputs,
+      step3Output: aggregatedStep3Output,
+      step3IndividualOutputs,
+      step4Output: aggregatedStep4Output,
+      step4IndividualOutputs,
+      step5Output: aggregatedStep5Output,
+      step5IndividualOutputs,
     });
 
-    step2_2Output = await mergeIndividualReports(step2_1Output, individualReports, context.hypothesisCount, runId);
-    
-    stepTimings["step2_3_merge"] = Date.now() - step2_3StartTime;
-    console.log(`[Run ${runId}] Merge completed. Final report length: ${step2_2Output.length} chars`);
-
-    // Save Step 2-2 output to database
-    await storage.updateRun(runId, { step2_2Output });
-
-    // ===== Combine outputs =====
+    // Create combined report for display (Step 2-1 + Step 2-2 individual reports)
     const combinedReport = `【Step 2-1：発散・選定フェーズ（監査ストリップ）】
 
 ${step2_1Output}
 
 ${'='.repeat(80)}
 
-【Step 2-2：収束・深掘りフェーズ（${context.hypothesisCount}個のAIによる並列詳細分析 + 統合レポート）】
+【Step 2-2〜5：各仮説の詳細分析・評価・データ抽出】
 
 ${step2_2Output}`;
 
@@ -1078,16 +1021,23 @@ ${step2_2Output}`;
     const validationResult = await validateHypotheses(combinedReport, context.hypothesisCount, runId);
     stepTimings["validation"] = Date.now() - validationStartTime;
 
-    console.log(`[Run ${runId}] Three-Phase Deep Research completed. Total time: ${Math.floor(stepTimings["total"] / 1000)}s`);
+    console.log(`[Run ${runId}] Per-Hypothesis Full Pipeline completed. Total time: ${Math.floor(stepTimings["total"] / 1000)}s`);
 
     return {
       report: combinedReport,
       searchQueries: [],
-      iterationCount: context.hypothesisCount + 2,
+      iterationCount: context.hypothesisCount * 4,
       validationResult,
       step2_1Output,
       step2_2Output,
-      step2_2IndividualOutputs: individualReports
+      step2_2IndividualOutputs,
+      // New: individual outputs for each step
+      step3Output: aggregatedStep3Output,
+      step4Output: aggregatedStep4Output,
+      step5Output: aggregatedStep5Output,
+      step3IndividualOutputs,
+      step4IndividualOutputs,
+      step5IndividualOutputs,
     };
   } catch (error: any) {
     console.error(`[Run ${runId}] Three-Phase Deep Research failed:`, error);
@@ -1219,6 +1169,301 @@ async function executeStep5(context: PipelineContext, runId: number): Promise<st
   return generateWithFlash(prompt);
 }
 
+// ===== Per-Hypothesis Step Execution Functions (New Pipeline Architecture) =====
+// These functions process Steps 3, 4, 5 for individual hypotheses
+
+interface PerHypothesisResult {
+  hypothesisNumber: number;
+  hypothesisTitle: string;
+  step2_2Output: string;
+  step3Output: string;
+  step4Output: string;
+  step5Output: string; // Single TSV row (no header)
+}
+
+async function executeStep3Individual(
+  hypothesisNumber: number,
+  hypothesisTitle: string,
+  step2_2Report: string,
+  targetSpec: string,
+  technicalAssets: string,
+  runId: number
+): Promise<string> {
+  const prompt = STEP3_INDIVIDUAL_PROMPT
+    .replace(/{HYPOTHESIS_NUMBER}/g, hypothesisNumber.toString())
+    .replace(/{HYPOTHESIS_TITLE}/g, hypothesisTitle);
+  
+  // For now, embed data directly in prompt (can be enhanced to use File Search later)
+  const fullPrompt = `${prompt}
+
+=== ターゲット仕様書 ===
+${targetSpec}
+
+=== 技術資産リスト ===
+${technicalAssets}
+
+=== Step 2-2 仮説レポート ===
+${step2_2Report}`;
+  
+  await addDebugPrompt(runId, `Step 3 仮説${hypothesisNumber} (${hypothesisTitle})`, fullPrompt, []);
+  
+  return generateWithPro(fullPrompt);
+}
+
+async function executeStep4Individual(
+  hypothesisNumber: number,
+  hypothesisTitle: string,
+  step2_2Report: string,
+  step3Output: string,
+  targetSpec: string,
+  technicalAssets: string,
+  runId: number
+): Promise<string> {
+  const prompt = STEP4_INDIVIDUAL_PROMPT
+    .replace(/{HYPOTHESIS_NUMBER}/g, hypothesisNumber.toString())
+    .replace(/{HYPOTHESIS_TITLE}/g, hypothesisTitle);
+  
+  const fullPrompt = `${prompt}
+
+=== ターゲット仕様書 ===
+${targetSpec}
+
+=== 技術資産リスト ===
+${technicalAssets}
+
+=== Step 2-2 仮説レポート ===
+${step2_2Report}
+
+=== Step 3 科学的評価結果 ===
+${step3Output}`;
+  
+  await addDebugPrompt(runId, `Step 4 仮説${hypothesisNumber} (${hypothesisTitle})`, fullPrompt, []);
+  
+  return generateWithPro(fullPrompt);
+}
+
+async function executeStep5Individual(
+  hypothesisNumber: number,
+  hypothesisTitle: string,
+  step2_2Report: string,
+  step3Output: string,
+  step4Output: string,
+  runId: number
+): Promise<string> {
+  const prompt = STEP5_INDIVIDUAL_PROMPT
+    .replace(/{HYPOTHESIS_NUMBER}/g, hypothesisNumber.toString())
+    .replace(/{HYPOTHESIS_TITLE}/g, hypothesisTitle);
+  
+  const fullPrompt = `${prompt}
+
+=== Step 2-2 仮説レポート ===
+${step2_2Report}
+
+=== Step 3 科学的評価結果 ===
+${step3Output}
+
+=== Step 4 戦略監査結果 ===
+${step4Output}`;
+  
+  await addDebugPrompt(runId, `Step 5 仮説${hypothesisNumber} (${hypothesisTitle})`, fullPrompt, []);
+  
+  return generateWithFlash(fullPrompt);
+}
+
+// Process a single hypothesis through Steps 2-2 → 3 → 4 → 5
+async function processHypothesisFull(
+  client: any,
+  hypothesis: ExtractedHypothesisFromStep2_1,
+  hypothesisNumber: number,
+  step2_1Output: string,
+  context: PipelineContext,
+  runId: number,
+  startTime: number,
+  stepTimings: { [key: string]: number }
+): Promise<PerHypothesisResult> {
+  const hypothesisTitle = hypothesis.title;
+  console.log(`[Run ${runId}] Processing Hypothesis ${hypothesisNumber}: ${hypothesisTitle}`);
+  
+  let storeName: string | null = null;
+  
+  try {
+    // === Step 2-2: Deep Research for this hypothesis ===
+    const step2_2Start = Date.now();
+    
+    await updateProgress(runId, { 
+      currentPhase: `hypothesis_${hypothesisNumber}_step2_2`, 
+      planningAnalysis: `仮説${hypothesisNumber}「${hypothesisTitle}」: Step 2-2 Deep Research実行中...`,
+      stepTimings,
+      stepStartTime: startTime,
+    });
+    
+    storeName = await createFileSearchStore(`gmethod-run-${runId}-h${hypothesisNumber}-${Date.now()}`);
+    console.log(`[Run ${runId}] Created File Search Store for Hypothesis ${hypothesisNumber}: ${storeName}`);
+
+    const hypothesisContext = `【対象仮説】
+仮説番号: ${hypothesisNumber}
+タイトル: ${hypothesis.title}
+カテゴリ: ${hypothesis.category}
+スコア: I=${hypothesis.scores.I}, M=${hypothesis.scores.M}, L=${hypothesis.scores.L}, U=${hypothesis.scores.U}, Total=${hypothesis.scores.total}
+
+【Step 2-1からの詳細情報】
+${hypothesis.rawText}
+
+【Step 2-1全体の監査ストリップ（参考）】
+${step2_1Output}`;
+
+    const step2_2FileConfig = await getFileAttachments(22);
+    const step2_2Attachments: string[] = [];
+
+    if (step2_2FileConfig.includes('hypothesis_context')) {
+      await uploadTextToFileSearchStore(storeName, hypothesisContext, "hypothesis_context");
+      step2_2Attachments.push("hypothesis_context");
+    }
+    if (step2_2FileConfig.includes('target_specification')) {
+      await uploadTextToFileSearchStore(storeName, context.targetSpec, "target_specification");
+      step2_2Attachments.push("target_specification");
+    }
+    if (step2_2FileConfig.includes('technical_assets')) {
+      await uploadTextToFileSearchStore(storeName, context.technicalAssets, "technical_assets");
+      step2_2Attachments.push("technical_assets");
+    }
+    
+    const researchPrompt2_2Template = await getDeepResearchPrompt2_2();
+    const individualPrompt = researchPrompt2_2Template
+      .replace(/{HYPOTHESIS_COUNT}/g, "1")
+      .replace(/{HYPOTHESIS_NUMBER}/g, hypothesisNumber.toString())
+      .replace(/{HYPOTHESIS_TITLE}/g, hypothesisTitle);
+    
+    await addDebugPrompt(runId, `Step 2-2 仮説${hypothesisNumber} (${hypothesisTitle})`, individualPrompt, step2_2Attachments);
+    
+    const step2_2Report = await runDeepResearchPhase(
+      client, 
+      individualPrompt, 
+      storeName, 
+      runId, 
+      `Step 2-2 Hypothesis ${hypothesisNumber}`,
+      startTime
+    );
+    
+    await deleteFileSearchStore(storeName);
+    storeName = null;
+    
+    stepTimings[`h${hypothesisNumber}_step2_2`] = Date.now() - step2_2Start;
+    console.log(`[Run ${runId}] Hypothesis ${hypothesisNumber} Step 2-2 completed (${step2_2Report.length} chars)`);
+    
+    // === Step 3: Scientific Evaluation for this hypothesis ===
+    let step3Output = "";
+    try {
+      const step3Start = Date.now();
+      
+      await updateProgress(runId, { 
+        currentPhase: `hypothesis_${hypothesisNumber}_step3`, 
+        planningAnalysis: `仮説${hypothesisNumber}「${hypothesisTitle}」: Step 3 科学的評価実行中...`,
+        stepTimings,
+        stepStartTime: startTime,
+      });
+      
+      step3Output = await executeStep3Individual(
+        hypothesisNumber,
+        hypothesisTitle,
+        step2_2Report,
+        context.targetSpec,
+        context.technicalAssets,
+        runId
+      );
+      
+      stepTimings[`h${hypothesisNumber}_step3`] = Date.now() - step3Start;
+      console.log(`[Run ${runId}] Hypothesis ${hypothesisNumber} Step 3 completed (${step3Output.length} chars)`);
+    } catch (step3Error: any) {
+      console.error(`[Run ${runId}] Hypothesis ${hypothesisNumber} Step 3 failed:`, step3Error);
+      step3Output = `【Step 3エラー】仮説${hypothesisNumber}の科学的評価に失敗: ${step3Error?.message || step3Error}`;
+    }
+    
+    // === Step 4: Strategic Audit for this hypothesis ===
+    let step4Output = "";
+    try {
+      const step4Start = Date.now();
+      
+      await updateProgress(runId, { 
+        currentPhase: `hypothesis_${hypothesisNumber}_step4`, 
+        planningAnalysis: `仮説${hypothesisNumber}「${hypothesisTitle}」: Step 4 戦略監査実行中...`,
+        stepTimings,
+        stepStartTime: startTime,
+      });
+      
+      step4Output = await executeStep4Individual(
+        hypothesisNumber,
+        hypothesisTitle,
+        step2_2Report,
+        step3Output,
+        context.targetSpec,
+        context.technicalAssets,
+        runId
+      );
+      
+      stepTimings[`h${hypothesisNumber}_step4`] = Date.now() - step4Start;
+      console.log(`[Run ${runId}] Hypothesis ${hypothesisNumber} Step 4 completed (${step4Output.length} chars)`);
+    } catch (step4Error: any) {
+      console.error(`[Run ${runId}] Hypothesis ${hypothesisNumber} Step 4 failed:`, step4Error);
+      step4Output = `【Step 4エラー】仮説${hypothesisNumber}の戦略監査に失敗: ${step4Error?.message || step4Error}`;
+    }
+    
+    // === Step 5: TSV Row Generation for this hypothesis ===
+    let step5Output = "";
+    try {
+      const step5Start = Date.now();
+      
+      await updateProgress(runId, { 
+        currentPhase: `hypothesis_${hypothesisNumber}_step5`, 
+        planningAnalysis: `仮説${hypothesisNumber}「${hypothesisTitle}」: Step 5 データ抽出実行中...`,
+        stepTimings,
+        stepStartTime: startTime,
+      });
+      
+      step5Output = await executeStep5Individual(
+        hypothesisNumber,
+        hypothesisTitle,
+        step2_2Report,
+        step3Output,
+        step4Output,
+        runId
+      );
+      
+      stepTimings[`h${hypothesisNumber}_step5`] = Date.now() - step5Start;
+      console.log(`[Run ${runId}] Hypothesis ${hypothesisNumber} Step 5 completed (${step5Output.length} chars)`);
+    } catch (step5Error: any) {
+      console.error(`[Run ${runId}] Hypothesis ${hypothesisNumber} Step 5 failed:`, step5Error);
+      step5Output = `${hypothesisNumber}\t${hypothesisTitle}\t【エラー】データ抽出失敗`;
+    }
+    
+    return {
+      hypothesisNumber,
+      hypothesisTitle,
+      step2_2Output: step2_2Report,
+      step3Output,
+      step4Output,
+      step5Output: step5Output.trim()
+    };
+    
+  } catch (error: any) {
+    console.error(`[Run ${runId}] Hypothesis ${hypothesisNumber} processing failed:`, error);
+    
+    if (storeName) {
+      await deleteFileSearchStore(storeName);
+    }
+    
+    // Return error result
+    return {
+      hypothesisNumber,
+      hypothesisTitle,
+      step2_2Output: `【エラー】処理に失敗: ${error?.message || error}`,
+      step3Output: "",
+      step4Output: "",
+      step5Output: ""
+    };
+  }
+}
+
 function parseTSVToJSON(tsv: string): Record<string, string>[] {
   const lines = tsv.trim().split("\n");
   if (lines.length < 2) return [];
@@ -1344,6 +1589,13 @@ interface Step2ResultWithRetry {
   step2_1Output?: string;
   step2_2Output?: string;
   step2_2IndividualOutputs?: string[];
+  // New pipeline: aggregated outputs from per-hypothesis processing
+  step3Output?: string;
+  step4Output?: string;
+  step5Output?: string;
+  step3IndividualOutputs?: string[];
+  step4IndividualOutputs?: string[];
+  step5IndividualOutputs?: string[];
 }
 
 async function executeStep2WithRetry(
@@ -1377,6 +1629,12 @@ async function executeStep2WithRetry(
       step2_1Output: result.step2_1Output,
       step2_2Output: result.step2_2Output,
       step2_2IndividualOutputs: result.step2_2IndividualOutputs,
+      step3Output: result.step3Output,
+      step4Output: result.step4Output,
+      step5Output: result.step5Output,
+      step3IndividualOutputs: result.step3IndividualOutputs,
+      step4IndividualOutputs: result.step4IndividualOutputs,
+      step5IndividualOutputs: result.step5IndividualOutputs,
     };
   }
 
@@ -1393,6 +1651,12 @@ async function executeStep2WithRetry(
     step2_1Output: result.step2_1Output,
     step2_2Output: result.step2_2Output,
     step2_2IndividualOutputs: result.step2_2IndividualOutputs,
+    step3Output: result.step3Output,
+    step4Output: result.step4Output,
+    step5Output: result.step5Output,
+    step3IndividualOutputs: result.step3IndividualOutputs,
+    step4IndividualOutputs: result.step4IndividualOutputs,
+    step5IndividualOutputs: result.step5IndividualOutputs,
   };
 }
 
@@ -1463,12 +1727,15 @@ export async function executeGMethodPipeline(
       const loopStartStep = loopIndex === startLoop ? startStep : 2;
       await storage.updateRun(runId, { currentLoop: loopIndex, currentStep: loopStartStep });
 
-      // Step 2: Deep Research
+      // Step 2: Deep Research (now includes Steps 2-2, 3, 4, 5 per hypothesis)
+      // New pipeline architecture: Each hypothesis is processed through 2-2→3→4→5 sequentially
+      let deepResearchResult: Step2ResultWithRetry | null = null;
+      
       if (loopStartStep <= 2) {
         const step2StartTime = Date.now();
         await updateStepDuration(runId, 'step2', { startTime: step2StartTime });
         
-        let deepResearchResult = await executeStep2WithRetry(context, runId);
+        deepResearchResult = await executeStep2WithRetry(context, runId);
         context.step2Output = deepResearchResult.report;
         
         const step2EndTime = Date.now();
@@ -1485,7 +1752,7 @@ export async function executeGMethodPipeline(
           validationPassed: deepResearchResult.validationResult.isValid,
           retried: deepResearchResult.retried,
         };
-        console.log(`[Run ${runId}] Loop ${loopIndex} Step 2 completed in ${Math.round((step2EndTime - step2StartTime) / 1000)}s: ${deepResearchResult.iterationCount} iterations, ${deepResearchResult.searchQueries.length} queries${deepResearchResult.retried ? " (retried)" : ""}`);
+        console.log(`[Run ${runId}] Loop ${loopIndex} Full pipeline completed in ${Math.round((step2EndTime - step2StartTime) / 1000)}s: ${deepResearchResult.iterationCount} iterations${deepResearchResult.retried ? " (retried)" : ""}`);
         
         if (!deepResearchResult.validationResult.isValid) {
           const warningMessage = `品質検証警告: ${deepResearchResult.validationResult.errors.slice(0, 3).join("; ")}`;
@@ -1493,7 +1760,7 @@ export async function executeGMethodPipeline(
           await storage.updateRun(runId, { 
             step2Output: context.step2Output, 
             step2_2IndividualOutputs: deepResearchResult.step2_2IndividualOutputs,
-            currentStep: 3,
+            currentStep: 5,
             validationMetadata,
             errorMessage: warningMessage,
           });
@@ -1501,116 +1768,59 @@ export async function executeGMethodPipeline(
           await storage.updateRun(runId, { 
             step2Output: context.step2Output, 
             step2_2IndividualOutputs: deepResearchResult.step2_2IndividualOutputs,
-            currentStep: 3,
+            currentStep: 5,
             validationMetadata,
           });
         }
 
-        // Check pause/stop after step 2
+        // Check pause/stop after step 2 (full pipeline)
         const control = await checkPipelineControl(runId);
         if (control === "stop") {
           await storage.updateRun(runId, { status: "error", errorMessage: "ユーザーにより停止されました" });
           return;
         }
         if (control === "pause") {
-          // currentStep is already 3, so resume will start at step 3
           await storage.updateRun(runId, { status: "paused" });
-          console.log(`[Run ${runId}] Paused after loop ${loopIndex} step 2, will resume at step 3`);
+          console.log(`[Run ${runId}] Paused after loop ${loopIndex} full pipeline`);
           return;
         }
       }
 
-      // Step 3: Scientific Evaluation
-      if (loopStartStep <= 3) {
-        const step3StartTime = Date.now();
-        await updateStepDuration(runId, 'step3', { startTime: step3StartTime });
-        
-        console.log(`[Run ${runId}] Loop ${loopIndex} Starting Step 3 (Scientific Evaluation with Pro)...`);
-        context.step3Output = await executeStep3(context, runId);
-        
-        const step3EndTime = Date.now();
-        await updateStepDuration(runId, 'step3', { 
-          startTime: step3StartTime, 
-          endTime: step3EndTime, 
-          durationMs: step3EndTime - step3StartTime 
-        });
-        console.log(`[Run ${runId}] Loop ${loopIndex} Step 3 completed in ${Math.round((step3EndTime - step3StartTime) / 1000)}s`);
-        
-        await storage.updateRun(runId, { step3Output: context.step3Output, currentStep: 4 });
-
-        // Check pause/stop after step 3
-        const control = await checkPipelineControl(runId);
-        if (control === "stop") {
-          await storage.updateRun(runId, { status: "error", errorMessage: "ユーザーにより停止されました" });
-          return;
-        }
-        if (control === "pause") {
-          // currentStep is already 4, so resume will start at step 4
-          await storage.updateRun(runId, { status: "paused" });
-          console.log(`[Run ${runId}] Paused after loop ${loopIndex} step 3, will resume at step 4`);
-          return;
-        }
-      }
-
-      // Step 4: Strategic Audit
-      if (loopStartStep <= 4) {
-        const step4StartTime = Date.now();
-        await updateStepDuration(runId, 'step4', { startTime: step4StartTime });
-        
-        console.log(`[Run ${runId}] Loop ${loopIndex} Starting Step 4 (Strategic Audit with Pro)...`);
-        context.step4Output = await executeStep4(context, runId);
-        
-        const step4EndTime = Date.now();
-        await updateStepDuration(runId, 'step4', { 
-          startTime: step4StartTime, 
-          endTime: step4EndTime, 
-          durationMs: step4EndTime - step4StartTime 
-        });
-        console.log(`[Run ${runId}] Loop ${loopIndex} Step 4 completed in ${Math.round((step4EndTime - step4StartTime) / 1000)}s`);
-        
-        await storage.updateRun(runId, { step4Output: context.step4Output, currentStep: 5 });
-
-        // Check pause/stop after step 4
-        const control = await checkPipelineControl(runId);
-        if (control === "stop") {
-          await storage.updateRun(runId, { status: "error", errorMessage: "ユーザーにより停止されました" });
-          return;
-        }
-        if (control === "pause") {
-          // currentStep is already 5, so resume will start at step 5
-          await storage.updateRun(runId, { status: "paused" });
-          console.log(`[Run ${runId}] Paused after loop ${loopIndex} step 4, will resume at step 5`);
-          return;
-        }
-      }
-
-      // Step 5: Integration
-      const step5StartTime = Date.now();
-      await updateStepDuration(runId, 'step5', { startTime: step5StartTime });
+      // Steps 3, 4, 5 are now processed per-hypothesis within Step 2
+      // The aggregated outputs are available in deepResearchResult
+      // We use the pre-computed Step 5 TSV output from the per-hypothesis processing
       
-      console.log(`[Run ${runId}] Loop ${loopIndex} Starting Step 5 (Integration with Flash)...`);
-      context.step5Output = await executeStep5(context, runId);
+      // Get Step 5 output (TSV) from the deep research result or from stored context
+      const currentRun = await storage.getRun(runId);
       
-      const step5EndTime = Date.now();
-      await updateStepDuration(runId, 'step5', { 
-        startTime: step5StartTime, 
-        endTime: step5EndTime, 
-        durationMs: step5EndTime - step5StartTime 
-      });
-      console.log(`[Run ${runId}] Loop ${loopIndex} Step 5 completed in ${Math.round((step5EndTime - step5StartTime) / 1000)}s`);
+      // Retrieve the aggregated Step 5 output from the database
+      // The per-hypothesis processing already saved step5IndividualOutputs
+      const step5IndividualOutputs = currentRun?.step5IndividualOutputs as string[] | null;
+      
+      // Build Step 5 output (TSV with header) from individual outputs
+      const tsvHeader = "仮説番号\t仮説タイトル\t業界\t分野\t素材が活躍する舞台\t素材の役割\t使用する技術資産\t原料(物質)\t成型体/モジュール形態\t事業仮説概要\t顧客の解決不能な課題\tデバイス・プロセスLvのソリューション\t素材・部材Lvのソリューション\t科学×経済判定\t条件\t総合スコア\t総評\tミッションクリティカリティ判定\t素材の必然性(Refutation)\t主要リスク\t補足\t科学的妥当性\t製造実現性\t性能優位\t単位経済\t市場魅力度\t規制・EHS\tIP防衛\t戦略適合\t戦略判定\t戦略勝算ランク\t結論\t撤退ライン\t顧客アクセス\t資本的持久力\t製造基盤\t対象競合\tMoat係数\tMake期間\tMakeコスト\tBuy期間\tBuyコスト\t非対称戦の勝算";
+      
+      if (step5IndividualOutputs && step5IndividualOutputs.length > 0) {
+        const tsvRows = step5IndividualOutputs.filter(row => row && row.trim().length > 0);
+        context.step5Output = tsvHeader + '\n' + tsvRows.join('\n');
+      } else {
+        context.step5Output = tsvHeader;
+      }
+      
+      console.log(`[Run ${runId}] Loop ${loopIndex} Step 5 TSV built from ${step5IndividualOutputs?.length || 0} individual outputs`);
       
       const integratedList = parseTSVToJSON(context.step5Output);
       
       // Get the next available hypothesis number for this project
-      const nextHypothesisNumber = await storage.getNextHypothesisNumber(run.projectId);
+      const nextHypothesisNumber = await storage.getNextHypothesisNumber(currentRun!.projectId);
       
       const hypothesesData = extractHypothesesFromTSV(
         context.step5Output,
-        run.projectId,
+        currentRun!.projectId,
         runId,
         nextHypothesisNumber,
-        run.targetSpecId,
-        run.technicalAssetsId
+        currentRun!.targetSpecId,
+        currentRun!.technicalAssetsId
       );
       
       if (hypothesesData.length > 0) {

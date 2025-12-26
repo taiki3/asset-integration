@@ -34,24 +34,29 @@ A web application for automating the "G-Method" business hypothesis generation p
   - Individual reports: `step2_2IndividualOutputs` (jsonb array) stores each STEP2-2 hypothesis report separately for individual download
 
 ## G-Method Pipeline
-The pipeline consists of 4 steps (numbered 2-5):
+The pipeline uses a Per-Hypothesis Full Pipeline architecture where each hypothesis is processed through all steps sequentially before moving to the next.
 
-### Step 2 - Three-Phase Deep Research Architecture
-Step 2 uses a sophisticated 3-phase parallel architecture:
+### Pipeline Architecture (Per-Hypothesis Sequential Processing)
 1. **Step 2-1 (発散・選定)**: One AI generates 30+ hypotheses and selects Top N using I/M/L/U criteria (weights: I:40%, M:30%, L:15%, U:15%)
-2. **Step 2-2 (個別深掘り)**: N separate Deep Research tasks run sequentially. Each AI analyzes one hypothesis in depth.
-3. **Step 2-3 (統合)**: Gemini 3.0 Pro merges all N individual reports into a unified final report. Reports are summarized before merging to stay within token limits.
+2. **Per-Hypothesis Full Processing**: For each selected hypothesis (1 to N):
+   - **Step 2-2**: Deep Research for detailed hypothesis analysis
+   - **Step 3**: Scientific/economic evaluation (Dr. Kill-Switch)
+   - **Step 4**: Strategic audit (War Gaming Mode)
+   - **Step 5**: TSV row extraction for this hypothesis
+3. **Aggregation**: All individual outputs are combined into final reports and TSV
 
 Key implementation details:
 - `extractHypothesesFromStep2_1()`: Robust parser with multi-attempt extraction, regex fallback, and strict count validation
-- `summarizeReportForMerge()`: Reduces each report to 800-1200 chars before merging
-- `mergeIndividualReports()`: Combines summaries using Gemini 3.0 Pro with reference deduplication
+- `processHypothesisFull()`: Executes complete 2-2→3→4→5 pipeline for a single hypothesis
+- `executeStep3Individual()`, `executeStep4Individual()`, `executeStep5Individual()`: Per-hypothesis step execution functions
+- Individual outputs stored in jsonb arrays: `step2_2IndividualOutputs`, `step3IndividualOutputs`, `step4IndividualOutputs`, `step5IndividualOutputs`
+- Final TSV is built by aggregating all individual Step 5 outputs with a header row
 - 429エラー検出: レート制限エラーが発生した場合、明確なエラーメッセージを表示
 
-### Other Steps
-2. **Step 3 - Scientific Evaluation**: Evaluate hypotheses for scientific and economic validity
-3. **Step 4 - Strategic Audit**: Assess competitive catch-up difficulty and make/buy decisions
-4. **Step 5 - Integration**: Generate final TSV data with all hypothesis information
+### Per-Hypothesis Prompts
+- `STEP3_INDIVIDUAL_PROMPT`: Scientific evaluation for single hypothesis
+- `STEP4_INDIVIDUAL_PROMPT`: Strategic audit for single hypothesis  
+- `STEP5_INDIVIDUAL_PROMPT`: TSV row extraction for single hypothesis
 
 ## API Endpoints
 
