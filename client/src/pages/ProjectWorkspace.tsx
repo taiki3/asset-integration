@@ -1,7 +1,7 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { Loader2, ArrowLeft } from "lucide-react";
+import { Loader2, ArrowLeft, Pencil, Trash2, Check, X } from "lucide-react";
 import { Link } from "wouter";
 import { Header } from "@/components/Header";
 import { ExecutionPanel } from "@/components/ExecutionPanel";
@@ -9,6 +9,17 @@ import { HistoryPanel } from "@/components/HistoryPanel";
 import { HypothesesPanel } from "@/components/HypothesesPanel";
 import { RunProgressDisplay } from "@/components/RunProgressDisplay";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Project, Resource, HypothesisRun, Hypothesis } from "@shared/schema";
@@ -21,6 +32,10 @@ export default function ProjectWorkspace({ projectId }: ProjectWorkspaceProps) {
   const { toast } = useToast();
   const [, navigate] = useLocation();
   const id = parseInt(projectId);
+  
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editedName, setEditedName] = useState("");
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   const { data: project, isLoading: projectLoading, error: projectError } = useQuery<Project>({
     queryKey: ["/api/projects", id],
@@ -382,6 +397,72 @@ export default function ProjectWorkspace({ projectId }: ProjectWorkspaceProps) {
     resumeInterruptedMutation.mutate(runId);
   };
 
+  const updateProjectMutation = useMutation({
+    mutationFn: async (name: string) => {
+      const res = await apiRequest("PATCH", `/api/projects/${id}`, { name });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", id] });
+      setIsEditingName(false);
+      toast({
+        title: "プロジェクト名を変更しました",
+        description: "プロジェクト名が正常に更新されました。",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "エラー",
+        description: "プロジェクト名の変更に失敗しました。",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const deleteProjectMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("DELETE", `/api/projects/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
+      setShowDeleteDialog(false);
+      toast({
+        title: "プロジェクトを削除しました",
+        description: "プロジェクトが正常に削除されました。",
+      });
+      navigate("/");
+    },
+    onError: () => {
+      toast({
+        title: "エラー",
+        description: "プロジェクトの削除に失敗しました。",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleStartEditName = () => {
+    if (project) {
+      setEditedName(project.name);
+      setIsEditingName(true);
+    }
+  };
+
+  const handleSaveName = () => {
+    if (editedName.trim()) {
+      updateProjectMutation.mutate(editedName.trim());
+    }
+  };
+
+  const handleCancelEditName = () => {
+    setIsEditingName(false);
+    setEditedName("");
+  };
+
+  const handleDeleteProject = () => {
+    deleteProjectMutation.mutate();
+  };
+
   const handleDownloadIndividualReport = async (runId: number, hypothesisIndex: number) => {
     try {
       const response = await fetch(`/api/runs/${runId}/download-individual-report/${hypothesisIndex}`);
@@ -462,15 +543,98 @@ export default function ProjectWorkspace({ projectId }: ProjectWorkspaceProps) {
       <Header project={project} />
       <main className="flex-1 max-w-screen-2xl mx-auto w-full px-6 py-6 flex flex-col overflow-auto">
         <div className="mb-6">
-          <h1 className="text-2xl font-medium" data-testid="text-project-title">
-            {project.name}
-          </h1>
+          <div className="flex items-center gap-2">
+            {isEditingName ? (
+              <div className="flex items-center gap-2">
+                <Input
+                  value={editedName}
+                  onChange={(e) => setEditedName(e.target.value)}
+                  className="text-2xl font-medium h-10 w-80"
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleSaveName();
+                    if (e.key === "Escape") handleCancelEditName();
+                  }}
+                  data-testid="input-project-name"
+                />
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  onClick={handleSaveName}
+                  disabled={updateProjectMutation.isPending || !editedName.trim()}
+                  data-testid="button-save-project-name"
+                >
+                  {updateProjectMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Check className="h-4 w-4" />
+                  )}
+                </Button>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  onClick={handleCancelEditName}
+                  disabled={updateProjectMutation.isPending}
+                  data-testid="button-cancel-edit-name"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            ) : (
+              <>
+                <h1 className="text-2xl font-medium" data-testid="text-project-title">
+                  {project.name}
+                </h1>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  onClick={handleStartEditName}
+                  data-testid="button-edit-project-name"
+                >
+                  <Pencil className="h-4 w-4" />
+                </Button>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  onClick={() => setShowDeleteDialog(true)}
+                  data-testid="button-delete-project"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </>
+            )}
+          </div>
           {project.description && (
             <p className="text-muted-foreground mt-1" data-testid="text-project-desc">
               {project.description}
             </p>
           )}
         </div>
+
+        <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>プロジェクトを削除しますか？</AlertDialogTitle>
+              <AlertDialogDescription>
+                本当に「{project.name}」を削除してよろしいですか？この操作は取り消せません。
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel data-testid="button-cancel-delete">キャンセル</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleDeleteProject}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                disabled={deleteProjectMutation.isPending}
+                data-testid="button-confirm-delete"
+              >
+                {deleteProjectMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : null}
+                削除する
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         {activeRun && (
           <div className="mb-6">
