@@ -24,6 +24,9 @@ A web application for automating the "G-Method" business hypothesis generation p
   - Rename: Projects can be renamed inline via pencil icon
 - **resources**: Input data storage (id, projectId, type, name, content, createdAt)
   - Types: `target_spec` (target specifications) and `technical_assets` (technical asset lists)
+- **hypotheses**: Generated hypothesis storage
+  - Soft delete: Uses `deletedAt` timestamp for logical deletion
+  - Deleted hypotheses are excluded from display and dedup checks during new generation
 - **hypothesis_runs**: G-Method execution history
   - Core fields: id, projectId, targetSpecId, technicalAssetsId, status, step outputs, integratedList
   - Job naming: `jobName` (default YYMMDDHHMM format), `loopIndex` for multi-loop batches
