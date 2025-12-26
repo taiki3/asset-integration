@@ -417,7 +417,7 @@ export function ExecutionPanel({
 
   return (
     <>
-      <Card className="flex flex-col overflow-hidden max-h-full">
+      <Card className="flex flex-col overflow-hidden h-full">
         <CardHeader className="pb-3 shrink-0">
           <CardTitle className="text-lg font-medium flex items-center gap-2">
             <Play className="h-5 w-5" />

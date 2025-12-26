@@ -465,8 +465,8 @@ export default function ProjectWorkspace({ projectId }: ProjectWorkspaceProps) {
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 min-h-[400px] lg:h-[calc(100vh-20rem)]">
-          <div className="lg:col-span-1 min-h-0">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 min-h-[400px] lg:max-h-[calc(100vh-16rem)]">
+          <div className="lg:col-span-1 min-h-0 flex flex-col">
             <ExecutionPanel
               targetSpecs={targetSpecs}
               technicalAssets={technicalAssets}
@@ -481,7 +481,7 @@ export default function ProjectWorkspace({ projectId }: ProjectWorkspaceProps) {
               isPending={addResourceMutation.isPending}
             />
           </div>
-          <div className="lg:col-span-1 min-h-0">
+          <div className="lg:col-span-1 min-h-0 flex flex-col">
             <HistoryPanel
               runs={sortedRuns}
               resources={resources}
