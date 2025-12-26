@@ -884,6 +884,46 @@ export async function registerRoutes(
     }
   });
 
+  // Export all active prompts as structured data (must be before :stepNumber routes)
+  const STEP_NAMES_FOR_EXPORT: Record<number, string> = {
+    21: "Step 2-1: 発散・選定フェーズ",
+    22: "Step 2-2: 収束・深掘りフェーズ",
+    3: "Step 3: 科学的評価",
+    4: "Step 4: 戦略監査",
+    5: "Step 5: 統合出力",
+  };
+
+  app.get("/api/prompts/export", isAuthenticated, requireAgcDomain, async (req, res) => {
+    try {
+      const exportSteps = [21, 22, 3, 4, 5];
+      const results: Array<{
+        stepNumber: number;
+        stepName: string;
+        isCustom: boolean;
+        version: number | null;
+        content: string;
+      }> = [];
+
+      for (const stepNumber of exportSteps) {
+        const activePrompt = await storage.getActivePrompt(stepNumber);
+        const defaultPrompt = DEFAULT_PROMPTS[stepNumber] || "";
+        
+        results.push({
+          stepNumber,
+          stepName: STEP_NAMES_FOR_EXPORT[stepNumber] || `Step ${stepNumber}`,
+          isCustom: !!activePrompt,
+          version: activePrompt?.version ?? null,
+          content: activePrompt?.content || defaultPrompt,
+        });
+      }
+
+      res.json(results);
+    } catch (error) {
+      console.error("Error exporting prompts:", error);
+      res.status(500).json({ error: "Failed to export prompts" });
+    }
+  });
+
   app.get("/api/prompts/:stepNumber", isAuthenticated, requireAgcDomain, async (req, res) => {
     try {
       const stepNumber = parseInt(req.params.stepNumber);
@@ -967,46 +1007,6 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error resetting prompt:", error);
       res.status(500).json({ error: "Failed to reset prompt" });
-    }
-  });
-
-  // Export all active prompts as structured data
-  const STEP_NAMES_FOR_EXPORT: Record<number, string> = {
-    21: "Step 2-1: 発散・選定フェーズ",
-    22: "Step 2-2: 収束・深掘りフェーズ",
-    3: "Step 3: 科学的評価",
-    4: "Step 4: 戦略監査",
-    5: "Step 5: 統合出力",
-  };
-
-  app.get("/api/prompts/export", isAuthenticated, requireAgcDomain, async (req, res) => {
-    try {
-      const exportSteps = [21, 22, 3, 4, 5];
-      const results: Array<{
-        stepNumber: number;
-        stepName: string;
-        isCustom: boolean;
-        version: number | null;
-        content: string;
-      }> = [];
-
-      for (const stepNumber of exportSteps) {
-        const activePrompt = await storage.getActivePrompt(stepNumber);
-        const defaultPrompt = DEFAULT_PROMPTS[stepNumber] || "";
-        
-        results.push({
-          stepNumber,
-          stepName: STEP_NAMES_FOR_EXPORT[stepNumber] || `Step ${stepNumber}`,
-          isCustom: !!activePrompt,
-          version: activePrompt?.version ?? null,
-          content: activePrompt?.content || defaultPrompt,
-        });
-      }
-
-      res.json(results);
-    } catch (error) {
-      console.error("Error exporting prompts:", error);
-      res.status(500).json({ error: "Failed to export prompts" });
     }
   });
 
