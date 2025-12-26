@@ -297,128 +297,219 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, 
                 )}
               </div>
 
-              {selectedRun.status === "completed" && (
-                <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 min-w-0">
-                  <TabsList className="grid w-full grid-cols-4 shrink-0">
-                    {stepLabels.map(({ key, step }) => (
-                      <TabsTrigger key={key} value={key} disabled={!selectedRun[key]}>
-                        ステップ {step}
-                      </TabsTrigger>
-                    ))}
-                  </TabsList>
-                  
-                  {(() => {
-                    const progressInfo = selectedRun.progressInfo as { stepDurations?: StepDurations } | null;
-                    const stepDurations = progressInfo?.stepDurations;
-                    if (stepDurations && Object.keys(stepDurations).length > 0) {
-                      const totalDuration = Object.values(stepDurations).reduce(
-                        (sum, timing) => sum + (timing?.durationMs || 0), 0
-                      );
-                      return (
-                        <div className="flex items-center gap-4 mt-3 px-1 text-xs text-muted-foreground" data-testid="step-timings">
-                          <div className="flex items-center gap-1">
-                            <Timer className="h-3 w-3" />
-                            <span>処理時間:</span>
-                          </div>
-                          {stepDurations.step2?.durationMs && (
-                            <span data-testid="timing-step2">S2: {formatDuration(stepDurations.step2.durationMs)}</span>
-                          )}
-                          {stepDurations.step3?.durationMs && (
-                            <span data-testid="timing-step3">S3: {formatDuration(stepDurations.step3.durationMs)}</span>
-                          )}
-                          {stepDurations.step4?.durationMs && (
-                            <span data-testid="timing-step4">S4: {formatDuration(stepDurations.step4.durationMs)}</span>
-                          )}
-                          {stepDurations.step5?.durationMs && (
-                            <span data-testid="timing-step5">S5: {formatDuration(stepDurations.step5.durationMs)}</span>
-                          )}
-                          {totalDuration > 0 && (
-                            <span className="font-medium" data-testid="timing-total">合計: {formatDuration(totalDuration)}</span>
-                          )}
-                        </div>
-                      );
-                    }
-                    return null;
-                  })()}
-                  
-                  {stepLabels.map(({ key }) => (
-                    <TabsContent key={key} value={key} className="mt-4 overflow-hidden">
-                      <ScrollArea className="h-[45vh] rounded-md border bg-muted/30 p-4">
-                        <div className="w-full overflow-x-auto">
-                          {key === "step5Output" ? (
-                            <pre className="text-sm font-mono whitespace-pre-wrap break-words">
-                              {selectedRun[key] || "出力がありません"}
-                            </pre>
-                          ) : (
-                            <div className="prose prose-sm dark:prose-invert max-w-none [&_table]:text-xs [&_pre]:overflow-x-auto [&_pre]:max-w-full">
-                              <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                                {selectedRun[key] || "出力がありません"}
-                              </ReactMarkdown>
+              {(() => {
+                const currentStep = selectedRun.currentStep || 2;
+                const isRunning = selectedRun.status === "running";
+                const isInterrupted = selectedRun.status === "interrupted";
+                const isError = selectedRun.status === "error";
+                const isCompleted = selectedRun.status === "completed";
+                
+                const getStepStatus = (step: number): "completed" | "running" | "pending" | "error" => {
+                  const outputKey = `step${step}Output` as keyof HypothesisRun;
+                  if (selectedRun[outputKey]) return "completed";
+                  if (isCompleted) return "completed";
+                  if (isRunning && currentStep === step) return "running";
+                  if (isError && currentStep === step) return "error";
+                  return "pending";
+                };
+                
+                const getCompletedStepCount = (): number => {
+                  let count = 0;
+                  if (selectedRun.step2Output) count++;
+                  if (selectedRun.step3Output) count++;
+                  if (selectedRun.step4Output) count++;
+                  if (selectedRun.step5Output) count++;
+                  return count;
+                };
+                
+                return (
+                  <>
+                    <div className="flex items-center justify-between gap-2 mb-3 p-3 rounded-md bg-muted/50" data-testid="progress-indicator">
+                      {stepLabels.map(({ step }, index) => {
+                        const status = getStepStatus(step);
+                        return (
+                          <div key={step} className="flex items-center gap-2 flex-1">
+                            <div className="flex items-center gap-2">
+                              {status === "completed" && (
+                                <CheckCircle className="h-4 w-4 text-green-500" />
+                              )}
+                              {status === "running" && (
+                                <Loader2 className="h-4 w-4 text-primary animate-spin" />
+                              )}
+                              {status === "error" && (
+                                <XCircle className="h-4 w-4 text-destructive" />
+                              )}
+                              {status === "pending" && (
+                                <Clock className="h-4 w-4 text-muted-foreground" />
+                              )}
+                              <span className={`text-xs font-medium ${
+                                status === "completed" ? "text-green-600 dark:text-green-400" :
+                                status === "running" ? "text-primary" :
+                                status === "error" ? "text-destructive" :
+                                "text-muted-foreground"
+                              }`}>
+                                S{step}
+                              </span>
                             </div>
-                          )}
+                            {index < stepLabels.length - 1 && (
+                              <div className={`flex-1 h-0.5 ${
+                                status === "completed" ? "bg-green-500" : "bg-muted-foreground/30"
+                              }`} />
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {isInterrupted && (
+                      <div className="flex items-center justify-between p-3 mb-3 rounded-md bg-amber-500/10 border border-amber-500/20">
+                        <div className="flex flex-col gap-1">
+                          <div className="flex items-center gap-2">
+                            <AlertTriangle className="h-4 w-4 text-amber-500" />
+                            <span className="text-sm text-amber-600 dark:text-amber-400">
+                              {selectedRun.errorMessage || "サーバー再起動により中断されました"}
+                            </span>
+                          </div>
+                          <span className="text-xs text-muted-foreground ml-6">
+                            完了済みステップ: {getCompletedStepCount()}/4
+                            {selectedRun.resumeCount && selectedRun.resumeCount > 0 && (
+                              <span className="ml-2">(再開回数: {selectedRun.resumeCount})</span>
+                            )}
+                          </span>
                         </div>
-                      </ScrollArea>
-                    </TabsContent>
-                  ))}
-                </Tabs>
-              )}
-
-              {selectedRun.status === "running" && (
-                <div className="flex flex-col items-center justify-center py-12">
-                  <Loader2 className="h-12 w-12 text-primary animate-spin mb-4" />
-                  <p className="text-sm text-muted-foreground">
-                    ステップ {selectedRun.currentStep || 2} / 5 を処理中...
-                  </p>
-                </div>
-              )}
-
-              {selectedRun.status === "error" && (
-                <div className="flex flex-col items-center justify-center py-12">
-                  <XCircle className="h-12 w-12 text-destructive mb-4" />
-                  <p className="text-sm text-destructive">
-                    {selectedRun.errorMessage || "処理中にエラーが発生しました"}
-                  </p>
-                </div>
-              )}
-
-              {selectedRun.status === "interrupted" && (
-                <div className="flex flex-col items-center justify-center py-12">
-                  <AlertTriangle className="h-12 w-12 text-amber-500 mb-4" />
-                  <p className="text-sm text-muted-foreground mb-2">
-                    {selectedRun.errorMessage || "サーバー再起動により中断されました"}
-                  </p>
-                  <p className="text-xs text-muted-foreground mb-4">
-                    完了済みステップ: {selectedRun.step4Output ? "4/5" : selectedRun.step3Output ? "3/5" : selectedRun.step2Output ? "2/5" : "0/5"}
-                    {selectedRun.resumeCount && selectedRun.resumeCount > 0 && (
-                      <span className="ml-2">(再開回数: {selectedRun.resumeCount})</span>
+                        {onResumeInterrupted && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="gap-2"
+                            onClick={() => {
+                              onResumeInterrupted(selectedRun.id);
+                              setDetailsOpen(false);
+                            }}
+                            disabled={isResuming}
+                            data-testid="button-resume-interrupted"
+                          >
+                            {isResuming ? (
+                              <>
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                                再開中...
+                              </>
+                            ) : (
+                              <>
+                                <RotateCcw className="h-3 w-3" />
+                                途中から再開
+                              </>
+                            )}
+                          </Button>
+                        )}
+                      </div>
                     )}
-                  </p>
-                  {onResumeInterrupted && (
-                    <Button
-                      variant="default"
-                      className="gap-2"
-                      onClick={() => {
-                        onResumeInterrupted(selectedRun.id);
-                        setDetailsOpen(false);
-                      }}
-                      disabled={isResuming}
-                      data-testid="button-resume-interrupted"
-                    >
-                      {isResuming ? (
-                        <>
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                          再開中...
-                        </>
-                      ) : (
-                        <>
-                          <RotateCcw className="h-4 w-4" />
-                          途中から再開
-                        </>
-                      )}
-                    </Button>
-                  )}
-                </div>
-              )}
+
+                    <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 min-w-0">
+                      <TabsList className="grid w-full grid-cols-4 shrink-0">
+                        {stepLabels.map(({ key, step }) => {
+                          const status = getStepStatus(step);
+                          const isDisabled = status === "pending";
+                          return (
+                            <TabsTrigger key={key} value={key} className="gap-1" disabled={isDisabled}>
+                              {status === "running" && (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              )}
+                              ステップ {step}
+                            </TabsTrigger>
+                          );
+                        })}
+                      </TabsList>
+                      
+                      {isCompleted && (() => {
+                        const progressInfo = selectedRun.progressInfo as { stepDurations?: StepDurations } | null;
+                        const stepDurations = progressInfo?.stepDurations;
+                        if (stepDurations && Object.keys(stepDurations).length > 0) {
+                          const totalDuration = Object.values(stepDurations).reduce(
+                            (sum, timing) => sum + (timing?.durationMs || 0), 0
+                          );
+                          return (
+                            <div className="flex items-center gap-4 mt-3 px-1 text-xs text-muted-foreground" data-testid="step-timings">
+                              <div className="flex items-center gap-1">
+                                <Timer className="h-3 w-3" />
+                                <span>処理時間:</span>
+                              </div>
+                              {stepDurations.step2?.durationMs && (
+                                <span data-testid="timing-step2">S2: {formatDuration(stepDurations.step2.durationMs)}</span>
+                              )}
+                              {stepDurations.step3?.durationMs && (
+                                <span data-testid="timing-step3">S3: {formatDuration(stepDurations.step3.durationMs)}</span>
+                              )}
+                              {stepDurations.step4?.durationMs && (
+                                <span data-testid="timing-step4">S4: {formatDuration(stepDurations.step4.durationMs)}</span>
+                              )}
+                              {stepDurations.step5?.durationMs && (
+                                <span data-testid="timing-step5">S5: {formatDuration(stepDurations.step5.durationMs)}</span>
+                              )}
+                              {totalDuration > 0 && (
+                                <span className="font-medium" data-testid="timing-total">合計: {formatDuration(totalDuration)}</span>
+                              )}
+                            </div>
+                          );
+                        }
+                        return null;
+                      })()}
+                      
+                      {stepLabels.map(({ key, step }) => {
+                        const status = getStepStatus(step);
+                        return (
+                          <TabsContent key={key} value={key} className="mt-4 overflow-hidden">
+                            <ScrollArea className="h-[45vh] rounded-md border bg-muted/30 p-4">
+                              {status === "completed" ? (
+                                <div className="w-full overflow-x-auto">
+                                  {key === "step5Output" ? (
+                                    <pre className="text-sm font-mono whitespace-pre-wrap break-words">
+                                      {selectedRun[key] || "出力がありません"}
+                                    </pre>
+                                  ) : (
+                                    <div className="prose prose-sm dark:prose-invert max-w-none [&_table]:text-xs [&_pre]:overflow-x-auto [&_pre]:max-w-full">
+                                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                        {selectedRun[key] || "出力がありません"}
+                                      </ReactMarkdown>
+                                    </div>
+                                  )}
+                                </div>
+                              ) : status === "running" ? (
+                                <div className="flex flex-col items-center justify-center h-full py-16">
+                                  <Loader2 className="h-10 w-10 text-primary animate-spin mb-4" />
+                                  <p className="text-sm text-muted-foreground">
+                                    ステップ {step} を処理中...
+                                  </p>
+                                  <p className="text-xs text-muted-foreground mt-1">
+                                    完了まで数分かかる場合があります
+                                  </p>
+                                </div>
+                              ) : status === "error" ? (
+                                <div className="flex flex-col items-center justify-center h-full py-16">
+                                  <XCircle className="h-10 w-10 text-destructive mb-4" />
+                                  <p className="text-sm text-destructive">
+                                    {selectedRun.errorMessage || "処理中にエラーが発生しました"}
+                                  </p>
+                                </div>
+                              ) : (
+                                <div className="flex flex-col items-center justify-center h-full py-16">
+                                  <Clock className="h-10 w-10 text-muted-foreground/50 mb-4" />
+                                  <p className="text-sm text-muted-foreground">
+                                    完了待ち
+                                  </p>
+                                  <p className="text-xs text-muted-foreground mt-1">
+                                    前のステップが完了すると開始されます
+                                  </p>
+                                </div>
+                              )}
+                            </ScrollArea>
+                          </TabsContent>
+                        );
+                      })}
+                    </Tabs>
+                  </>
+                );
+              })()}
             </>
           )}
 
