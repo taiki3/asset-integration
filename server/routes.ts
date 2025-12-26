@@ -558,6 +558,54 @@ export async function registerRoutes(
     }
   });
 
+  // Resume an interrupted pipeline (restart from where it stopped)
+  app.post("/api/runs/:id/resume-interrupted", isAuthenticated, requireAgcDomain, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const run = await storage.getRun(id);
+      if (!run) {
+        return res.status(404).json({ error: "Run not found" });
+      }
+      if (run.status !== "interrupted") {
+        return res.status(400).json({ error: "Run is not interrupted" });
+      }
+      
+      // Determine which step to resume from based on completed outputs
+      let resumeStep = 2;
+      if (run.step5Output) {
+        // Shouldn't happen - already completed
+        return res.status(400).json({ error: "Run already completed" });
+      } else if (run.step4Output) {
+        resumeStep = 5;
+      } else if (run.step3Output) {
+        resumeStep = 4;
+      } else if (run.step2Output) {
+        resumeStep = 3;
+      }
+      
+      // Increment resume count and reset status
+      const resumeCount = (run.resumeCount || 0) + 1;
+      await storage.updateRun(id, {
+        status: "running",
+        resumeCount,
+        errorMessage: null,
+        currentStep: resumeStep,
+      });
+      
+      console.log(`[Run ${id}] Resuming interrupted run (attempt ${resumeCount}) from step ${resumeStep}`);
+      
+      // Resume pipeline execution
+      resumePipeline(id).catch((error) => {
+        console.error("Pipeline resume error:", error);
+      });
+      
+      res.json({ message: `パイプラインをステップ${resumeStep}から再開しました`, resumeStep, resumeCount });
+    } catch (error) {
+      console.error("Error resuming interrupted run:", error);
+      res.status(500).json({ error: "Failed to resume interrupted run" });
+    }
+  });
+
   // Stop a running or paused pipeline (cannot be resumed)
   app.post("/api/runs/:id/stop", isAuthenticated, requireAgcDomain, async (req, res) => {
     try {

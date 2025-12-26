@@ -1619,18 +1619,24 @@ export async function executeGMethodPipeline(
   }
 }
 
-// Resume a paused pipeline
+// Resume a paused or running pipeline (used after pause/resume or interrupted resume)
 export async function resumePipeline(runId: number): Promise<void> {
   const run = await storage.getRun(runId);
-  if (!run || run.status !== "paused") {
-    throw new Error("Run not found or not paused");
+  if (!run) {
+    throw new Error("Run not found");
+  }
+  
+  // Allow resume if running (for interrupted resume) or paused
+  if (run.status !== "paused" && run.status !== "running") {
+    throw new Error("Run is not in a resumable state");
   }
   
   // Resume from the current step (not next step) since pause happens after step completion
   // If paused between loops, currentStep will be 2 and we resume from step 2 of the next loop
   const resumeStep = run.currentStep || 2;
   const currentLoop = run.currentLoop || 1;
-  console.log(`[Run ${runId}] Resuming from loop ${currentLoop}, step ${resumeStep}`);
+  const resumeCount = run.resumeCount || 0;
+  console.log(`[Run ${runId}] Resuming from loop ${currentLoop}, step ${resumeStep}${resumeCount > 0 ? ` (resume attempt ${resumeCount})` : ''}`);
   
   await executeGMethodPipeline(runId, resumeStep);
 }
