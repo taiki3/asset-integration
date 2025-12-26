@@ -82,6 +82,7 @@ export const hypotheses = pgTable("hypotheses", {
   contentHash: text("content_hash"), // Hash of fullData for efficient deduplication
   fullData: jsonb("full_data").notNull(), // Complete row data from Step5 - all columns stored here
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  deletedAt: timestamp("deleted_at"), // Soft delete timestamp
 });
 
 // ============= RELATIONS (declared after tables) =============

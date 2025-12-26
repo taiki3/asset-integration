@@ -677,7 +677,7 @@ export async function registerRoutes(
   app.delete("/api/hypotheses/:id", isAuthenticated, requireAgcDomain, async (req, res) => {
     try {
       const id = parseInt(req.params.id);
-      await storage.deleteHypothesis(id);
+      await storage.softDeleteHypothesis(id);
       res.status(204).send();
     } catch (error) {
       console.error("Error deleting hypothesis:", error);

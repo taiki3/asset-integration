@@ -326,10 +326,28 @@ export function HypothesesPanel({ hypotheses, resources, onDelete }: HypothesesP
       <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Lightbulb className="h-5 w-5" />
-              仮説詳細
-            </DialogTitle>
+            <div className="flex items-center justify-between gap-2">
+              <DialogTitle className="flex items-center gap-2">
+                <Lightbulb className="h-5 w-5" />
+                仮説詳細
+              </DialogTitle>
+              {selectedHypothesis && (
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  onClick={() => {
+                    if (window.confirm("この仮説を削除しますか？\n（将来の生成時に重複チェックから除外されます）")) {
+                      onDelete(selectedHypothesis.id);
+                      setDetailsOpen(false);
+                      setSelectedHypothesis(null);
+                    }
+                  }}
+                  data-testid="button-delete-hypothesis-detail"
+                >
+                  <Trash2 className="h-4 w-4 text-muted-foreground" />
+                </Button>
+              )}
+            </div>
             <DialogDescription>
               {selectedHypothesis?.displayTitle || `仮説 ${selectedHypothesis?.hypothesisNumber}`}
             </DialogDescription>

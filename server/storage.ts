@@ -46,9 +46,11 @@ export interface IStorage {
 
   // Hypotheses
   getHypothesesByProject(projectId: number): Promise<Hypothesis[]>;
+  getActiveHypothesesByProject(projectId: number): Promise<Hypothesis[]>; // Excludes soft-deleted
   createHypothesis(hypothesis: InsertHypothesis): Promise<Hypothesis>;
   createHypotheses(hypothesesData: InsertHypothesis[]): Promise<Hypothesis[]>;
-  deleteHypothesis(id: number): Promise<void>;
+  deleteHypothesis(id: number): Promise<void>; // Hard delete (legacy)
+  softDeleteHypothesis(id: number): Promise<void>; // Soft delete
   getNextHypothesisNumber(projectId: number): Promise<number>;
 
   // Prompt Versions
@@ -177,7 +179,18 @@ export class DatabaseStorage implements IStorage {
 
   // Hypotheses
   async getHypothesesByProject(projectId: number): Promise<Hypothesis[]> {
-    return db.select().from(hypotheses).where(eq(hypotheses.projectId, projectId)).orderBy(desc(hypotheses.createdAt));
+    // Returns only non-deleted hypotheses (for UI display)
+    return db.select().from(hypotheses).where(
+      and(
+        eq(hypotheses.projectId, projectId),
+        isNull(hypotheses.deletedAt)
+      )
+    ).orderBy(desc(hypotheses.createdAt));
+  }
+
+  async getActiveHypothesesByProject(projectId: number): Promise<Hypothesis[]> {
+    // Alias for clarity - excludes soft-deleted hypotheses
+    return this.getHypothesesByProject(projectId);
   }
 
   async createHypothesis(hypothesis: InsertHypothesis): Promise<Hypothesis> {
@@ -192,10 +205,17 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteHypothesis(id: number): Promise<void> {
+    // Hard delete (legacy - kept for backward compatibility)
     await db.delete(hypotheses).where(eq(hypotheses.id, id));
   }
 
+  async softDeleteHypothesis(id: number): Promise<void> {
+    // Soft delete - sets deletedAt timestamp
+    await db.update(hypotheses).set({ deletedAt: new Date() }).where(eq(hypotheses.id, id));
+  }
+
   async getNextHypothesisNumber(projectId: number): Promise<number> {
+    // Count all hypotheses including deleted ones to avoid number reuse
     const result = await db
       .select({ maxNumber: max(hypotheses.hypothesisNumber) })
       .from(hypotheses)
