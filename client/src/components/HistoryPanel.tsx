@@ -630,7 +630,7 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, 
                   </SelectTrigger>
                   <SelectContent>
                     {debugPrompts.map((entry, index) => (
-                      <SelectItem key={index} value={entry.step}>
+                      <SelectItem key={index} value={`${index}-${entry.step}`}>
                         {entry.step}
                       </SelectItem>
                     ))}
@@ -639,7 +639,8 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, 
               </div>
 
               {(() => {
-                const selectedEntry = debugPrompts.find(e => e.step === selectedDebugStep);
+                const selectedIndex = parseInt(selectedDebugStep.split('-')[0]);
+                const selectedEntry = debugPrompts[selectedIndex];
                 if (!selectedEntry) return null;
 
                 return (
