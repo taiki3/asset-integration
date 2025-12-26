@@ -435,7 +435,7 @@ export default function ProjectWorkspace({ projectId }: ProjectWorkspaceProps) {
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <Header project={project} />
-      <main className="flex-1 max-w-screen-2xl mx-auto w-full px-6 py-6">
+      <main className="flex-1 max-w-screen-2xl mx-auto w-full px-6 py-6 flex flex-col overflow-auto">
         <div className="mb-6">
           <h1 className="text-2xl font-medium" data-testid="text-project-title">
             {project.name}
@@ -465,8 +465,8 @@ export default function ProjectWorkspace({ projectId }: ProjectWorkspaceProps) {
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 min-h-[400px] lg:max-h-[calc(100vh-16rem)]">
-          <div className="lg:col-span-1 min-h-0 flex flex-col">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:h-[calc(100vh-18rem)]">
+          <div className="min-h-[400px] lg:min-h-0 lg:h-full">
             <ExecutionPanel
               targetSpecs={targetSpecs}
               technicalAssets={technicalAssets}
@@ -481,7 +481,7 @@ export default function ProjectWorkspace({ projectId }: ProjectWorkspaceProps) {
               isPending={addResourceMutation.isPending}
             />
           </div>
-          <div className="lg:col-span-1 min-h-0 flex flex-col">
+          <div className="min-h-[300px] lg:min-h-0 lg:h-full">
             <HistoryPanel
               runs={sortedRuns}
               resources={resources}
@@ -493,7 +493,7 @@ export default function ProjectWorkspace({ projectId }: ProjectWorkspaceProps) {
           </div>
         </div>
 
-        <div className="mt-6">
+        <div className="mt-6 shrink-0">
           <HypothesesPanel
             hypotheses={hypotheses}
             resources={resources}
