@@ -993,6 +993,12 @@ async function executeDeepResearchStep2(context: PipelineContext, runId: number)
       const step2_2Result = step2_2Results[i];
       const hypothesisNumber = step2_2Result.hypothesisNumber;
       const hypothesisTitle = step2_2Result.hypothesisTitle;
+      const step2_2OutputForThisHypothesis = step2_2Result.step2_2Output;
+      
+      // Debug: Log Step 2-2 output being passed to Steps 3-5
+      console.log(`[Run ${runId}] DEBUG: Passing Step 2-2 output for hypothesis ${hypothesisNumber} to Steps 3-5`);
+      console.log(`[Run ${runId}] DEBUG: Step 2-2 output length: ${step2_2OutputForThisHypothesis.length} chars`);
+      console.log(`[Run ${runId}] DEBUG: Step 2-2 output first 200 chars: ${step2_2OutputForThisHypothesis.substring(0, 200)}`);
       
       await updateProgress(runId, { 
         currentPhase: `hypothesis_${hypothesisNumber}_steps3to5`, 
@@ -1006,7 +1012,7 @@ async function executeDeepResearchStep2(context: PipelineContext, runId: number)
       const result = await processSteps3to5ForHypothesis(
         hypothesisNumber,
         hypothesisTitle,
-        step2_2Result.step2_2Output,
+        step2_2OutputForThisHypothesis,
         context,
         runId,
         startTime,
@@ -1265,6 +1271,11 @@ async function executeStep3Individual(
   technicalAssets: string,
   runId: number
 ): Promise<string> {
+  // Debug: Log what Step 2-2 report is being used
+  console.log(`[Run ${runId}] executeStep3Individual for hypothesis ${hypothesisNumber}`);
+  console.log(`[Run ${runId}] Received step2_2Report length: ${step2_2Report.length} chars`);
+  console.log(`[Run ${runId}] step2_2Report first 200 chars: ${step2_2Report.substring(0, 200)}`);
+  
   const prompt = STEP3_INDIVIDUAL_PROMPT
     .replace(/{HYPOTHESIS_NUMBER}/g, hypothesisNumber.toString())
     .replace(/{HYPOTHESIS_TITLE}/g, hypothesisTitle);
