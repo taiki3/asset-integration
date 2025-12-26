@@ -1631,6 +1631,9 @@ export async function resumePipeline(runId: number): Promise<void> {
     throw new Error("Run is not in a resumable state");
   }
   
+  // Clear any stale pause/stop requests from before the interruption
+  clearControlRequests(runId);
+  
   // Resume from the current step (not next step) since pause happens after step completion
   // If paused between loops, currentStep will be 2 and we resume from step 2 of the next loop
   const resumeStep = run.currentStep || 2;

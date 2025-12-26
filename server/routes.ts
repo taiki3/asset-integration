@@ -571,7 +571,10 @@ export async function registerRoutes(
       }
       
       // Determine which step to resume from based on completed outputs
-      let resumeStep = 2;
+      // Use currentStep as primary indicator (set by pipeline during execution)
+      // Falls back to output-based detection for older runs
+      let resumeStep = run.currentStep || 2;
+      
       if (run.step5Output) {
         // Shouldn't happen - already completed
         return res.status(400).json({ error: "Run already completed" });
@@ -580,7 +583,13 @@ export async function registerRoutes(
       } else if (run.step3Output) {
         resumeStep = 4;
       } else if (run.step2Output) {
+        // Step 2 complete, resume from step 3
         resumeStep = 3;
+      } else {
+        // Step 2 not complete - must restart from beginning of Step 2
+        // The pipeline will use any existing step2_1Output/step2_2IndividualOutputs
+        // to avoid re-running completed Deep Research substeps
+        resumeStep = 2;
       }
       
       // Increment resume count and reset status

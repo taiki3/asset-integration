@@ -65,10 +65,22 @@ Key implementation details:
 - `GET /api/projects/:projectId/runs` - List runs for project
 - `POST /api/projects/:projectId/runs` - Start new run
 - `GET /api/runs/:id` - Get run details
+- `POST /api/runs/:id/resume-interrupted` - Resume an interrupted run from where it stopped
 - `GET /api/runs/:id/download?format=tsv|xlsx` - Download results
 - `GET /api/runs/:id/download-step2-word` - Download STEP2 report as Word document
 - `GET /api/runs/:id/individual-reports` - List available STEP2-2 individual hypothesis reports
 - `GET /api/runs/:id/download-individual-report/:hypothesisIndex` - Download individual hypothesis report as Word document
+
+### Run Status Types
+- `pending` - Waiting to start
+- `running` - Currently executing
+- `paused` - User paused execution
+- `completed` - Successfully finished
+- `error` - Failed with an error
+- `interrupted` - Stopped due to server restart (SIGTERM from platform)
+
+### Resume Feature
+When a run is interrupted (status `interrupted`), users can click "途中から再開" to resume from the last completed step. The system uses `resumeCount` to track how many times a run has been resumed.
 
 ## Running the Application
 ```bash
