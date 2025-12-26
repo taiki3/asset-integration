@@ -102,6 +102,14 @@ npm run db:push    # Push database schema changes
 - `server/prompts.ts` - Gemini prompts for each step
 - `client/src/pages/Dashboard.tsx` - Main dashboard
 - `client/src/pages/ProjectWorkspace.tsx` - Project workspace
+- `client/src/components/PromptManual.tsx` - Prompt placeholder documentation
+
+## Prompt Manual
+Accessible from Settings page header. Documents for each step:
+- Model used (deep-research-pro-preview or gemini-3-pro-preview)
+- Data flow (File Search uploads vs. direct prompt embedding)
+- File uploads (target_specification, technical_assets, hypothesis_context, previous_hypotheses)
+- Placeholders with sources ({HYPOTHESIS_COUNT}, {PREVIOUS_HYPOTHESES}, {STEP2_OUTPUT}, etc.)
 
 ## Design System
 - Typography: IBM Plex Sans (body), IBM Plex Mono (code/data)
