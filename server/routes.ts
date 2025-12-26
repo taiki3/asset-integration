@@ -478,15 +478,15 @@ export async function registerRoutes(
       const projectId = parseInt(req.params.projectId);
       const { existingFilter, ...runData } = req.body;
       
-      // Generate default job name if not provided (YYMMDDHHMM format)
+      // Generate default job name if not provided (YYYYMMDDHHMM format)
       if (!runData.jobName) {
         const now = new Date();
-        const yy = String(now.getFullYear()).slice(-2);
+        const yyyy = String(now.getFullYear());
         const mm = String(now.getMonth() + 1).padStart(2, '0');
         const dd = String(now.getDate()).padStart(2, '0');
         const hh = String(now.getHours()).padStart(2, '0');
         const min = String(now.getMinutes()).padStart(2, '0');
-        runData.jobName = `${yy}${mm}${dd}${hh}${min}`;
+        runData.jobName = `${yyyy}${mm}${dd}${hh}${min}`;
       }
       
       // Set totalLoops from loopCount for pipeline execution

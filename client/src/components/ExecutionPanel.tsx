@@ -614,7 +614,7 @@ export function ExecutionPanel({
                     onChange={(e) => setJobName(e.target.value)}
                     disabled={isExecuting}
                     className="flex-1"
-                    placeholder="YYMMDDHHMM形式"
+                    placeholder="YYYYMMDDHHMM形式"
                     data-testid="input-job-name"
                   />
                 </div>

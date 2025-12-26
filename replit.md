@@ -29,7 +29,7 @@ A web application for automating the "G-Method" business hypothesis generation p
   - Deleted hypotheses are excluded from display and dedup checks during new generation
 - **hypothesis_runs**: G-Method execution history
   - Core fields: id, projectId, targetSpecId, technicalAssetsId, status, step outputs, integratedList
-  - Job naming: `jobName` (default YYMMDDHHMM format), `loopIndex` for multi-loop batches
+  - Job naming: `jobName` (default YYYYMMDDHHMM format), `loopIndex` for multi-loop batches
   - Loop tracking: `loopCount`, `currentLoop`, `totalLoops` for multi-loop execution
   - Individual reports: `step2_2IndividualOutputs` (jsonb array) stores each STEP2-2 hypothesis report separately for individual download
 
