@@ -64,6 +64,8 @@ const STEP_INFO: Record<string, StepInfo> = {
       "Deep Researchはファイル検索（File Search）機能を使用するため、入力データはFile Searchストアにアップロードされます",
       "プロンプト内で「添付ファイル target_specification を参照」のように記述すると、アップロードされたファイルが参照されます",
       "既出仮説がない場合、{PREVIOUS_HYPOTHESES}は「なし」に置換されます",
+      "設定画面でFile Searchに添付するファイルを個別に選択できます（target_specification、technical_assets）",
+      "File Search添付とプレースホルダー埋め込みは併用可能です",
     ],
   },
   "step22": {
@@ -100,6 +102,8 @@ const STEP_INFO: Record<string, StepInfo> = {
       "各仮説のレポートは個別にダウンロード可能（Word形式）",
       "レート制限を考慮して1分間隔で順次実行されます",
       "hypothesis_contextファイルには、Step 2-1で抽出された仮説情報（タイトル、カテゴリ、I/M/L/Uスコア、詳細テキスト）が含まれます",
+      "設定画面でFile Searchに添付するファイルを個別に選択できます（target_specification、technical_assets、hypothesis_context）",
+      "File Search添付とプレースホルダー埋め込みは併用可能です",
     ],
   },
   "step23": {

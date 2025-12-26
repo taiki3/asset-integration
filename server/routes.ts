@@ -924,6 +924,97 @@ export async function registerRoutes(
     }
   });
 
+  // Available files for File Search per step
+  // Each step can attach input files and/or previous step outputs
+  interface AvailableFile {
+    id: string;
+    name: string;
+    description: string;
+    category: 'input' | 'step_output';
+  }
+  
+  const AVAILABLE_FILES_BY_STEP: Record<number, AvailableFile[]> = {
+    21: [
+      { id: 'target_specification', name: 'ターゲット仕様書', description: '対象市場・顧客要件の仕様書', category: 'input' },
+      { id: 'technical_assets', name: '技術資産リスト', description: '保有技術・素材のリスト', category: 'input' },
+      { id: 'previous_hypotheses', name: '既出仮説', description: '過去に生成された仮説リスト（重複回避用、存在する場合のみ）', category: 'step_output' },
+    ],
+    22: [
+      { id: 'target_specification', name: 'ターゲット仕様書', description: '対象市場・顧客要件の仕様書', category: 'input' },
+      { id: 'technical_assets', name: '技術資産リスト', description: '保有技術・素材のリスト', category: 'input' },
+      { id: 'hypothesis_context', name: '仮説コンテキスト', description: 'STEP2-1で選定された仮説の詳細', category: 'step_output' },
+    ],
+    3: [
+      { id: 'target_specification', name: 'ターゲット仕様書', description: '対象市場・顧客要件の仕様書', category: 'input' },
+      { id: 'technical_assets', name: '技術資産リスト', description: '保有技術・素材のリスト', category: 'input' },
+      { id: 'step2_output', name: 'STEP2出力', description: 'STEP2で生成された仮説レポート', category: 'step_output' },
+    ],
+    4: [
+      { id: 'target_specification', name: 'ターゲット仕様書', description: '対象市場・顧客要件の仕様書', category: 'input' },
+      { id: 'technical_assets', name: '技術資産リスト', description: '保有技術・素材のリスト', category: 'input' },
+      { id: 'step2_output', name: 'STEP2出力', description: 'STEP2で生成された仮説レポート', category: 'step_output' },
+      { id: 'step3_output', name: 'STEP3出力', description: 'STEP3の科学的評価結果', category: 'step_output' },
+    ],
+    5: [
+      { id: 'target_specification', name: 'ターゲット仕様書', description: '対象市場・顧客要件の仕様書', category: 'input' },
+      { id: 'technical_assets', name: '技術資産リスト', description: '保有技術・素材のリスト', category: 'input' },
+      { id: 'step2_output', name: 'STEP2出力', description: 'STEP2で生成された仮説レポート', category: 'step_output' },
+      { id: 'step3_output', name: 'STEP3出力', description: 'STEP3の科学的評価結果', category: 'step_output' },
+      { id: 'step4_output', name: 'STEP4出力', description: 'STEP4の戦略監査結果', category: 'step_output' },
+    ],
+  };
+
+  // Get available files and current attachment settings for a step
+  app.get("/api/file-attachments/:stepNumber", isAuthenticated, requireAgcDomain, async (req, res) => {
+    try {
+      const stepNumber = parseInt(req.params.stepNumber);
+      if (![21, 22, 3, 4, 5].includes(stepNumber)) {
+        return res.status(400).json({ error: "Invalid step number" });
+      }
+
+      const availableFiles = AVAILABLE_FILES_BY_STEP[stepNumber] || [];
+      const setting = await storage.getStepFileAttachment(stepNumber);
+      const attachedFiles = (setting?.attachedFiles as string[]) || [];
+
+      res.json({
+        stepNumber,
+        availableFiles,
+        attachedFiles,
+      });
+    } catch (error) {
+      console.error("Error fetching file attachments:", error);
+      res.status(500).json({ error: "Failed to fetch file attachments" });
+    }
+  });
+
+  // Update file attachment settings for a step
+  app.put("/api/file-attachments/:stepNumber", isAuthenticated, requireAgcDomain, async (req, res) => {
+    try {
+      const stepNumber = parseInt(req.params.stepNumber);
+      if (![21, 22, 3, 4, 5].includes(stepNumber)) {
+        return res.status(400).json({ error: "Invalid step number" });
+      }
+
+      const { attachedFiles } = req.body;
+      if (!Array.isArray(attachedFiles)) {
+        return res.status(400).json({ error: "attachedFiles must be an array" });
+      }
+
+      // Validate that all files are valid for this step
+      const availableIds = (AVAILABLE_FILES_BY_STEP[stepNumber] || []).map(f => f.id);
+      const invalidFiles = attachedFiles.filter((id: string) => !availableIds.includes(id));
+      if (invalidFiles.length > 0) {
+        return res.status(400).json({ error: `Invalid file IDs: ${invalidFiles.join(', ')}` });
+      }
+
+      const setting = await storage.setStepFileAttachment(stepNumber, attachedFiles);
+      res.json(setting);
+    } catch (error) {
+      console.error("Error updating file attachments:", error);
+      res.status(500).json({ error: "Failed to update file attachments" });
+    }
+  });
+
   app.get("/api/prompts/:stepNumber", isAuthenticated, requireAgcDomain, async (req, res) => {
     try {
       const stepNumber = parseInt(req.params.stepNumber);

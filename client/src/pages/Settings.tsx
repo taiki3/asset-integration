@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { ArrowLeft, Save, RotateCcw, Check, Download } from "lucide-react";
+import { ArrowLeft, Save, RotateCcw, Check, Download, FileText, Paperclip } from "lucide-react";
 import { Link } from "wouter";
 import { Header } from "@/components/Header";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
@@ -21,6 +22,19 @@ interface ExportedPrompt {
   isCustom: boolean;
   version: number | null;
   content: string;
+}
+
+interface AvailableFile {
+  id: string;
+  name: string;
+  description: string;
+  category: 'input' | 'step_output';
+}
+
+interface FileAttachmentData {
+  stepNumber: number;
+  availableFiles: AvailableFile[];
+  attachedFiles: string[];
 }
 
 interface PromptData {
@@ -49,6 +63,43 @@ export default function Settings() {
   const { data: promptData, isLoading } = useQuery<PromptData>({
     queryKey: [`/api/prompts/${selectedStep}`],
   });
+
+  const { data: fileAttachmentData, isLoading: isLoadingAttachments } = useQuery<FileAttachmentData>({
+    queryKey: ['/api/file-attachments', selectedStep],
+    queryFn: async () => {
+      const res = await fetch(`/api/file-attachments/${selectedStep}`, { credentials: 'include' });
+      if (!res.ok) throw new Error('Failed to fetch');
+      return res.json();
+    },
+  });
+
+  const updateAttachmentsMutation = useMutation({
+    mutationFn: async (attachedFiles: string[]) => {
+      const res = await apiRequest("PUT", `/api/file-attachments/${selectedStep}`, { attachedFiles });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/file-attachments', selectedStep] });
+      toast({
+        title: "添付ファイル設定を保存しました",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "エラー",
+        description: "添付ファイル設定の保存に失敗しました。",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleToggleFileAttachment = (fileId: string) => {
+    const currentAttached = fileAttachmentData?.attachedFiles || [];
+    const newAttached = currentAttached.includes(fileId)
+      ? currentAttached.filter(id => id !== fileId)
+      : [...currentAttached, fileId];
+    updateAttachmentsMutation.mutate(newAttached);
+  };
 
   useEffect(() => {
     if (promptData) {
@@ -329,6 +380,60 @@ export default function Settings() {
                 </div>
               ) : (
                 <>
+                  <div className="border rounded-md p-4 bg-muted/30 space-y-3">
+                    <div className="flex items-center gap-2">
+                      <Paperclip className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm font-medium">File Search 添付ファイル設定</span>
+                      <span className="text-xs text-muted-foreground">
+                        （選択したファイルはAIがFile Searchで参照可能）
+                      </span>
+                    </div>
+                    {isLoadingAttachments ? (
+                      <div className="text-sm text-muted-foreground">読み込み中...</div>
+                    ) : fileAttachmentData && fileAttachmentData.availableFiles.length > 0 ? (
+                      <div className="space-y-2">
+                        {['input', 'step_output'].map(category => {
+                          const categoryFiles = fileAttachmentData.availableFiles.filter(f => f.category === category);
+                          if (categoryFiles.length === 0) return null;
+                          return (
+                            <div key={category} className="space-y-1">
+                              <div className="text-xs text-muted-foreground font-medium">
+                                {category === 'input' ? '入力ファイル' : '前ステップの出力'}
+                              </div>
+                              {categoryFiles.map(file => (
+                                <div key={file.id} className="flex items-start gap-3 pl-2">
+                                  <Checkbox
+                                    id={`file-${file.id}`}
+                                    checked={(fileAttachmentData.attachedFiles || []).includes(file.id)}
+                                    onCheckedChange={() => handleToggleFileAttachment(file.id)}
+                                    disabled={updateAttachmentsMutation.isPending}
+                                    data-testid={`checkbox-file-${file.id}`}
+                                  />
+                                  <label 
+                                    htmlFor={`file-${file.id}`}
+                                    className="text-sm cursor-pointer flex-1"
+                                  >
+                                    <span className="font-medium">{file.name}</span>
+                                    <span className="text-muted-foreground ml-2 text-xs">
+                                      — {file.description}
+                                    </span>
+                                  </label>
+                                </div>
+                              ))}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="text-sm text-muted-foreground">
+                        このステップでは添付ファイルを設定できません。
+                      </div>
+                    )}
+                    <p className="text-xs text-muted-foreground pt-2 border-t">
+                      File Searchを使用すると、選択したファイルの内容をAIが検索して参照できます。
+                      プロンプト内のプレースホルダー（{'{'}STEP2_OUTPUT{'}'}等）による埋め込みも引き続き使用可能です。
+                    </p>
+                  </div>
                   <Textarea
                     value={editContent || currentPrompt || ""}
                     onChange={(e) => setEditContent(e.target.value)}

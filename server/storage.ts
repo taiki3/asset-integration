@@ -9,11 +9,13 @@ import {
   type InsertHypothesis,
   type PromptVersion,
   type InsertPromptVersion,
+  type StepFileAttachment,
   projects,
   resources,
   hypothesisRuns,
   hypotheses,
   promptVersions,
+  stepFileAttachments,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, max, or, and, ne, inArray, isNull } from "drizzle-orm";
@@ -58,6 +60,10 @@ export interface IStorage {
   getActivePrompt(stepNumber: number): Promise<PromptVersion | undefined>;
   createPromptVersion(prompt: InsertPromptVersion): Promise<PromptVersion>;
   activatePromptVersion(id: number): Promise<PromptVersion | undefined>;
+
+  // Step File Attachments
+  getStepFileAttachment(stepNumber: number): Promise<StepFileAttachment | undefined>;
+  setStepFileAttachment(stepNumber: number, attachedFiles: string[]): Promise<StepFileAttachment>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -268,6 +274,29 @@ export class DatabaseStorage implements IStorage {
       .where(eq(promptVersions.id, id))
       .returning();
     return updated;
+  }
+
+  // Step File Attachments
+  async getStepFileAttachment(stepNumber: number): Promise<StepFileAttachment | undefined> {
+    const [setting] = await db.select().from(stepFileAttachments)
+      .where(eq(stepFileAttachments.stepNumber, stepNumber));
+    return setting;
+  }
+
+  async setStepFileAttachment(stepNumber: number, attachedFiles: string[]): Promise<StepFileAttachment> {
+    const existing = await this.getStepFileAttachment(stepNumber);
+    if (existing) {
+      const [updated] = await db.update(stepFileAttachments)
+        .set({ attachedFiles, updatedAt: new Date() })
+        .where(eq(stepFileAttachments.stepNumber, stepNumber))
+        .returning();
+      return updated;
+    } else {
+      const [created] = await db.insert(stepFileAttachments)
+        .values({ stepNumber, attachedFiles })
+        .returning();
+      return created;
+    }
   }
 }
 

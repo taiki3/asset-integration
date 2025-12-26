@@ -69,6 +69,14 @@ export const promptVersions = pgTable("prompt_versions", {
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 
+// Step File Attachments - Configuration for which files to attach via File Search per step
+export const stepFileAttachments = pgTable("step_file_attachments", {
+  id: serial("id").primaryKey(),
+  stepNumber: integer("step_number").notNull().unique(), // 21, 22, 3, 4, 5
+  attachedFiles: jsonb("attached_files").notNull().default([]), // Array of file IDs to attach
+  updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
 // Hypotheses - Stored hypotheses from completed runs for deduplication
 // Flexible schema: fullData (JSONB) stores all columns dynamically based on STEP5 prompt output
 export const hypotheses = pgTable("hypotheses", {
@@ -174,6 +182,11 @@ export const insertPromptVersionSchema = createInsertSchema(promptVersions).omit
   createdAt: true,
 });
 
+export const insertStepFileAttachmentSchema = createInsertSchema(stepFileAttachments).omit({
+  id: true,
+  updatedAt: true,
+});
+
 // ============= TYPES =============
 
 export type Project = typeof projects.$inferSelect;
@@ -186,6 +199,8 @@ export type Hypothesis = typeof hypotheses.$inferSelect;
 export type InsertHypothesis = z.infer<typeof insertHypothesisSchema>;
 export type PromptVersion = typeof promptVersions.$inferSelect;
 export type InsertPromptVersion = z.infer<typeof insertPromptVersionSchema>;
+export type StepFileAttachment = typeof stepFileAttachments.$inferSelect;
+export type InsertStepFileAttachment = z.infer<typeof insertStepFileAttachmentSchema>;
 
 // Re-export chat models for Gemini integration
 export * from "./models/chat";

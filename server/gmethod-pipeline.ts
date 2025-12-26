@@ -88,6 +88,28 @@ function getDeepResearchPrompt(): string {
   return STEP2_DEEP_RESEARCH_PROMPT;
 }
 
+// Get file attachment settings for a step
+async function getFileAttachments(stepNumber: number): Promise<string[]> {
+  try {
+    const setting = await storage.getStepFileAttachment(stepNumber);
+    if (setting && Array.isArray(setting.attachedFiles)) {
+      return setting.attachedFiles as string[];
+    }
+  } catch (error) {
+    console.log(`[Pipeline] Error fetching file attachment settings for Step ${stepNumber}, using defaults`);
+  }
+  // Default: attach all available files if no settings configured (backward compatible)
+  // Note: previous_hypotheses for Step 2-1 is handled separately in the pipeline
+  const defaults: Record<number, string[]> = {
+    21: ['target_specification', 'technical_assets', 'previous_hypotheses'],
+    22: ['target_specification', 'technical_assets', 'hypothesis_context'],
+    3: ['target_specification', 'technical_assets', 'step2_output'],
+    4: ['target_specification', 'technical_assets', 'step2_output', 'step3_output'],
+    5: ['target_specification', 'technical_assets', 'step2_output', 'step3_output', 'step4_output'],
+  };
+  return defaults[stepNumber] || [];
+}
+
 // Get Deep Research prompts for 2-stage execution
 async function getDeepResearchPrompt2_1(): Promise<string> {
   try {
@@ -803,14 +825,27 @@ async function executeDeepResearchStep2(context: PipelineContext, runId: number)
     fileSearchStoreName1 = await createFileSearchStore(`gmethod-run-${runId}-step2-1-${Date.now()}`);
     console.log(`[Run ${runId}] Created File Search Store for Step 2-1: ${fileSearchStoreName1}`);
 
-    await uploadTextToFileSearchStore(fileSearchStoreName1, context.targetSpec, "target_specification");
-    console.log(`[Run ${runId}] Uploaded target specification`);
+    // Get configured file attachments for Step 2-1
+    const step2_1FileConfig = await getFileAttachments(21);
+    const step2_1Attachments: string[] = [];
+    console.log(`[Run ${runId}] Step 2-1 file attachment config: ${step2_1FileConfig.join(', ') || 'none'}`);
 
-    await uploadTextToFileSearchStore(fileSearchStoreName1, context.technicalAssets, "technical_assets");
-    console.log(`[Run ${runId}] Uploaded technical assets`);
+    if (step2_1FileConfig.includes('target_specification')) {
+      await uploadTextToFileSearchStore(fileSearchStoreName1, context.targetSpec, "target_specification");
+      step2_1Attachments.push("target_specification");
+      console.log(`[Run ${runId}] Uploaded target specification`);
+    }
 
-    if (context.previousHypotheses) {
+    if (step2_1FileConfig.includes('technical_assets')) {
+      await uploadTextToFileSearchStore(fileSearchStoreName1, context.technicalAssets, "technical_assets");
+      step2_1Attachments.push("technical_assets");
+      console.log(`[Run ${runId}] Uploaded technical assets`);
+    }
+
+    // Upload previous hypotheses if configured AND if they exist
+    if (step2_1FileConfig.includes('previous_hypotheses') && context.previousHypotheses) {
       await uploadTextToFileSearchStore(fileSearchStoreName1, context.previousHypotheses, "previous_hypotheses");
+      step2_1Attachments.push("previous_hypotheses");
       console.log(`[Run ${runId}] Uploaded previous hypotheses`);
     }
 
@@ -825,8 +860,6 @@ async function executeDeepResearchStep2(context: PipelineContext, runId: number)
     console.log(`[Run ${runId}] Step 2-1 Prompt: ${researchPrompt2_1.length} chars`);
 
     // Save debug prompt for Step 2-1
-    const step2_1Attachments = ["target_specification", "technical_assets"];
-    if (context.previousHypotheses) step2_1Attachments.push("previous_hypotheses");
     await addDebugPrompt(runId, "Step 2-1 (発散・選定)", researchPrompt2_1, step2_1Attachments);
 
     await updateProgress(runId, { 
@@ -912,7 +945,7 @@ async function executeDeepResearchStep2(context: PipelineContext, runId: number)
       fileSearchStores.push(storeName);
       console.log(`[Run ${runId}] Created File Search Store for Hypothesis ${hypothesisNum}: ${storeName}`);
 
-      // Upload context for this specific hypothesis
+      // Upload context for this specific hypothesis based on file attachment settings
       const hypothesisContext = `【対象仮説】
 仮説番号: ${hypothesisNum}
 タイトル: ${hypothesis.title}
@@ -925,9 +958,22 @@ ${hypothesis.rawText}
 【Step 2-1全体の監査ストリップ（参考）】
 ${step2_1Output}`;
 
-      await uploadTextToFileSearchStore(storeName, hypothesisContext, "hypothesis_context");
-      await uploadTextToFileSearchStore(storeName, context.targetSpec, "target_specification");
-      await uploadTextToFileSearchStore(storeName, context.technicalAssets, "technical_assets");
+      // Get configured file attachments for Step 2-2
+      const step2_2FileConfig = await getFileAttachments(22);
+      const step2_2Attachments: string[] = [];
+
+      if (step2_2FileConfig.includes('hypothesis_context')) {
+        await uploadTextToFileSearchStore(storeName, hypothesisContext, "hypothesis_context");
+        step2_2Attachments.push("hypothesis_context");
+      }
+      if (step2_2FileConfig.includes('target_specification')) {
+        await uploadTextToFileSearchStore(storeName, context.targetSpec, "target_specification");
+        step2_2Attachments.push("target_specification");
+      }
+      if (step2_2FileConfig.includes('technical_assets')) {
+        await uploadTextToFileSearchStore(storeName, context.technicalAssets, "technical_assets");
+        step2_2Attachments.push("technical_assets");
+      }
       
       // Customize prompt for this specific hypothesis
       const individualPrompt = researchPrompt2_2Template
@@ -936,8 +982,7 @@ ${step2_1Output}`;
         .replace(/{HYPOTHESIS_TITLE}/g, hypothesis.title);
       
       // Save debug prompt for each Step 2-2 hypothesis
-      await addDebugPrompt(runId, `Step 2-2 仮説${hypothesisNum} (${hypothesis.title})`, individualPrompt, 
-        ["hypothesis_context", "target_specification", "technical_assets"]);
+      await addDebugPrompt(runId, `Step 2-2 仮説${hypothesisNum} (${hypothesis.title})`, individualPrompt, step2_2Attachments);
       
       try {
         // Execute Deep Research for this hypothesis
