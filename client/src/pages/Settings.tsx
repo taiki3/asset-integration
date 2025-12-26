@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { ArrowLeft, Save, RotateCcw, Check } from "lucide-react";
+import { ArrowLeft, Save, RotateCcw, Check, Download } from "lucide-react";
 import { Link } from "wouter";
 import { Header } from "@/components/Header";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,14 @@ import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import type { PromptVersion } from "@shared/schema";
 import { PromptManual } from "@/components/PromptManual";
+
+interface ExportedPrompt {
+  stepNumber: number;
+  stepName: string;
+  isCustom: boolean;
+  version: number | null;
+  content: string;
+}
 
 interface PromptData {
   stepNumber: number;
@@ -136,6 +144,66 @@ export default function Settings() {
     ? promptData.versions.find(v => v.id === promptData.activeId)?.content
     : promptData?.defaultPrompt;
 
+  const [isExporting, setIsExporting] = useState(false);
+
+  const handleExportPrompts = async () => {
+    setIsExporting(true);
+    try {
+      const res = await apiRequest("GET", "/api/prompts/export");
+      const prompts: ExportedPrompt[] = await res.json();
+      
+      const lines: string[] = [];
+      lines.push("# G-Method カスタムプロンプト一覧");
+      lines.push("");
+      lines.push(`エクスポート日時: ${format(new Date(), "yyyy/MM/dd HH:mm:ss")}`);
+      lines.push("");
+      lines.push("---");
+      lines.push("");
+
+      for (const prompt of prompts) {
+        lines.push(`## ${prompt.stepName}`);
+        lines.push("");
+        if (prompt.isCustom) {
+          lines.push(`> カスタムプロンプト（v${prompt.version}）を使用中`);
+        } else {
+          lines.push("> デフォルトプロンプトを使用中");
+        }
+        lines.push("");
+        lines.push("```");
+        lines.push(prompt.content);
+        lines.push("```");
+        lines.push("");
+        lines.push("---");
+        lines.push("");
+      }
+
+      const content = lines.join("\n");
+      const blob = new Blob([content], { type: "text/markdown;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `gmethod-prompts-${format(new Date(), "yyyyMMdd-HHmmss")}.md`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      toast({
+        title: "エクスポート完了",
+        description: "プロンプト一覧をMarkdownファイルでダウンロードしました。",
+      });
+    } catch (error) {
+      console.error("Export error:", error);
+      toast({
+        title: "エラー",
+        description: "プロンプトのエクスポートに失敗しました。",
+        variant: "destructive",
+      });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <Header />
@@ -156,7 +224,20 @@ export default function Settings() {
               </p>
             </div>
           </div>
-          <PromptManual />
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              onClick={handleExportPrompts}
+              disabled={isExporting}
+              data-testid="button-export-prompts"
+            >
+              <Download className="h-4 w-4" />
+              {isExporting ? "エクスポート中..." : "プロンプト一覧"}
+            </Button>
+            <PromptManual />
+          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
