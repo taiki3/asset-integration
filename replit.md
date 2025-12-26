@@ -34,20 +34,21 @@ A web application for automating the "G-Method" business hypothesis generation p
   - Individual reports: `step2_2IndividualOutputs` (jsonb array) stores each STEP2-2 hypothesis report separately for individual download
 
 ## G-Method Pipeline
-The pipeline uses a Per-Hypothesis Full Pipeline architecture where each hypothesis is processed through all steps sequentially before moving to the next.
+The pipeline uses a hybrid parallel/sequential architecture: Step 2-2 runs in parallel for all hypotheses, then Steps 3→4→5 are processed sequentially for each.
 
-### Pipeline Architecture (Per-Hypothesis Sequential Processing)
+### Pipeline Architecture (Parallel Step 2-2 + Sequential Steps 3-5)
 1. **Step 2-1 (発散・選定)**: One AI generates 30+ hypotheses and selects Top N using I/M/L/U criteria (weights: I:40%, M:30%, L:15%, U:15%)
-2. **Per-Hypothesis Full Processing**: For each selected hypothesis (1 to N):
-   - **Step 2-2**: Deep Research for detailed hypothesis analysis
+2. **Step 2-2 (並列Deep Research)**: N個のDeep Research タスクが**並列**で実行
+3. **Steps 3→4→5 (順次処理)**: 各仮説について順次実行
    - **Step 3**: Scientific/economic evaluation (Dr. Kill-Switch)
    - **Step 4**: Strategic audit (War Gaming Mode)
    - **Step 5**: TSV row extraction for this hypothesis
-3. **Aggregation**: All individual outputs are combined into final reports and TSV
+4. **Aggregation**: All individual outputs are combined into final reports and TSV
 
 Key implementation details:
 - `extractHypothesesFromStep2_1()`: Robust parser with multi-attempt extraction, regex fallback, and strict count validation
-- `processHypothesisFull()`: Executes complete 2-2→3→4→5 pipeline for a single hypothesis
+- `executeStep2_2ForHypothesis()`: Executes Step 2-2 Deep Research for a single hypothesis (can run in parallel)
+- `processSteps3to5ForHypothesis()`: Executes Steps 3→4→5 sequentially for a single hypothesis
 - `executeStep3Individual()`, `executeStep4Individual()`, `executeStep5Individual()`: Per-hypothesis step execution functions
 - Individual outputs stored in jsonb arrays: `step2_2IndividualOutputs`, `step3IndividualOutputs`, `step4IndividualOutputs`, `step5IndividualOutputs`
 - Final TSV is built by aggregating all individual Step 5 outputs with a header row

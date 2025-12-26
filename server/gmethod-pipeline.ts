@@ -53,6 +53,21 @@ export function clearControlRequests(runId: number): void {
   stopRequests.delete(runId);
 }
 
+// Custom error classes for pause/stop control flow
+export class PauseRequestedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'PauseRequestedError';
+  }
+}
+
+export class StopRequestedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'StopRequestedError';
+  }
+}
+
 // Deep Research rate limiting is now handled by shared module (deep-research.ts)
 
 // Get prompt for a step - uses DB version if available, otherwise default
@@ -761,6 +776,16 @@ async function runDeepResearchPhase(
     pollCount++;
     await sleep(pollInterval);
 
+    // Cooperative cancellation check during polling
+    if (isStopRequested(runId)) {
+      console.log(`[Run ${runId}] ${phaseName}: Stop requested during polling, aborting`);
+      throw new StopRequestedError(`${phaseName} が停止リクエストにより中断されました`);
+    }
+    if (isPauseRequested(runId)) {
+      console.log(`[Run ${runId}] ${phaseName}: Pause requested during polling, aborting`);
+      throw new PauseRequestedError(`${phaseName} が一時停止リクエストにより中断されました`);
+    }
+
     try {
       const currentStatus = await (client as any).interactions.get(interactionId);
       const status = currentStatus.status;
@@ -900,8 +925,8 @@ async function executeDeepResearchStep2(context: PipelineContext, runId: number)
       fileSearchStoreName1 = null;
     }
 
-    // ===== PHASE 2: Per-Hypothesis Full Pipeline (Step 2-2 → 3 → 4 → 5 for each) =====
-    console.log(`[Run ${runId}] === PHASE 2: Per-Hypothesis Full Pipeline (${context.hypothesisCount}仮説を順次処理: 2-2→3→4→5) ===`);
+    // ===== PHASE 2: Parallel Step 2-2 Deep Research for all hypotheses =====
+    console.log(`[Run ${runId}] === PHASE 2: Parallel Step 2-2 Deep Research (${context.hypothesisCount}仮説を並列処理) ===`);
     
     const phase2StartTime = Date.now();
     
@@ -909,40 +934,79 @@ async function executeDeepResearchStep2(context: PipelineContext, runId: number)
     await updateProgress(runId, { 
       currentPhase: "extracting_hypotheses", 
       currentIteration: 1, 
-      maxIterations: context.hypothesisCount * 4 + 1, // 4 steps per hypothesis + extraction
+      maxIterations: context.hypothesisCount + 3, // Step 2-2 parallel + Steps 3-5 sequential per hypothesis
       planningAnalysis: "Step 2-1の結果から個別仮説を抽出中...",
       stepTimings,
       stepStartTime: startTime,
     });
 
     const extractedHypotheses = await extractHypothesesFromStep2_1(step2_1Output, context.hypothesisCount);
-    console.log(`[Run ${runId}] Extracted ${extractedHypotheses.length} hypotheses for sequential processing`);
+    console.log(`[Run ${runId}] Extracted ${extractedHypotheses.length} hypotheses for parallel Step 2-2 processing`);
 
-    // Process each hypothesis through the full pipeline (2-2 → 3 → 4 → 5) sequentially
+    // Run Step 2-2 Deep Research in PARALLEL for all hypotheses
+    await updateProgress(runId, { 
+      currentPhase: "step2_2_parallel", 
+      currentIteration: 2, 
+      maxIterations: context.hypothesisCount + 3,
+      planningAnalysis: `Step 2-2: ${extractedHypotheses.length}個の仮説を並列でDeep Research実行中...`,
+      stepTimings,
+      stepStartTime: startTime,
+    });
+
+    const step2_2Promises = extractedHypotheses.map((hypothesis, i) => 
+      executeStep2_2ForHypothesis(
+        client,
+        hypothesis,
+        i + 1,
+        step2_1Output,
+        context,
+        runId,
+        startTime
+      )
+    );
+
+    const step2_2Results = await Promise.all(step2_2Promises);
+    stepTimings["step2_2_parallel"] = Date.now() - phase2StartTime;
+    console.log(`[Run ${runId}] All ${step2_2Results.length} Step 2-2 Deep Research completed in parallel`);
+
+    // Save Step 2-2 individual outputs immediately
+    const step2_2IndividualOutputs = step2_2Results.map(r => r.step2_2Output);
+    await storage.updateRun(runId, { step2_2IndividualOutputs });
+
+    // Check for pause/stop request after parallel Step 2-2
+    const runStatusCheck = await storage.getRun(runId);
+    if (runStatusCheck?.status === "paused" || runStatusCheck?.status === "error") {
+      console.log(`[Run ${runId}] Run status is ${runStatusCheck.status}, aborting before Phase 3`);
+      throw new Error(`処理が中断されました: ${runStatusCheck.status}`);
+    }
+
+    // ===== PHASE 3: Sequential Steps 3→4→5 for each hypothesis =====
+    console.log(`[Run ${runId}] === PHASE 3: Sequential Steps 3→4→5 (${context.hypothesisCount}仮説を順次処理) ===`);
+    
+    const phase3StartTime = Date.now();
     const allResults: PerHypothesisResult[] = [];
-    const step2_2IndividualOutputs: string[] = [];
     const step3IndividualOutputs: string[] = [];
     const step4IndividualOutputs: string[] = [];
     const step5IndividualOutputs: string[] = [];
     
-    for (let i = 0; i < extractedHypotheses.length; i++) {
-      const hypothesisNumber = i + 1;
-      const hypothesis = extractedHypotheses[i];
+    for (let i = 0; i < step2_2Results.length; i++) {
+      const step2_2Result = step2_2Results[i];
+      const hypothesisNumber = step2_2Result.hypothesisNumber;
+      const hypothesisTitle = step2_2Result.hypothesisTitle;
       
       await updateProgress(runId, { 
-        currentPhase: `hypothesis_${hypothesisNumber}_processing`, 
-        currentIteration: i * 4 + 2, 
-        maxIterations: context.hypothesisCount * 4 + 1,
-        planningAnalysis: `仮説${hypothesisNumber}/${extractedHypotheses.length}「${hypothesis.title}」を処理中...`,
+        currentPhase: `hypothesis_${hypothesisNumber}_steps3to5`, 
+        currentIteration: i + 3, 
+        maxIterations: context.hypothesisCount + 3,
+        planningAnalysis: `仮説${hypothesisNumber}/${step2_2Results.length}「${hypothesisTitle}」: Steps 3→4→5 実行中...`,
         stepTimings,
         stepStartTime: startTime,
       });
       
-      const result = await processHypothesisFull(
-        client,
-        hypothesis,
+      const result = await processSteps3to5ForHypothesis(
         hypothesisNumber,
-        step2_1Output,
+        hypothesisTitle,
+        step2_2Result.step2_2Output,
         context,
         runId,
         startTime,
@@ -950,16 +1014,16 @@ async function executeDeepResearchStep2(context: PipelineContext, runId: number)
       );
       
       allResults.push(result);
-      step2_2IndividualOutputs.push(result.step2_2Output);
       step3IndividualOutputs.push(result.step3Output);
       step4IndividualOutputs.push(result.step4Output);
       step5IndividualOutputs.push(result.step5Output);
       
-      console.log(`[Run ${runId}] Hypothesis ${hypothesisNumber}/${extractedHypotheses.length} fully processed`);
+      console.log(`[Run ${runId}] Hypothesis ${hypothesisNumber}/${step2_2Results.length} Steps 3→4→5 completed`);
     }
     
-    stepTimings["phase2_all_hypotheses"] = Date.now() - phase2StartTime;
-    console.log(`[Run ${runId}] All ${allResults.length} hypotheses processed through full pipeline`);
+    stepTimings["phase3_steps3to5"] = Date.now() - phase3StartTime;
+    stepTimings["phase2_total"] = Date.now() - phase2StartTime;
+    console.log(`[Run ${runId}] All ${allResults.length} hypotheses fully processed`);
 
     // ===== Aggregate outputs =====
     // Combine Step 2-2 outputs into a single report (for backward compatibility and display)
@@ -1040,6 +1104,18 @@ ${step2_2Output}`;
       step5IndividualOutputs,
     };
   } catch (error: any) {
+    // Handle pause/stop cancellation errors specially - update run status and exit gracefully
+    if (error instanceof PauseRequestedError) {
+      console.log(`[Run ${runId}] Deep Research paused by user request:`, error.message);
+      await storage.updateRun(runId, { status: "paused" });
+      throw error; // Re-throw so caller knows it was paused
+    }
+    if (error instanceof StopRequestedError) {
+      console.log(`[Run ${runId}] Deep Research stopped by user request:`, error.message);
+      // Use dedicated 'stopped' status for clean user-initiated termination (not a failure)
+      await storage.updateRun(runId, { status: "stopped" });
+      throw error; // Re-throw so caller knows it was stopped
+    }
     console.error(`[Run ${runId}] Three-Phase Deep Research failed:`, error);
     throw new Error(`Deep Research APIの起動に失敗しました: ${error?.message || error}`);
   } finally {
@@ -1270,33 +1346,33 @@ ${step4Output}`;
   return generateWithFlash(fullPrompt);
 }
 
-// Process a single hypothesis through Steps 2-2 → 3 → 4 → 5
-async function processHypothesisFull(
+// Execute Step 2-2 Deep Research for a single hypothesis (can be run in parallel)
+async function executeStep2_2ForHypothesis(
   client: any,
   hypothesis: ExtractedHypothesisFromStep2_1,
   hypothesisNumber: number,
   step2_1Output: string,
   context: PipelineContext,
   runId: number,
-  startTime: number,
-  stepTimings: { [key: string]: number }
-): Promise<PerHypothesisResult> {
+  startTime: number
+): Promise<{ hypothesisNumber: number; hypothesisTitle: string; step2_2Output: string }> {
   const hypothesisTitle = hypothesis.title;
-  console.log(`[Run ${runId}] Processing Hypothesis ${hypothesisNumber}: ${hypothesisTitle}`);
+  
+  // Check for pause/stop before starting Deep Research - throw to abort entire parallel batch
+  if (isStopRequested(runId)) {
+    console.log(`[Run ${runId}] Stop requested, aborting Step 2-2 for Hypothesis ${hypothesisNumber}`);
+    throw new StopRequestedError(`仮説${hypothesisNumber}のStep 2-2が停止リクエストにより中断されました`);
+  }
+  if (isPauseRequested(runId)) {
+    console.log(`[Run ${runId}] Pause requested, aborting Step 2-2 for Hypothesis ${hypothesisNumber}`);
+    throw new PauseRequestedError(`仮説${hypothesisNumber}のStep 2-2が一時停止リクエストにより中断されました`);
+  }
+  
+  console.log(`[Run ${runId}] Starting Step 2-2 for Hypothesis ${hypothesisNumber}: ${hypothesisTitle}`);
   
   let storeName: string | null = null;
   
   try {
-    // === Step 2-2: Deep Research for this hypothesis ===
-    const step2_2Start = Date.now();
-    
-    await updateProgress(runId, { 
-      currentPhase: `hypothesis_${hypothesisNumber}_step2_2`, 
-      planningAnalysis: `仮説${hypothesisNumber}「${hypothesisTitle}」: Step 2-2 Deep Research実行中...`,
-      stepTimings,
-      stepStartTime: startTime,
-    });
-    
     storeName = await createFileSearchStore(`gmethod-run-${runId}-h${hypothesisNumber}-${Date.now()}`);
     console.log(`[Run ${runId}] Created File Search Store for Hypothesis ${hypothesisNumber}: ${storeName}`);
 
@@ -1348,120 +1424,135 @@ ${step2_1Output}`;
     await deleteFileSearchStore(storeName);
     storeName = null;
     
-    stepTimings[`h${hypothesisNumber}_step2_2`] = Date.now() - step2_2Start;
     console.log(`[Run ${runId}] Hypothesis ${hypothesisNumber} Step 2-2 completed (${step2_2Report.length} chars)`);
     
-    // === Step 3: Scientific Evaluation for this hypothesis ===
-    let step3Output = "";
-    try {
-      const step3Start = Date.now();
-      
-      await updateProgress(runId, { 
-        currentPhase: `hypothesis_${hypothesisNumber}_step3`, 
-        planningAnalysis: `仮説${hypothesisNumber}「${hypothesisTitle}」: Step 3 科学的評価実行中...`,
-        stepTimings,
-        stepStartTime: startTime,
-      });
-      
-      step3Output = await executeStep3Individual(
-        hypothesisNumber,
-        hypothesisTitle,
-        step2_2Report,
-        context.targetSpec,
-        context.technicalAssets,
-        runId
-      );
-      
-      stepTimings[`h${hypothesisNumber}_step3`] = Date.now() - step3Start;
-      console.log(`[Run ${runId}] Hypothesis ${hypothesisNumber} Step 3 completed (${step3Output.length} chars)`);
-    } catch (step3Error: any) {
-      console.error(`[Run ${runId}] Hypothesis ${hypothesisNumber} Step 3 failed:`, step3Error);
-      step3Output = `【Step 3エラー】仮説${hypothesisNumber}の科学的評価に失敗: ${step3Error?.message || step3Error}`;
-    }
-    
-    // === Step 4: Strategic Audit for this hypothesis ===
-    let step4Output = "";
-    try {
-      const step4Start = Date.now();
-      
-      await updateProgress(runId, { 
-        currentPhase: `hypothesis_${hypothesisNumber}_step4`, 
-        planningAnalysis: `仮説${hypothesisNumber}「${hypothesisTitle}」: Step 4 戦略監査実行中...`,
-        stepTimings,
-        stepStartTime: startTime,
-      });
-      
-      step4Output = await executeStep4Individual(
-        hypothesisNumber,
-        hypothesisTitle,
-        step2_2Report,
-        step3Output,
-        context.targetSpec,
-        context.technicalAssets,
-        runId
-      );
-      
-      stepTimings[`h${hypothesisNumber}_step4`] = Date.now() - step4Start;
-      console.log(`[Run ${runId}] Hypothesis ${hypothesisNumber} Step 4 completed (${step4Output.length} chars)`);
-    } catch (step4Error: any) {
-      console.error(`[Run ${runId}] Hypothesis ${hypothesisNumber} Step 4 failed:`, step4Error);
-      step4Output = `【Step 4エラー】仮説${hypothesisNumber}の戦略監査に失敗: ${step4Error?.message || step4Error}`;
-    }
-    
-    // === Step 5: TSV Row Generation for this hypothesis ===
-    let step5Output = "";
-    try {
-      const step5Start = Date.now();
-      
-      await updateProgress(runId, { 
-        currentPhase: `hypothesis_${hypothesisNumber}_step5`, 
-        planningAnalysis: `仮説${hypothesisNumber}「${hypothesisTitle}」: Step 5 データ抽出実行中...`,
-        stepTimings,
-        stepStartTime: startTime,
-      });
-      
-      step5Output = await executeStep5Individual(
-        hypothesisNumber,
-        hypothesisTitle,
-        step2_2Report,
-        step3Output,
-        step4Output,
-        runId
-      );
-      
-      stepTimings[`h${hypothesisNumber}_step5`] = Date.now() - step5Start;
-      console.log(`[Run ${runId}] Hypothesis ${hypothesisNumber} Step 5 completed (${step5Output.length} chars)`);
-    } catch (step5Error: any) {
-      console.error(`[Run ${runId}] Hypothesis ${hypothesisNumber} Step 5 failed:`, step5Error);
-      step5Output = `${hypothesisNumber}\t${hypothesisTitle}\t【エラー】データ抽出失敗`;
-    }
-    
     return {
       hypothesisNumber,
       hypothesisTitle,
-      step2_2Output: step2_2Report,
-      step3Output,
-      step4Output,
-      step5Output: step5Output.trim()
+      step2_2Output: step2_2Report
     };
-    
   } catch (error: any) {
-    console.error(`[Run ${runId}] Hypothesis ${hypothesisNumber} processing failed:`, error);
-    
+    console.error(`[Run ${runId}] Hypothesis ${hypothesisNumber} Step 2-2 failed:`, error);
     if (storeName) {
-      await deleteFileSearchStore(storeName);
+      await deleteFileSearchStore(storeName).catch(e => console.error("Failed to cleanup store:", e));
     }
-    
-    // Return error result
+    // Re-throw pause/stop errors so they bubble up and halt the parallel execution
+    if (error instanceof PauseRequestedError || error instanceof StopRequestedError) {
+      throw error;
+    }
     return {
       hypothesisNumber,
       hypothesisTitle,
-      step2_2Output: `【エラー】処理に失敗: ${error?.message || error}`,
-      step3Output: "",
-      step4Output: "",
-      step5Output: ""
+      step2_2Output: `【Step 2-2エラー】仮説${hypothesisNumber}のDeep Research失敗: ${error?.message || error}`
     };
   }
+}
+
+// Process Steps 3 → 4 → 5 for a single hypothesis (after Step 2-2 is complete)
+async function processSteps3to5ForHypothesis(
+  hypothesisNumber: number,
+  hypothesisTitle: string,
+  step2_2Output: string,
+  context: PipelineContext,
+  runId: number,
+  startTime: number,
+  stepTimings: { [key: string]: number }
+): Promise<PerHypothesisResult> {
+  console.log(`[Run ${runId}] Processing Steps 3-5 for Hypothesis ${hypothesisNumber}: ${hypothesisTitle}`);
+  
+  // === Step 3: Scientific Evaluation for this hypothesis ===
+  let step3Output = "";
+  try {
+    const step3Start = Date.now();
+    
+    await updateProgress(runId, { 
+      currentPhase: `hypothesis_${hypothesisNumber}_step3`, 
+      planningAnalysis: `仮説${hypothesisNumber}「${hypothesisTitle}」: Step 3 科学的評価実行中...`,
+      stepTimings,
+      stepStartTime: startTime,
+    });
+    
+    step3Output = await executeStep3Individual(
+      hypothesisNumber,
+      hypothesisTitle,
+      step2_2Output,
+      context.targetSpec,
+      context.technicalAssets,
+      runId
+    );
+    
+    stepTimings[`h${hypothesisNumber}_step3`] = Date.now() - step3Start;
+    console.log(`[Run ${runId}] Hypothesis ${hypothesisNumber} Step 3 completed (${step3Output.length} chars)`);
+  } catch (step3Error: any) {
+    console.error(`[Run ${runId}] Hypothesis ${hypothesisNumber} Step 3 failed:`, step3Error);
+    step3Output = `【Step 3エラー】仮説${hypothesisNumber}の科学的評価に失敗: ${step3Error?.message || step3Error}`;
+  }
+  
+  // === Step 4: Strategic Audit for this hypothesis ===
+  let step4Output = "";
+  try {
+    const step4Start = Date.now();
+    
+    await updateProgress(runId, { 
+      currentPhase: `hypothesis_${hypothesisNumber}_step4`, 
+      planningAnalysis: `仮説${hypothesisNumber}「${hypothesisTitle}」: Step 4 戦略監査実行中...`,
+      stepTimings,
+      stepStartTime: startTime,
+    });
+    
+    step4Output = await executeStep4Individual(
+      hypothesisNumber,
+      hypothesisTitle,
+      step2_2Output,
+      step3Output,
+      context.targetSpec,
+      context.technicalAssets,
+      runId
+    );
+    
+    stepTimings[`h${hypothesisNumber}_step4`] = Date.now() - step4Start;
+    console.log(`[Run ${runId}] Hypothesis ${hypothesisNumber} Step 4 completed (${step4Output.length} chars)`);
+  } catch (step4Error: any) {
+    console.error(`[Run ${runId}] Hypothesis ${hypothesisNumber} Step 4 failed:`, step4Error);
+    step4Output = `【Step 4エラー】仮説${hypothesisNumber}の戦略監査に失敗: ${step4Error?.message || step4Error}`;
+  }
+  
+  // === Step 5: TSV Row Generation for this hypothesis ===
+  let step5Output = "";
+  try {
+    const step5Start = Date.now();
+    
+    await updateProgress(runId, { 
+      currentPhase: `hypothesis_${hypothesisNumber}_step5`, 
+      planningAnalysis: `仮説${hypothesisNumber}「${hypothesisTitle}」: Step 5 データ抽出実行中...`,
+      stepTimings,
+      stepStartTime: startTime,
+    });
+    
+    step5Output = await executeStep5Individual(
+      hypothesisNumber,
+      hypothesisTitle,
+      step2_2Output,
+      step3Output,
+      step4Output,
+      runId
+    );
+    
+    stepTimings[`h${hypothesisNumber}_step5`] = Date.now() - step5Start;
+    console.log(`[Run ${runId}] Hypothesis ${hypothesisNumber} Step 5 completed (${step5Output.length} chars)`);
+  } catch (step5Error: any) {
+    console.error(`[Run ${runId}] Hypothesis ${hypothesisNumber} Step 5 failed:`, step5Error);
+    step5Output = `${hypothesisNumber}\t${hypothesisTitle}\t【エラー】データ抽出失敗`;
+  }
+  
+  return {
+    hypothesisNumber,
+    hypothesisTitle,
+    step2_2Output,
+    step3Output,
+    step4Output,
+    step5Output: step5Output.trim()
+  };
 }
 
 function parseTSVToJSON(tsv: string): Record<string, string>[] {
