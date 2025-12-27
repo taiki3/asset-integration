@@ -242,7 +242,13 @@ async function uploadTextToFileSearchStore(
   
   const tempDir = os.tmpdir();
   const tempFile = path.join(tempDir, `${displayName.replace(/[^a-zA-Z0-9]/g, '_')}.txt`);
-  fs.writeFileSync(tempFile, content, 'utf-8');
+  
+  // Convert to Buffer first to ensure consistent byte size handling
+  const contentBuffer = Buffer.from(content, 'utf-8');
+  fs.writeFileSync(tempFile, contentBuffer);
+  
+  const fileSize = fs.statSync(tempFile).size;
+  console.log(`[FileSearch] Uploading ${displayName}: ${content.length} chars, ${fileSize} bytes`);
   
   try {
     let operation = await (client as any).fileSearchStores.uploadToFileSearchStore({
@@ -259,7 +265,7 @@ async function uploadTextToFileSearchStore(
       operation = await (client as any).operations.get({ operation });
     }
     
-    console.log(`Uploaded file to store: ${displayName}`);
+    console.log(`[FileSearch] Uploaded file to store: ${displayName} (${fileSize} bytes)`);
     return displayName;
   } finally {
     if (fs.existsSync(tempFile)) {
@@ -293,7 +299,13 @@ async function uploadTextFile(content: string, displayName: string): Promise<Upl
   
   const tempDir = os.tmpdir();
   const tempFile = path.join(tempDir, `${displayName.replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}.txt`);
-  fs.writeFileSync(tempFile, content, 'utf-8');
+  
+  // Convert to Buffer first to ensure consistent byte size handling
+  const contentBuffer = Buffer.from(content, 'utf-8');
+  fs.writeFileSync(tempFile, contentBuffer);
+  
+  const fileSize = fs.statSync(tempFile).size;
+  console.log(`[FileUpload] Uploading ${displayName}: ${content.length} chars, ${fileSize} bytes`);
   
   try {
     const file = await client.files.upload({
@@ -304,7 +316,7 @@ async function uploadTextFile(content: string, displayName: string): Promise<Upl
       }
     });
     
-    console.log(`Uploaded file: ${displayName} as ${file.name}`);
+    console.log(`[FileUpload] Uploaded file: ${displayName} as ${file.name} (${fileSize} bytes)`);
     return {
       name: file.name || '',
       uri: file.uri || '',
