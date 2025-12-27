@@ -739,6 +739,52 @@ export async function registerRoutes(
     }
   });
 
+  // Import hypotheses from CSV
+  app.post("/api/projects/:projectId/hypotheses/import", isAuthenticated, requireAgcDomain, async (req, res) => {
+    try {
+      const projectId = parseInt(req.params.projectId);
+      const { rows, columnMapping } = req.body as {
+        rows: Record<string, string>[];
+        columnMapping: Record<string, string>; // CSV column -> app column
+      };
+
+      if (!rows || !Array.isArray(rows) || rows.length === 0) {
+        return res.status(400).json({ error: "No data rows provided" });
+      }
+
+      // Get next hypothesis number
+      let nextNumber = await storage.getNextHypothesisNumber(projectId);
+
+      // Transform rows based on column mapping
+      const hypothesesToCreate = rows.map((row) => {
+        const fullData: Record<string, string> = {};
+        
+        // Map CSV columns to app columns
+        for (const [csvCol, appCol] of Object.entries(columnMapping)) {
+          if (appCol && row[csvCol] !== undefined) {
+            fullData[appCol] = row[csvCol];
+          }
+        }
+
+        // Extract display title from first text column
+        const displayTitle = Object.values(fullData)[0] || "";
+
+        return {
+          projectId,
+          hypothesisNumber: nextNumber++,
+          displayTitle: String(displayTitle).slice(0, 200),
+          fullData,
+        };
+      });
+
+      const created = await storage.createHypotheses(hypothesesToCreate);
+      res.json({ imported: created.length, hypotheses: created });
+    } catch (error) {
+      console.error("Error importing hypotheses:", error);
+      res.status(500).json({ error: "Failed to import hypotheses" });
+    }
+  });
+
   // Download endpoints
   app.get("/api/runs/:id/download", isAuthenticated, requireAgcDomain, async (req, res) => {
     try {
