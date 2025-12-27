@@ -581,6 +581,15 @@ interface StepTiming {
   durationMs?: number;
 }
 
+interface ParallelItem {
+  hypothesisNumber: number;
+  hypothesisTitle: string;
+  status: "waiting" | "running" | "completed" | "error";
+  currentStep?: string;
+  startTime?: number;
+  endTime?: number;
+}
+
 interface ProgressInfo {
   planningAnalysis?: string;
   planningQueries?: string[];
@@ -596,6 +605,7 @@ interface ProgressInfo {
     step4?: StepTiming;
     step5?: StepTiming;
   };
+  parallelItems?: ParallelItem[];
 }
 
 async function updateProgress(runId: number, progressInfo: ProgressInfo): Promise<void> {
@@ -622,6 +632,38 @@ async function updateStepDuration(
   const stepDurations = existingProgress.stepDurations || {};
   stepDurations[stepKey] = timing;
   await updateProgress(runId, { stepDurations });
+}
+
+async function updateParallelItemStatus(
+  runId: number,
+  hypothesisNumber: number,
+  updates: Partial<ParallelItem>
+): Promise<void> {
+  const run = await storage.getRun(runId);
+  const existingProgress = (run?.progressInfo as ProgressInfo) || {};
+  const parallelItems = existingProgress.parallelItems || [];
+  
+  const itemIndex = parallelItems.findIndex(item => item.hypothesisNumber === hypothesisNumber);
+  if (itemIndex >= 0) {
+    parallelItems[itemIndex] = { ...parallelItems[itemIndex], ...updates };
+  }
+  
+  await storage.updateRun(runId, { 
+    progressInfo: { ...existingProgress, parallelItems } 
+  });
+}
+
+async function initializeParallelItems(
+  runId: number,
+  hypotheses: { number: number; title: string }[]
+): Promise<void> {
+  const parallelItems: ParallelItem[] = hypotheses.map(h => ({
+    hypothesisNumber: h.number,
+    hypothesisTitle: h.title.length > 40 ? h.title.substring(0, 40) + "..." : h.title,
+    status: "waiting" as const,
+  }));
+  
+  await updateProgress(runId, { parallelItems });
 }
 
 // Extended DeepResearchResult to include 2-phase outputs
@@ -1051,6 +1093,12 @@ async function executeDeepResearchStep2(context: PipelineContext, runId: number)
     const extractedHypotheses = await extractHypothesesFromStep2_1(step2_1Output, context.hypothesisCount);
     console.log(`[Run ${runId}] Extracted ${extractedHypotheses.length} hypotheses for parallel Step 2-2 processing`);
 
+    // Initialize parallel items for UI visualization
+    await initializeParallelItems(runId, extractedHypotheses.map(h => ({ 
+      number: h.number, 
+      title: h.title 
+    })));
+
     // Run Step 2-2 Deep Research in PARALLEL for all hypotheses
     await updateProgress(runId, { 
       currentPhase: "step2_2_parallel", 
@@ -1062,7 +1110,7 @@ async function executeDeepResearchStep2(context: PipelineContext, runId: number)
     });
 
     const step2_2Promises = extractedHypotheses.map((hypothesis, i) => 
-      executeStep2_2ForHypothesis(
+      executeStep2_2ForHypothesisWithProgress(
         client,
         hypothesis,
         i + 1,
@@ -1093,6 +1141,12 @@ async function executeDeepResearchStep2(context: PipelineContext, runId: number)
     
     const phase3StartTime = Date.now();
     
+    // Reset parallel items for Phase 3 visualization
+    await initializeParallelItems(runId, step2_2Results.map(r => ({ 
+      number: r.hypothesisNumber, 
+      title: r.hypothesisTitle 
+    })));
+    
     await updateProgress(runId, { 
       currentPhase: "steps3to5_parallel", 
       currentIteration: 3, 
@@ -1111,7 +1165,7 @@ async function executeDeepResearchStep2(context: PipelineContext, runId: number)
       console.log(`[Run ${runId}] Starting parallel Steps 3-5 for hypothesis ${hypothesisNumber}: ${hypothesisTitle}`);
       console.log(`[Run ${runId}] DEBUG: Step 2-2 output length: ${step2_2OutputForThisHypothesis.length} chars`);
       
-      return processSteps3to5ForHypothesis(
+      return processSteps3to5ForHypothesisWithProgress(
         client,
         hypothesisNumber,
         hypothesisTitle,
@@ -1751,6 +1805,51 @@ ${step2_1Output}`;
   }
 }
 
+// Wrapper function that reports progress for parallel visualization
+async function executeStep2_2ForHypothesisWithProgress(
+  client: any,
+  hypothesis: ExtractedHypothesisFromStep2_1,
+  hypothesisNumber: number,
+  step2_1Output: string,
+  context: PipelineContext,
+  runId: number,
+  startTime: number
+): Promise<{ hypothesisNumber: number; hypothesisTitle: string; step2_2Output: string; durationMs: number }> {
+  // Mark as running
+  await updateParallelItemStatus(runId, hypothesis.number, {
+    status: "running",
+    currentStep: "Step 2-2",
+    startTime: Date.now(),
+  });
+  
+  try {
+    const result = await executeStep2_2ForHypothesis(
+      client,
+      hypothesis,
+      hypothesisNumber,
+      step2_1Output,
+      context,
+      runId,
+      startTime
+    );
+    
+    // Mark as completed
+    await updateParallelItemStatus(runId, hypothesis.number, {
+      status: "completed",
+      endTime: Date.now(),
+    });
+    
+    return result;
+  } catch (error) {
+    // Mark as error
+    await updateParallelItemStatus(runId, hypothesis.number, {
+      status: "error",
+      endTime: Date.now(),
+    });
+    throw error;
+  }
+}
+
 // Process Steps 3 → 4 → 5 for a single hypothesis (after Step 2-2 is complete)
 async function processSteps3to5ForHypothesis(
   client: GoogleGenAI,
@@ -1879,6 +1978,53 @@ async function processSteps3to5ForHypothesis(
       totalMs
     }
   };
+}
+
+// Wrapper function that reports progress for parallel visualization
+async function processSteps3to5ForHypothesisWithProgress(
+  client: GoogleGenAI,
+  hypothesisNumber: number,
+  hypothesisTitle: string,
+  step2_2Output: string,
+  context: PipelineContext,
+  runId: number,
+  startTime: number,
+  stepTimings: { [key: string]: number }
+): Promise<PerHypothesisResult> {
+  // Mark as running
+  await updateParallelItemStatus(runId, hypothesisNumber, {
+    status: "running",
+    currentStep: "Steps 3-5",
+    startTime: Date.now(),
+  });
+  
+  try {
+    const result = await processSteps3to5ForHypothesis(
+      client,
+      hypothesisNumber,
+      hypothesisTitle,
+      step2_2Output,
+      context,
+      runId,
+      startTime,
+      stepTimings
+    );
+    
+    // Mark as completed
+    await updateParallelItemStatus(runId, hypothesisNumber, {
+      status: "completed",
+      endTime: Date.now(),
+    });
+    
+    return result;
+  } catch (error) {
+    // Mark as error
+    await updateParallelItemStatus(runId, hypothesisNumber, {
+      status: "error",
+      endTime: Date.now(),
+    });
+    throw error;
+  }
 }
 
 function parseTSVToJSON(tsv: string): Record<string, string>[] {
