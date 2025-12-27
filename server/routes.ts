@@ -937,6 +937,126 @@ export async function registerRoutes(
     }
   });
 
+  // Get available STEP 3 individual reports for a run
+  app.get("/api/runs/:id/step3-reports", isAuthenticated, requireAgcDomain, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const run = await storage.getRun(id);
+      
+      if (!run) {
+        return res.status(404).json({ error: "Run not found" });
+      }
+      
+      const individualOutputs = run.step3IndividualOutputs as string[] | null;
+      if (!individualOutputs || !Array.isArray(individualOutputs)) {
+        return res.json({ available: false, count: 0, reports: [] });
+      }
+      
+      const reports = individualOutputs.map((report, index) => {
+        const titleMatch = report.match(/(?:^|\n)#+\s*(?:仮説\s*\d+[:\s]*)?(.+?)(?:\n|$)/);
+        const title = titleMatch ? titleMatch[1].trim().slice(0, 100) : `仮説${index + 1}`;
+        const hasError = report.includes("エラー") || report.includes("失敗");
+        
+        return { index, title, previewLength: report.length, hasError };
+      });
+      
+      res.json({ available: true, count: individualOutputs.length, reports });
+    } catch (error) {
+      console.error("Error fetching step3 reports:", error);
+      res.status(500).json({ error: "Failed to fetch step3 reports" });
+    }
+  });
+
+  // Get STEP 3 individual report content for preview
+  app.get("/api/runs/:id/step3-reports/:hypothesisIndex/content", isAuthenticated, requireAgcDomain, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const hypothesisIndex = parseInt(req.params.hypothesisIndex);
+      const run = await storage.getRun(id);
+      
+      if (!run) {
+        return res.status(404).json({ error: "Run not found" });
+      }
+      
+      const individualOutputs = run.step3IndividualOutputs as string[] | null;
+      if (!individualOutputs || !Array.isArray(individualOutputs)) {
+        return res.status(404).json({ error: "STEP3個別レポートが利用できません" });
+      }
+      
+      if (hypothesisIndex < 0 || hypothesisIndex >= individualOutputs.length) {
+        return res.status(400).json({ error: `仮説インデックスが無効です。範囲: 0-${individualOutputs.length - 1}` });
+      }
+      
+      const content = individualOutputs[hypothesisIndex];
+      const hasError = content.includes("エラー") || content.includes("失敗");
+      
+      res.json({ content, hasError });
+    } catch (error) {
+      console.error("Error fetching step3 report content:", error);
+      res.status(500).json({ error: "Failed to fetch step3 report content" });
+    }
+  });
+
+  // Get available STEP 4 individual reports for a run
+  app.get("/api/runs/:id/step4-reports", isAuthenticated, requireAgcDomain, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const run = await storage.getRun(id);
+      
+      if (!run) {
+        return res.status(404).json({ error: "Run not found" });
+      }
+      
+      const individualOutputs = run.step4IndividualOutputs as string[] | null;
+      if (!individualOutputs || !Array.isArray(individualOutputs)) {
+        return res.json({ available: false, count: 0, reports: [] });
+      }
+      
+      const reports = individualOutputs.map((report, index) => {
+        const titleMatch = report.match(/(?:^|\n)#+\s*(?:仮説\s*\d+[:\s]*)?(.+?)(?:\n|$)/);
+        const title = titleMatch ? titleMatch[1].trim().slice(0, 100) : `仮説${index + 1}`;
+        const hasError = report.includes("エラー") || report.includes("失敗");
+        
+        return { index, title, previewLength: report.length, hasError };
+      });
+      
+      res.json({ available: true, count: individualOutputs.length, reports });
+    } catch (error) {
+      console.error("Error fetching step4 reports:", error);
+      res.status(500).json({ error: "Failed to fetch step4 reports" });
+    }
+  });
+
+  // Get STEP 4 individual report content for preview
+  app.get("/api/runs/:id/step4-reports/:hypothesisIndex/content", isAuthenticated, requireAgcDomain, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const hypothesisIndex = parseInt(req.params.hypothesisIndex);
+      const run = await storage.getRun(id);
+      
+      if (!run) {
+        return res.status(404).json({ error: "Run not found" });
+      }
+      
+      const individualOutputs = run.step4IndividualOutputs as string[] | null;
+      if (!individualOutputs || !Array.isArray(individualOutputs)) {
+        return res.status(404).json({ error: "STEP4個別レポートが利用できません" });
+      }
+      
+      if (hypothesisIndex < 0 || hypothesisIndex >= individualOutputs.length) {
+        return res.status(400).json({ error: `仮説インデックスが無効です。範囲: 0-${individualOutputs.length - 1}` });
+      }
+      
+      const content = individualOutputs[hypothesisIndex];
+      const hasError = content.includes("エラー") || content.includes("失敗");
+      
+      res.json({ content, hasError });
+    } catch (error) {
+      console.error("Error fetching step4 report content:", error);
+      res.status(500).json({ error: "Failed to fetch step4 report content" });
+    }
+  });
+
   // Debug Prompts API - Get actual prompts used in a run
   app.get("/api/runs/:id/debug-prompts", isAuthenticated, requireAgcDomain, async (req, res) => {
     try {
