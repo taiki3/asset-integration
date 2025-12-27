@@ -6,6 +6,7 @@ import { STEP2_PROMPT, STEP2_1_DEEP_RESEARCH_PROMPT, STEP2_2_DEEP_RESEARCH_PROMP
 import { executeGMethodPipeline, executeReprocessPipeline, requestPause, requestResume, requestStop, resumePipeline, isRunActive, getActiveRunIds, forceReleaseAllLocks } from "./gmethod-pipeline";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, TableRow, TableCell, Table, WidthType, BorderStyle } from "docx";
+import archiver from "archiver";
 
 // Server start time for version tracking
 const SERVER_START_TIME = new Date().toISOString();
@@ -1041,6 +1042,113 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error fetching individual report content:", error);
       res.status(500).json({ error: "Failed to fetch individual report content" });
+    }
+  });
+
+  // Bulk download all Word reports for a project's hypotheses as ZIP
+  app.get("/api/projects/:projectId/hypotheses/download-all-reports", isAuthenticated, requireAgcDomain, async (req, res) => {
+    try {
+      const projectId = parseInt(req.params.projectId);
+      const project = await storage.getProject(projectId);
+      
+      if (!project) {
+        return res.status(404).json({ error: "Project not found" });
+      }
+      
+      const hypotheses = await storage.getHypothesesByProject(projectId);
+      if (hypotheses.length === 0) {
+        return res.status(400).json({ error: "仮説がありません" });
+      }
+      
+      // Group hypotheses by runId to fetch reports efficiently
+      const hypothesesByRun = new Map<number, typeof hypotheses>();
+      for (const h of hypotheses) {
+        if (h.runId) {
+          if (!hypothesesByRun.has(h.runId)) {
+            hypothesesByRun.set(h.runId, []);
+          }
+          hypothesesByRun.get(h.runId)!.push(h);
+        }
+      }
+      
+      // Fetch all runs and their individual outputs
+      const runReports = new Map<number, { outputs: string[], titles: string[] }>();
+      for (const runId of hypothesesByRun.keys()) {
+        const run = await storage.getRun(runId);
+        if (run) {
+          const outputs = run.step2_2IndividualOutputs as string[] | null;
+          const titles = run.step2_2IndividualTitles as string[] | null;
+          if (outputs && Array.isArray(outputs)) {
+            runReports.set(runId, {
+              outputs,
+              titles: titles || outputs.map((_, i) => `仮説${i + 1}`)
+            });
+          }
+        }
+      }
+      
+      // Create ZIP archive
+      const archive = archiver("zip", { zlib: { level: 9 } });
+      
+      res.setHeader("Content-Type", "application/zip");
+      res.setHeader("Content-Disposition", `attachment; filename="hypotheses-reports-${project.name}.zip"`);
+      
+      archive.pipe(res);
+      
+      // Helper to sanitize filename
+      const sanitizeFilename = (name: string): string => {
+        return name
+          .replace(/[<>:"/\\|?*]/g, "_")
+          .replace(/\s+/g, "_")
+          .slice(0, 100);
+      };
+      
+      let reportCount = 0;
+      
+      // Generate Word documents for each hypothesis
+      for (const hypothesis of hypotheses) {
+        if (!hypothesis.runId) continue;
+        
+        const runData = runReports.get(hypothesis.runId);
+        if (!runData) continue;
+        
+        // Calculate the index of this hypothesis within its run
+        const sameRunHypotheses = hypotheses
+          .filter(h => h.runId === hypothesis.runId)
+          .sort((a, b) => a.hypothesisNumber - b.hypothesisNumber);
+        const indexInRun = sameRunHypotheses.findIndex(h => h.id === hypothesis.id);
+        
+        if (indexInRun < 0 || indexInRun >= runData.outputs.length) continue;
+        
+        const report = runData.outputs[indexInRun];
+        
+        // Skip error reports
+        if (report.includes("Deep Researchの実行に失敗しました") || 
+            report.includes("APIの起動に失敗しました")) {
+          continue;
+        }
+        
+        const title = hypothesis.displayTitle || runData.titles[indexInRun] || `仮説${hypothesis.hypothesisNumber}`;
+        const filename = `${String(hypothesis.hypothesisNumber).padStart(3, "0")}_${sanitizeFilename(title)}.docx`;
+        
+        try {
+          const docBuffer = await convertMarkdownToWord(report, title);
+          archive.append(docBuffer, { name: filename });
+          reportCount++;
+        } catch (docError) {
+          console.error(`Error generating Word for hypothesis ${hypothesis.hypothesisNumber}:`, docError);
+        }
+      }
+      
+      if (reportCount === 0) {
+        archive.abort();
+        return res.status(400).json({ error: "ダウンロード可能なレポートがありません" });
+      }
+      
+      await archive.finalize();
+    } catch (error) {
+      console.error("Error downloading all reports:", error);
+      res.status(500).json({ error: "Failed to download reports" });
     }
   });
 
