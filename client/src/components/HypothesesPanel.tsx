@@ -1,5 +1,7 @@
-import { useState, useMemo } from "react";
-import { Lightbulb, ChevronDown, ChevronUp, Trash2, LayoutGrid, Table, Download, FileText } from "lucide-react";
+import { useState, useMemo, useEffect } from "react";
+import { Lightbulb, ChevronDown, ChevronUp, Trash2, LayoutGrid, Table, Download, FileText, Settings } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -52,11 +54,15 @@ function getDisplayValue(data: FullDataRow, keys: string[]): string {
   return "";
 }
 
+const COLUMN_SETTINGS_KEY = "hypotheses-display-columns";
+
 export function HypothesesPanel({ hypotheses, resources, onDelete, onDownloadWord }: HypothesesPanelProps) {
   const [isOpen, setIsOpen] = useState(true);
   const [viewMode, setViewMode] = useState<ViewMode>("card");
   const [selectedHypothesis, setSelectedHypothesis] = useState<Hypothesis | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [columnSettingsOpen, setColumnSettingsOpen] = useState(false);
+  const [selectedColumns, setSelectedColumns] = useState<Set<string>>(new Set());
 
   const allColumns = useMemo(() => {
     const columnSet = new Set<string>();
@@ -67,9 +73,36 @@ export function HypothesesPanel({ hypotheses, resources, onDelete, onDownloadWor
     return Array.from(columnSet);
   }, [hypotheses]);
 
-  const displayColumns = useMemo(() => {
-    return allColumns.slice(0, 6);
+  // Load saved column settings from localStorage
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(COLUMN_SETTINGS_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved) as string[];
+        // Only keep columns that actually exist in current data
+        const validColumns = parsed.filter(col => allColumns.includes(col));
+        if (validColumns.length > 0) {
+          setSelectedColumns(new Set(validColumns));
+          return;
+        }
+      }
+    } catch {
+      // Ignore parse errors
+    }
+    // Default: first 6 columns
+    setSelectedColumns(new Set(allColumns.slice(0, 6)));
   }, [allColumns]);
+
+  // Save column settings to localStorage
+  const saveColumnSettings = (columns: Set<string>) => {
+    setSelectedColumns(columns);
+    localStorage.setItem(COLUMN_SETTINGS_KEY, JSON.stringify(Array.from(columns)));
+  };
+
+  const displayColumns = useMemo(() => {
+    // Maintain order from allColumns, filter by selectedColumns
+    return allColumns.filter(col => selectedColumns.has(col));
+  }, [allColumns, selectedColumns]);
 
   const getResourceName = (resourceId: number | null): string => {
     if (!resourceId) return "-";
@@ -270,11 +303,24 @@ export function HypothesesPanel({ hypotheses, resources, onDelete, onDownloadWor
                   {hypotheses.length}件
                 </Badge>
               </div>
-              {isOpen ? (
-                <ChevronUp className="h-4 w-4 text-muted-foreground" />
-              ) : (
-                <ChevronDown className="h-4 w-4 text-muted-foreground" />
-              )}
+              <div className="flex items-center gap-1">
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setColumnSettingsOpen(true);
+                  }}
+                  data-testid="button-column-settings"
+                >
+                  <Settings className="h-4 w-4 text-muted-foreground" />
+                </Button>
+                {isOpen ? (
+                  <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                ) : (
+                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                )}
+              </div>
             </CardTitle>
           </CardHeader>
         </CollapsibleTrigger>
@@ -403,6 +449,81 @@ export function HypothesesPanel({ hypotheses, resources, onDelete, onDownloadWor
               </Button>
             )}
             <Button variant="outline" onClick={() => setDetailsOpen(false)}>
+              閉じる
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={columnSettingsOpen} onOpenChange={setColumnSettingsOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Settings className="h-5 w-5" />
+              表示カラム設定
+            </DialogTitle>
+            <DialogDescription>
+              カード表示・テーブル表示で表示するカラムを選択してください
+            </DialogDescription>
+          </DialogHeader>
+
+          <ScrollArea className="max-h-[300px]">
+            <div className="space-y-3 pr-4">
+              {allColumns.map((column) => (
+                <div
+                  key={column}
+                  className="flex items-center gap-3 p-2 rounded-md hover-elevate cursor-pointer"
+                  onClick={() => {
+                    const newSelected = new Set(selectedColumns);
+                    if (newSelected.has(column)) {
+                      newSelected.delete(column);
+                    } else {
+                      newSelected.add(column);
+                    }
+                    saveColumnSettings(newSelected);
+                  }}
+                  data-testid={`column-setting-${column}`}
+                >
+                  <Checkbox
+                    checked={selectedColumns.has(column)}
+                    onCheckedChange={(checked) => {
+                      const newSelected = new Set(selectedColumns);
+                      if (checked) {
+                        newSelected.add(column);
+                      } else {
+                        newSelected.delete(column);
+                      }
+                      saveColumnSettings(newSelected);
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                    className="shrink-0"
+                  />
+                  <Label className="text-sm cursor-pointer flex-1">{column}</Label>
+                </div>
+              ))}
+            </div>
+          </ScrollArea>
+
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => saveColumnSettings(new Set(allColumns))}
+                data-testid="button-select-all-columns"
+              >
+                すべて選択
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => saveColumnSettings(new Set(allColumns.slice(0, 6)))}
+                data-testid="button-reset-columns"
+              >
+                リセット
+              </Button>
+            </div>
+            <Button onClick={() => setColumnSettingsOpen(false)}>
               閉じる
             </Button>
           </DialogFooter>
