@@ -432,6 +432,59 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, 
                       </TabsList>
                       
                       {isCompleted && (() => {
+                        interface HypothesisTiming {
+                          hypothesisNumber: number;
+                          hypothesisTitle: string;
+                          step2_2Ms: number;
+                          step3Ms: number;
+                          step4Ms: number;
+                          step5Ms: number;
+                          steps3to5TotalMs: number;
+                        }
+                        interface ExecutionTiming {
+                          overallMs: number;
+                          step2_1Ms: number;
+                          step2_2ParallelMs: number;
+                          steps3to5ParallelMs: number;
+                          hypotheses: HypothesisTiming[];
+                        }
+                        const executionTiming = selectedRun.executionTiming as ExecutionTiming | null;
+                        if (executionTiming && executionTiming.overallMs > 0) {
+                          return (
+                            <div className="mt-3 px-1 space-y-2" data-testid="execution-timing">
+                              <div className="flex items-center gap-4 text-xs text-muted-foreground flex-wrap">
+                                <div className="flex items-center gap-1">
+                                  <Timer className="h-3 w-3" />
+                                  <span className="font-medium">全体:</span>
+                                  <span data-testid="timing-overall">{formatDuration(executionTiming.overallMs)}</span>
+                                </div>
+                                <span data-testid="timing-step2-1">S2-1: {formatDuration(executionTiming.step2_1Ms)}</span>
+                                <span data-testid="timing-step2-2">S2-2並列: {formatDuration(executionTiming.step2_2ParallelMs)}</span>
+                                <span data-testid="timing-steps3to5">S3-5並列: {formatDuration(executionTiming.steps3to5ParallelMs)}</span>
+                              </div>
+                              {executionTiming.hypotheses && executionTiming.hypotheses.length > 0 && (
+                                <details className="text-xs">
+                                  <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
+                                    仮説別タイミング詳細
+                                  </summary>
+                                  <div className="mt-2 space-y-1 pl-2 border-l-2 border-muted">
+                                    {executionTiming.hypotheses.map((h) => (
+                                      <div key={h.hypothesisNumber} className="flex gap-2 text-muted-foreground flex-wrap" data-testid={`timing-hypothesis-${h.hypothesisNumber}`}>
+                                        <span className="font-medium min-w-[60px]">H{h.hypothesisNumber}:</span>
+                                        <span className="truncate max-w-[150px]" title={h.hypothesisTitle}>{h.hypothesisTitle}</span>
+                                        <span className="text-nowrap">S2-2:{formatDuration(h.step2_2Ms)}</span>
+                                        <span className="text-nowrap">S3:{formatDuration(h.step3Ms)}</span>
+                                        <span className="text-nowrap">S4:{formatDuration(h.step4Ms)}</span>
+                                        <span className="text-nowrap">S5:{formatDuration(h.step5Ms)}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </details>
+                              )}
+                            </div>
+                          );
+                        }
+                        // Fallback to old progressInfo format
                         const progressInfo = selectedRun.progressInfo as { stepDurations?: StepDurations } | null;
                         const stepDurations = progressInfo?.stepDurations;
                         if (stepDurations && Object.keys(stepDurations).length > 0) {
