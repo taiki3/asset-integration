@@ -1,9 +1,18 @@
 import { useState, useEffect } from "react";
-import { Search, Brain, FileText, Loader2, Clock, Timer, Pause, Play, Square } from "lucide-react";
+import { Search, Brain, FileText, Loader2, Clock, Timer, Pause, Play, Square, CheckCircle2, AlertCircle, Circle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
+
+interface ParallelItem {
+  hypothesisNumber: number;
+  hypothesisTitle: string;
+  status: "waiting" | "running" | "completed" | "error";
+  currentStep?: string;
+  startTime?: number;
+  endTime?: number;
+}
 
 interface ProgressInfo {
   planningAnalysis?: string;
@@ -13,6 +22,7 @@ interface ProgressInfo {
   maxIterations?: number;
   stepTimings?: { [key: string]: number };
   stepStartTime?: number;
+  parallelItems?: ParallelItem[];
 }
 
 interface RunProgressDisplayProps {
@@ -44,6 +54,9 @@ const phaseLabels: { [key: string]: string } = {
   completed: "完了",
   deep_research_starting: "Deep Research 起動中",
   deep_research_running: "Deep Research 実行中",
+  extracting_hypotheses: "仮説抽出中",
+  step2_2_parallel: "Step 2-2 並列実行中",
+  steps3to5_parallel: "Steps 3-5 並列実行中",
 };
 
 const stepLabels: { [key: number]: string } = {
@@ -253,6 +266,39 @@ export function RunProgressDisplay({
               {currentStep === 4 && "戦略的観点で監査中..."}
               {currentStep === 5 && "最終データを統合中..."}
             </span>
+          </div>
+        )}
+
+        {progressInfo?.parallelItems && progressInfo.parallelItems.length > 0 && (
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Clock className="h-3 w-3" />
+              並列処理状況 ({progressInfo.parallelItems.filter(i => i.status === "completed").length}/{progressInfo.parallelItems.length} 完了)
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {progressInfo.parallelItems.map((item) => (
+                <div
+                  key={item.hypothesisNumber}
+                  className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-xs border ${
+                    item.status === "running" 
+                      ? "bg-blue-500/10 border-blue-500/30 text-blue-700 dark:text-blue-300" 
+                      : item.status === "completed" 
+                        ? "bg-green-500/10 border-green-500/30 text-green-700 dark:text-green-300" 
+                        : item.status === "error" 
+                          ? "bg-red-500/10 border-red-500/30 text-red-700 dark:text-red-300" 
+                          : "bg-muted/50 border-border text-muted-foreground"
+                  }`}
+                  data-testid={`parallel-item-${item.hypothesisNumber}`}
+                >
+                  {item.status === "running" && <Loader2 className="h-3 w-3 animate-spin" />}
+                  {item.status === "completed" && <CheckCircle2 className="h-3 w-3" />}
+                  {item.status === "error" && <AlertCircle className="h-3 w-3" />}
+                  {item.status === "waiting" && <Circle className="h-3 w-3" />}
+                  <span className="font-medium">H{item.hypothesisNumber}</span>
+                  <span className="max-w-[100px] truncate">{item.hypothesisTitle}</span>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </CardContent>
