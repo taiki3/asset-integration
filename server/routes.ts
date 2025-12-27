@@ -786,6 +786,15 @@ export async function registerRoutes(
       }
 
       const report = individualOutputs[hypothesisIndex];
+      
+      // Check if report contains error message (Step 2-2 failed)
+      if (report.includes("Deep Researchの実行に失敗しました") || report.includes("APIの起動に失敗しました")) {
+        return res.status(400).json({ 
+          error: "このレポートはStep 2-2でエラーが発生したため、詳細コンテンツがありません。",
+          details: report.substring(0, 300)
+        });
+      }
+      
       const docBuffer = await convertMarkdownToWord(report, `仮説${hypothesisIndex + 1} 個別レポート - Run #${id}`);
       
       res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
@@ -814,11 +823,25 @@ export async function registerRoutes(
       
       const reports = individualOutputs.map((report, index) => {
         const titleMatch = report.match(/(?:^|\n)#+\s*(?:仮説\s*\d+[:\s]*)?(.+?)(?:\n|$)/);
-        const title = titleMatch ? titleMatch[1].trim().slice(0, 100) : `仮説${index + 1}`;
+        let title = titleMatch ? titleMatch[1].trim().slice(0, 100) : `仮説${index + 1}`;
+        
+        // Check if this report has an error (Step 2-2 failed)
+        const hasError = report.includes("Deep Researchの実行に失敗しました") || 
+                        report.includes("APIの起動に失敗しました");
+        
+        // Extract title from error message format if needed
+        if (hasError) {
+          const errorTitleMatch = report.match(/【仮説\d+:\s*(.+?)】/);
+          if (errorTitleMatch) {
+            title = errorTitleMatch[1].trim();
+          }
+        }
+        
         return {
           index,
           title,
           previewLength: report.length,
+          hasError,
         };
       });
       

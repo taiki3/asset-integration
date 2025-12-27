@@ -30,6 +30,7 @@ interface IndividualReport {
   index: number;
   title: string;
   previewLength: number;
+  hasError?: boolean;
 }
 
 interface DebugPromptEntry {
@@ -534,13 +535,24 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, 
                 ) : individualReports.length > 0 && (
                   <div className="flex items-center gap-2">
                     <Select value={selectedHypothesisIndex} onValueChange={setSelectedHypothesisIndex}>
-                      <SelectTrigger className="w-[200px]" data-testid="select-individual-report">
+                      <SelectTrigger className="w-[220px]" data-testid="select-individual-report">
                         <SelectValue placeholder="仮説を選択" />
                       </SelectTrigger>
                       <SelectContent>
                         {individualReports.map((report) => (
-                          <SelectItem key={report.index} value={report.index.toString()}>
-                            仮説{report.index + 1}: {report.title.slice(0, 30)}...
+                          <SelectItem 
+                            key={report.index} 
+                            value={report.index.toString()}
+                            disabled={report.hasError}
+                          >
+                            {report.hasError ? (
+                              <span className="flex items-center gap-1 text-destructive">
+                                <XCircle className="h-3 w-3" />
+                                仮説{report.index + 1}: エラー
+                              </span>
+                            ) : (
+                              <>仮説{report.index + 1}: {report.title.slice(0, 25)}...</>
+                            )}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -548,7 +560,7 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, 
                     <Button
                       variant="outline"
                       className="gap-2"
-                      disabled={!selectedHypothesisIndex}
+                      disabled={!selectedHypothesisIndex || individualReports.find(r => r.index.toString() === selectedHypothesisIndex)?.hasError}
                       onClick={() => selectedRun && onDownloadIndividualReport(selectedRun.id, parseInt(selectedHypothesisIndex))}
                       data-testid="button-download-individual-report"
                     >
