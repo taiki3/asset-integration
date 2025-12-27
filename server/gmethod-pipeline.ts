@@ -618,6 +618,10 @@ async function updateProgress(runId: number, progressInfo: ProgressInfo): Promis
       ...existingProgress.stepDurations,
       ...progressInfo.stepDurations,
     },
+    // Preserve parallelItems unless explicitly provided
+    parallelItems: progressInfo.parallelItems !== undefined 
+      ? progressInfo.parallelItems 
+      : existingProgress.parallelItems,
   };
   await storage.updateRun(runId, { progressInfo: mergedProgress });
 }
