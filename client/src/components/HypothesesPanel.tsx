@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { Lightbulb, ChevronDown, ChevronUp, Trash2, LayoutGrid, Table, Download, FileText, Settings } from "lucide-react";
+import { Lightbulb, ChevronDown, ChevronUp, Trash2, LayoutGrid, Table, Download, FileText, Settings, Loader2 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,6 +19,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import {
   Table as TableComponent,
   TableBody,
@@ -63,6 +66,9 @@ export function HypothesesPanel({ hypotheses, resources, onDelete, onDownloadWor
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [columnSettingsOpen, setColumnSettingsOpen] = useState(false);
   const [selectedColumns, setSelectedColumns] = useState<Set<string>>(new Set());
+  const [detailsTab, setDetailsTab] = useState<"summary" | "report">("summary");
+  const [reportContent, setReportContent] = useState<string | null>(null);
+  const [reportLoading, setReportLoading] = useState(false);
 
   const allColumns = useMemo(() => {
     const columnSet = new Set<string>();
@@ -113,6 +119,35 @@ export function HypothesesPanel({ hypotheses, resources, onDelete, onDownloadWor
   const handleHypothesisClick = (hypothesis: Hypothesis) => {
     setSelectedHypothesis(hypothesis);
     setDetailsOpen(true);
+    setDetailsTab("summary");
+    setReportContent(null);
+  };
+
+  const fetchReportContent = async (hypothesis: Hypothesis) => {
+    if (!hypothesis.runId) return;
+    const index = getHypothesisIndexInRun(hypothesis);
+    setReportLoading(true);
+    try {
+      const res = await fetch(`/api/runs/${hypothesis.runId}/individual-reports/${index}/content`);
+      if (res.ok) {
+        const data = await res.json();
+        setReportContent(data.content || "レポートが見つかりませんでした");
+      } else {
+        setReportContent("レポートの取得に失敗しました");
+      }
+    } catch {
+      setReportContent("レポートの取得に失敗しました");
+    } finally {
+      setReportLoading(false);
+    }
+  };
+
+  const handleTabChange = (value: string) => {
+    const tab = value as "summary" | "report";
+    setDetailsTab(tab);
+    if (tab === "report" && selectedHypothesis && !reportContent && !reportLoading) {
+      fetchReportContent(selectedHypothesis);
+    }
   };
 
   // Calculate the index of a hypothesis within its run's individual outputs array
@@ -417,23 +452,61 @@ export function HypothesesPanel({ hypotheses, resources, onDelete, onDownloadWor
           </DialogHeader>
 
           {selectedHypothesis && (
-            <ScrollArea className="max-h-[60vh]">
-              <div className="space-y-4 pr-4">
-                {(() => {
-                  const data = getFullData(selectedHypothesis);
-                  const entries = Object.entries(data).filter(([, v]) => v != null && v !== "");
-                  return entries.map(([key, value]) => (
-                    <div key={key}>
-                      <h4 className="text-sm font-medium mb-1">{key}</h4>
-                      <p className="text-sm text-muted-foreground whitespace-pre-wrap">{String(value)}</p>
+            <Tabs value={detailsTab} onValueChange={handleTabChange} className="w-full">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="summary" data-testid="tab-hypothesis-summary">概要</TabsTrigger>
+                <TabsTrigger value="report" data-testid="tab-hypothesis-report">レポート</TabsTrigger>
+              </TabsList>
+              <TabsContent value="summary">
+                <ScrollArea className="max-h-[50vh]">
+                  <div className="space-y-4 pr-4">
+                    {(() => {
+                      const data = getFullData(selectedHypothesis);
+                      const entries = Object.entries(data).filter(([, v]) => v != null && v !== "");
+                      return entries.map(([key, value]) => (
+                        <div key={key}>
+                          <h4 className="text-sm font-medium mb-1">{key}</h4>
+                          <p className="text-sm text-muted-foreground whitespace-pre-wrap">{String(value)}</p>
+                        </div>
+                      ));
+                    })()}
+                    <div className="text-xs text-muted-foreground pt-2 border-t">
+                      作成日: {format(new Date(selectedHypothesis.createdAt), "yyyy/MM/dd HH:mm")}
                     </div>
-                  ));
-                })()}
-                <div className="text-xs text-muted-foreground pt-2 border-t">
-                  作成日: {format(new Date(selectedHypothesis.createdAt), "yyyy/MM/dd HH:mm")}
-                </div>
-              </div>
-            </ScrollArea>
+                  </div>
+                </ScrollArea>
+              </TabsContent>
+              <TabsContent value="report">
+                <ScrollArea className="max-h-[50vh]">
+                  {reportLoading ? (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                      <span className="ml-2 text-sm text-muted-foreground">読み込み中...</span>
+                    </div>
+                  ) : reportContent ? (
+                    <div className="prose prose-sm dark:prose-invert max-w-none pr-4">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {reportContent}
+                      </ReactMarkdown>
+                    </div>
+                  ) : !selectedHypothesis.runId ? (
+                    <div className="flex flex-col items-center justify-center py-8 text-center">
+                      <FileText className="h-8 w-8 text-muted-foreground/30 mb-2" />
+                      <p className="text-sm text-muted-foreground">
+                        この仮説にはレポートが関連付けられていません
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center py-8 text-center">
+                      <FileText className="h-8 w-8 text-muted-foreground/30 mb-2" />
+                      <p className="text-sm text-muted-foreground">
+                        レポートを読み込むにはこのタブを選択してください
+                      </p>
+                    </div>
+                  )}
+                </ScrollArea>
+              </TabsContent>
+            </Tabs>
           )}
 
           <DialogFooter className="gap-2 sm:gap-2">
