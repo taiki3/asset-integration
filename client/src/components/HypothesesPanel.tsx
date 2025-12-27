@@ -466,7 +466,7 @@ export function HypothesesPanel({ hypotheses, resources, projectId, onDelete, on
                     </Button>
                   </div>
                 </div>
-                <div className="max-h-[400px] overflow-y-auto">
+                <div className="max-h-[400px] overflow-auto">
                   {viewMode === "card" ? <CardView /> : <TableView />}
                 </div>
               </>
