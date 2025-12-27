@@ -1324,18 +1324,27 @@ async function executeDeepResearchStep2(context: PipelineContext, runId: number)
       step5IndividualOutputs,
     });
     
+    // Rebuild aggregated outputs from all accumulated individual outputs (for multi-loop support)
+    const fullStep2_2Output = appendedOutputs.step2_2IndividualOutputs.map((output, i) => 
+      `${'='.repeat(60)}\n【仮説${i + 1}】\n${'='.repeat(60)}\n\n${output}`
+    ).join('\n\n');
+    const fullStep3Output = appendedOutputs.step3IndividualOutputs.join('\n\n');
+    const fullStep4Output = appendedOutputs.step4IndividualOutputs.join('\n\n');
+    const fullStep5Output = aggregateStep5Outputs(appendedOutputs.step5IndividualOutputs);
+    
     await storage.updateRun(runId, { 
-      step2_2Output,
+      step2_2Output: fullStep2_2Output,
       step2_2IndividualOutputs: appendedOutputs.step2_2IndividualOutputs,
-      step3Output: aggregatedStep3Output,
+      step3Output: fullStep3Output,
       step3IndividualOutputs: appendedOutputs.step3IndividualOutputs,
-      step4Output: aggregatedStep4Output,
+      step4Output: fullStep4Output,
       step4IndividualOutputs: appendedOutputs.step4IndividualOutputs,
-      step5Output: aggregatedStep5Output,
+      step5Output: fullStep5Output,
       step5IndividualOutputs: appendedOutputs.step5IndividualOutputs,
     });
 
     // Create combined report for display (Step 2-1 + Step 2-2 individual reports)
+    // Use fullStep2_2Output to include all hypotheses from all loops
     const combinedReport = `【Step 2-1：発散・選定フェーズ（監査ストリップ）】
 
 ${step2_1Output}
@@ -1344,30 +1353,44 @@ ${'='.repeat(80)}
 
 【Step 2-2〜5：各仮説の詳細分析・評価・データ抽出】
 
-${step2_2Output}`;
+${fullStep2_2Output}`;
 
     stepTimings["total"] = Date.now() - startTime;
 
-    // Build execution timing data
+    // Build execution timing data for current loop's hypotheses
+    const currentLoopTimingData = extractedHypotheses.map((h, i) => {
+      const hNum = i + 1;
+      const step2_2Result = step2_2Results[i];
+      const steps3to5Result = allResults[i];
+      return {
+        hypothesisNumber: hNum,
+        hypothesisTitle: h.title,
+        step2_2Ms: step2_2Result?.durationMs || 0,
+        step3Ms: steps3to5Result?.timing?.step3Ms || 0,
+        step4Ms: steps3to5Result?.timing?.step4Ms || 0,
+        step5Ms: steps3to5Result?.timing?.step5Ms || 0,
+        steps3to5TotalMs: steps3to5Result?.timing?.totalMs || 0,
+      };
+    });
+
+    // Get existing timing data and merge with current loop (for multi-loop runs)
+    const run = await storage.getRun(runId);
+    const existingTiming = (run?.executionTiming as any) || {};
+    const existingHypotheses = Array.isArray(existingTiming.hypotheses) ? existingTiming.hypotheses : [];
+    
+    // Renumber hypotheses based on their position in the accumulated array
+    const totalHypothesesSoFar = existingHypotheses.length;
+    const renumberedCurrentTimingData = currentLoopTimingData.map((h, i) => ({
+      ...h,
+      hypothesisNumber: totalHypothesesSoFar + i + 1,
+    }));
+
     const executionTiming = {
-      overallMs: stepTimings["total"],
-      step2_1Ms: stepTimings["step2_1_deep_research"] || 0,
-      step2_2ParallelMs: stepTimings["step2_2_parallel"] || 0,
-      steps3to5ParallelMs: stepTimings["phase3_steps3to5_parallel"] || 0,
-      hypotheses: extractedHypotheses.map((h, i) => {
-        const hNum = i + 1;
-        const step2_2Result = step2_2Results[i];
-        const steps3to5Result = allResults[i];
-        return {
-          hypothesisNumber: hNum,
-          hypothesisTitle: h.title,
-          step2_2Ms: step2_2Result?.durationMs || 0,
-          step3Ms: steps3to5Result?.timing?.step3Ms || 0,
-          step4Ms: steps3to5Result?.timing?.step4Ms || 0,
-          step5Ms: steps3to5Result?.timing?.step5Ms || 0,
-          steps3to5TotalMs: steps3to5Result?.timing?.totalMs || 0,
-        };
-      }),
+      overallMs: (existingTiming.overallMs || 0) + stepTimings["total"],
+      step2_1Ms: (existingTiming.step2_1Ms || 0) + (stepTimings["step2_1_deep_research"] || 0),
+      step2_2ParallelMs: (existingTiming.step2_2ParallelMs || 0) + (stepTimings["step2_2_parallel"] || 0),
+      steps3to5ParallelMs: (existingTiming.steps3to5ParallelMs || 0) + (stepTimings["phase3_steps3to5_parallel"] || 0),
+      hypotheses: [...existingHypotheses, ...renumberedCurrentTimingData],
     };
     
     // Save execution timing
@@ -1395,15 +1418,15 @@ ${step2_2Output}`;
       iterationCount: context.hypothesisCount * 4,
       validationResult,
       step2_1Output,
-      step2_2Output,
-      step2_2IndividualOutputs,
-      // New: individual outputs for each step
-      step3Output: aggregatedStep3Output,
-      step4Output: aggregatedStep4Output,
-      step5Output: aggregatedStep5Output,
-      step3IndividualOutputs,
-      step4IndividualOutputs,
-      step5IndividualOutputs,
+      step2_2Output: fullStep2_2Output,
+      step2_2IndividualOutputs: appendedOutputs.step2_2IndividualOutputs,
+      // New: individual outputs for each step (with full accumulation for multi-loop)
+      step3Output: fullStep3Output,
+      step4Output: fullStep4Output,
+      step5Output: fullStep5Output,
+      step3IndividualOutputs: appendedOutputs.step3IndividualOutputs,
+      step4IndividualOutputs: appendedOutputs.step4IndividualOutputs,
+      step5IndividualOutputs: appendedOutputs.step5IndividualOutputs,
     };
   } catch (error: any) {
     // Handle pause/stop cancellation errors specially - update run status and exit gracefully
