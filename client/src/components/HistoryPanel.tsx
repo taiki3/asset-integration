@@ -931,15 +931,58 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, 
                         </div>
                       </TabsContent>
                       
-                      {/* STEP 5 Tab - integrated output */}
+                      {/* STEP 5 Tab - integrated output as table */}
                       <TabsContent value="step5Output" className="mt-4 overflow-hidden">
-                        <ScrollArea className="h-[45vh] rounded-md border bg-muted/30 p-4">
+                        <ScrollArea className="h-[45vh] rounded-md border bg-muted/30">
                           {getStepStatus(5) === "completed" ? (
-                            <div className="w-full overflow-x-auto">
-                              <pre className="text-sm font-mono whitespace-pre-wrap break-words">
-                                {selectedRun.step5Output || "出力がありません"}
-                              </pre>
-                            </div>
+                            (() => {
+                              const tsvContent = selectedRun.step5Output || "";
+                              const lines = tsvContent.split("\n").filter(line => line.trim());
+                              if (lines.length < 2) {
+                                return (
+                                  <div className="p-4">
+                                    <pre className="text-sm font-mono whitespace-pre-wrap break-words">
+                                      {tsvContent || "出力がありません"}
+                                    </pre>
+                                  </div>
+                                );
+                              }
+                              const headers = lines[0].split("\t");
+                              const rows = lines.slice(1).map(line => line.split("\t"));
+                              return (
+                                <div className="overflow-x-auto">
+                                  <table className="w-max min-w-full text-xs border-collapse">
+                                    <thead className="sticky top-0 bg-muted z-10">
+                                      <tr>
+                                        {headers.map((header, i) => (
+                                          <th 
+                                            key={`h-${i}`} 
+                                            className="border border-border px-2 py-1.5 text-left font-medium whitespace-nowrap bg-muted"
+                                          >
+                                            {header}
+                                          </th>
+                                        ))}
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {rows.map((row, rowIdx) => (
+                                        <tr key={`r-${rowIdx}`} className="hover:bg-muted/50">
+                                          {row.map((cell, cellIdx) => (
+                                            <td 
+                                              key={`c-${rowIdx}-${cellIdx}`} 
+                                              className="border border-border px-2 py-1 whitespace-nowrap max-w-[300px] truncate"
+                                              title={cell}
+                                            >
+                                              {cell}
+                                            </td>
+                                          ))}
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              );
+                            })()
                           ) : getStepStatus(5) === "running" ? (
                             <div className="flex flex-col items-center justify-center h-full py-16">
                               <Loader2 className="h-10 w-10 text-primary animate-spin mb-4" />
