@@ -1,8 +1,6 @@
 import { useState, useMemo, useCallback, useRef } from "react";
-import { Upload, X, Check, Search, AlertCircle, Loader2 } from "lucide-react";
+import { Upload, Check, Search, AlertCircle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Dialog,
@@ -79,96 +77,6 @@ function parseCSV(text: string): { headers: string[]; rows: Record<string, strin
   return { headers, rows };
 }
 
-interface ColumnMappingRowProps {
-  appColumn: string;
-  csvColumns: string[];
-  selectedCsvColumn: string;
-  onSelect: (csvColumn: string) => void;
-}
-
-function ColumnMappingRow({ appColumn, csvColumns, selectedCsvColumn, onSelect }: ColumnMappingRowProps) {
-  const [open, setOpen] = useState(false);
-  const [searchValue, setSearchValue] = useState("");
-
-  const filteredColumns = useMemo(() => {
-    if (!searchValue) return csvColumns;
-    const lower = searchValue.toLowerCase();
-    return csvColumns.filter(col => col.toLowerCase().includes(lower));
-  }, [csvColumns, searchValue]);
-
-  return (
-    <div className="flex items-center gap-4 py-2 border-b border-border last:border-b-0">
-      <div className="flex-1 min-w-0">
-        <span className="text-sm font-medium truncate block" title={appColumn}>
-          {appColumn}
-        </span>
-      </div>
-      <div className="flex-shrink-0 text-muted-foreground">→</div>
-      <div className="flex-1 min-w-0">
-        <Popover open={open} onOpenChange={setOpen}>
-          <PopoverTrigger asChild>
-            <Button
-              variant="outline"
-              role="combobox"
-              aria-expanded={open}
-              className="w-full justify-between"
-              data-testid={`mapping-select-${appColumn}`}
-            >
-              <span className="truncate">
-                {selectedCsvColumn || "(未選択)"}
-              </span>
-              <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-64 p-0" align="start">
-            <Command>
-              <CommandInput 
-                placeholder="列を検索..." 
-                value={searchValue}
-                onValueChange={setSearchValue}
-                data-testid={`mapping-search-${appColumn}`}
-              />
-              <CommandList>
-                <CommandEmpty>列が見つかりません</CommandEmpty>
-                <CommandGroup>
-                  <CommandItem
-                    value=""
-                    onSelect={() => {
-                      onSelect("");
-                      setOpen(false);
-                      setSearchValue("");
-                    }}
-                  >
-                    <span className="text-muted-foreground">(選択解除)</span>
-                  </CommandItem>
-                  {filteredColumns.map((col) => (
-                    <CommandItem
-                      key={col}
-                      value={col}
-                      onSelect={() => {
-                        onSelect(col);
-                        setOpen(false);
-                        setSearchValue("");
-                      }}
-                    >
-                      {selectedCsvColumn === col && (
-                        <Check className="mr-2 h-4 w-4" />
-                      )}
-                      <span className={selectedCsvColumn === col ? "" : "ml-6"}>
-                        {col}
-                      </span>
-                    </CommandItem>
-                  ))}
-                </CommandGroup>
-              </CommandList>
-            </Command>
-          </PopoverContent>
-        </Popover>
-      </div>
-    </div>
-  );
-}
-
 export function CsvImportModal({ open, onClose, onImport, existingColumns }: CsvImportModalProps) {
   const [step, setStep] = useState<Step>("upload");
   const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
@@ -197,13 +105,21 @@ export function CsvImportModal({ open, onClose, onImport, existingColumns }: Csv
         setCsvHeaders(headers);
         setCsvRows(rows);
 
+        // Auto-match: for each existing app column, find matching CSV column
         const initialMapping: Record<string, string> = {};
-        headers.forEach(csvCol => {
-          const exactMatch = existingColumns.find(
-            appCol => appCol.toLowerCase() === csvCol.toLowerCase()
+        existingColumns.forEach(appCol => {
+          const exactMatch = headers.find(
+            csvCol => csvCol.toLowerCase() === appCol.toLowerCase()
           );
           if (exactMatch) {
-            initialMapping[csvCol] = exactMatch;
+            initialMapping[appCol] = exactMatch;
+          }
+        });
+        // Also auto-match new columns from CSV
+        headers.forEach(csvCol => {
+          if (!existingColumns.some(ac => ac.toLowerCase() === csvCol.toLowerCase())) {
+            // New column from CSV, auto-map to itself
+            initialMapping[csvCol] = csvCol;
           }
         });
         setColumnMapping(initialMapping);
@@ -218,13 +134,13 @@ export function CsvImportModal({ open, onClose, onImport, existingColumns }: Csv
     reader.readAsText(file);
   }, [existingColumns]);
 
-  const handleMappingChange = useCallback((csvCol: string, appCol: string) => {
+  const handleMappingChange = useCallback((appCol: string, csvCol: string) => {
     setColumnMapping(prev => {
       const newMapping = { ...prev };
-      if (appCol) {
-        newMapping[csvCol] = appCol;
+      if (csvCol) {
+        newMapping[appCol] = csvCol;
       } else {
-        delete newMapping[csvCol];
+        delete newMapping[appCol];
       }
       return newMapping;
     });
@@ -337,8 +253,14 @@ export function CsvImportModal({ open, onClose, onImport, existingColumns }: Csv
 
             <ScrollArea className="flex-1 pr-4">
               <div className="space-y-1">
-                {csvHeaders.map(csvCol => (
-                  <div key={csvCol} className="flex items-center gap-4 py-2 border-b border-border last:border-b-0">
+                {allAppColumns.map(appCol => (
+                  <div key={appCol} className="flex items-center gap-4 py-2 border-b border-border last:border-b-0">
+                    <div className="flex-1 min-w-0">
+                      <span className="text-sm font-medium truncate block" title={appCol}>
+                        {appCol}
+                      </span>
+                    </div>
+                    <div className="flex-shrink-0 text-muted-foreground">←</div>
                     <div className="flex-1 min-w-0">
                       <Popover>
                         <PopoverTrigger asChild>
@@ -346,10 +268,10 @@ export function CsvImportModal({ open, onClose, onImport, existingColumns }: Csv
                             variant="outline"
                             role="combobox"
                             className="w-full justify-between"
-                            data-testid={`app-col-select-${csvCol}`}
+                            data-testid={`csv-col-select-${appCol}`}
                           >
                             <span className="truncate">
-                              {columnMapping[csvCol] || "(未選択)"}
+                              {columnMapping[appCol] || "(未選択)"}
                             </span>
                             <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                           </Button>
@@ -362,21 +284,21 @@ export function CsvImportModal({ open, onClose, onImport, existingColumns }: Csv
                               <CommandGroup>
                                 <CommandItem
                                   value=""
-                                  onSelect={() => handleMappingChange(csvCol, "")}
+                                  onSelect={() => handleMappingChange(appCol, "")}
                                 >
                                   <span className="text-muted-foreground">(選択解除)</span>
                                 </CommandItem>
-                                {allAppColumns.map((appCol) => (
+                                {csvHeaders.map((csvCol) => (
                                   <CommandItem
-                                    key={appCol}
-                                    value={appCol}
-                                    onSelect={() => handleMappingChange(csvCol, appCol)}
+                                    key={csvCol}
+                                    value={csvCol}
+                                    onSelect={() => handleMappingChange(appCol, csvCol)}
                                   >
-                                    {columnMapping[csvCol] === appCol && (
+                                    {columnMapping[appCol] === csvCol && (
                                       <Check className="mr-2 h-4 w-4" />
                                     )}
-                                    <span className={columnMapping[csvCol] === appCol ? "" : "ml-6"}>
-                                      {appCol}
+                                    <span className={columnMapping[appCol] === csvCol ? "" : "ml-6"}>
+                                      {csvCol}
                                     </span>
                                   </CommandItem>
                                 ))}
@@ -385,12 +307,6 @@ export function CsvImportModal({ open, onClose, onImport, existingColumns }: Csv
                           </Command>
                         </PopoverContent>
                       </Popover>
-                    </div>
-                    <div className="flex-shrink-0 text-muted-foreground">←</div>
-                    <div className="flex-1 min-w-0">
-                      <span className="text-sm font-medium truncate block" title={csvCol}>
-                        {csvCol}
-                      </span>
                     </div>
                   </div>
                 ))}

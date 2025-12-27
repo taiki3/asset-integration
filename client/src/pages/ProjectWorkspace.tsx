@@ -688,6 +688,7 @@ export default function ProjectWorkspace({ projectId }: ProjectWorkspaceProps) {
           <HypothesesPanel
             hypotheses={hypotheses}
             resources={resources}
+            projectId={Number(id) || 0}
             onDelete={handleDeleteHypothesis}
             onDownloadWord={handleDownloadIndividualReport}
           />

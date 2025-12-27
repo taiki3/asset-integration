@@ -745,7 +745,7 @@ export async function registerRoutes(
       const projectId = parseInt(req.params.projectId);
       const { rows, columnMapping } = req.body as {
         rows: Record<string, string>[];
-        columnMapping: Record<string, string>; // CSV column -> app column
+        columnMapping: Record<string, string>; // app column -> CSV column
       };
 
       if (!rows || !Array.isArray(rows) || rows.length === 0) {
@@ -759,9 +759,9 @@ export async function registerRoutes(
       const hypothesesToCreate = rows.map((row) => {
         const fullData: Record<string, string> = {};
         
-        // Map CSV columns to app columns
-        for (const [csvCol, appCol] of Object.entries(columnMapping)) {
-          if (appCol && row[csvCol] !== undefined) {
+        // Map app columns from CSV columns
+        for (const [appCol, csvCol] of Object.entries(columnMapping)) {
+          if (csvCol && row[csvCol] !== undefined) {
             fullData[appCol] = row[csvCol];
           }
         }

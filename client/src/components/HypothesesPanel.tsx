@@ -1,5 +1,5 @@
-import { useState, useMemo, useEffect } from "react";
-import { Lightbulb, ChevronDown, ChevronUp, Trash2, LayoutGrid, Table, Download, FileText, Settings, Loader2 } from "lucide-react";
+import { useState, useMemo, useEffect, useCallback } from "react";
+import { Lightbulb, ChevronDown, ChevronUp, Trash2, LayoutGrid, Table, Download, Upload, FileText, Settings, Loader2 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -32,12 +32,16 @@ import {
 } from "@/components/ui/table";
 import { format } from "date-fns";
 import type { Hypothesis, Resource } from "@shared/schema";
+import { CsvImportModal } from "@/components/CsvImportModal";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 type FullDataRow = Record<string, string | number | null>;
 
 interface HypothesesPanelProps {
   hypotheses: Hypothesis[];
   resources: Resource[];
+  projectId: number;
   onDelete: (id: number) => void;
   onDownloadWord?: (runId: number, hypothesisIndex: number) => void;
 }
@@ -59,7 +63,7 @@ function getDisplayValue(data: FullDataRow, keys: string[]): string {
 
 const COLUMN_SETTINGS_KEY = "hypotheses-display-columns";
 
-export function HypothesesPanel({ hypotheses, resources, onDelete, onDownloadWord }: HypothesesPanelProps) {
+export function HypothesesPanel({ hypotheses, resources, projectId, onDelete, onDownloadWord }: HypothesesPanelProps) {
   const [isOpen, setIsOpen] = useState(true);
   const [viewMode, setViewMode] = useState<ViewMode>("card");
   const [selectedHypothesis, setSelectedHypothesis] = useState<Hypothesis | null>(null);
@@ -69,6 +73,8 @@ export function HypothesesPanel({ hypotheses, resources, onDelete, onDownloadWor
   const [detailsTab, setDetailsTab] = useState<"summary" | "report">("summary");
   const [reportContent, setReportContent] = useState<string | null>(null);
   const [reportLoading, setReportLoading] = useState(false);
+  const [importModalOpen, setImportModalOpen] = useState(false);
+  const { toast } = useToast();
 
   const allColumns = useMemo(() => {
     const columnSet = new Set<string>();
@@ -215,6 +221,26 @@ export function HypothesesPanel({ hypotheses, resources, onDelete, onDownloadWor
     window.URL.revokeObjectURL(url);
     document.body.removeChild(a);
   };
+
+  const handleImportCSV = useCallback(async (
+    rows: Record<string, string>[],
+    columnMapping: Record<string, string>
+  ) => {
+    const response = await apiRequest(
+      "POST",
+      `/api/projects/${projectId}/hypotheses/import`,
+      { rows, columnMapping }
+    );
+    
+    const result = await response.json();
+    
+    queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "hypotheses"] });
+    
+    toast({
+      title: "インポート完了",
+      description: `${result.imported}件の仮説をインポートしました`,
+    });
+  }, [projectId, toast]);
 
   const CardView = () => (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
@@ -370,6 +396,19 @@ export function HypothesesPanel({ hypotheses, resources, onDelete, onDownloadWor
                 <p className="text-xs text-muted-foreground mt-1">
                   G-Methodを実行すると、生成された仮説がここに表示されます
                 </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-2 mt-4"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setImportModalOpen(true);
+                  }}
+                  data-testid="button-import-csv-empty"
+                >
+                  <Upload className="h-4 w-4" />
+                  CSVインポート
+                </Button>
               </div>
             ) : (
               <>
@@ -398,19 +437,34 @@ export function HypothesesPanel({ hypotheses, resources, onDelete, onDownloadWor
                       <Table className="h-4 w-4" />
                     </Button>
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleExportCSV();
-                    }}
-                    className="gap-2"
-                    data-testid="button-export-csv"
-                  >
-                    <Download className="h-4 w-4" />
-                    CSVエクスポート
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setImportModalOpen(true);
+                      }}
+                      className="gap-2"
+                      data-testid="button-import-csv"
+                    >
+                      <Upload className="h-4 w-4" />
+                      CSVインポート
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleExportCSV();
+                      }}
+                      className="gap-2"
+                      data-testid="button-export-csv"
+                    >
+                      <Download className="h-4 w-4" />
+                      CSVエクスポート
+                    </Button>
+                  </div>
                 </div>
                 <div className="max-h-[400px] overflow-y-auto">
                   {viewMode === "card" ? <CardView /> : <TableView />}
@@ -602,6 +656,13 @@ export function HypothesesPanel({ hypotheses, resources, onDelete, onDownloadWor
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <CsvImportModal
+        open={importModalOpen}
+        onClose={() => setImportModalOpen(false)}
+        onImport={handleImportCSV}
+        existingColumns={allColumns}
+      />
     </Card>
   );
 }
