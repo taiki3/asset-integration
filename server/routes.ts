@@ -5,7 +5,7 @@ import { insertProjectSchema, insertResourceSchema, insertHypothesisRunSchema, i
 import { STEP2_PROMPT, STEP2_1_DEEP_RESEARCH_PROMPT, STEP2_2_DEEP_RESEARCH_PROMPT, STEP3_INDIVIDUAL_PROMPT, STEP4_INDIVIDUAL_PROMPT, STEP5_INDIVIDUAL_PROMPT } from "./prompts";
 import { executeGMethodPipeline, executeReprocessPipeline, requestPause, requestResume, requestStop, resumePipeline, isRunActive, getActiveRunIds, forceReleaseAllLocks } from "./gmethod-pipeline";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
-import { Document, Packer, Paragraph, TextRun, HeadingLevel, TableRow, TableCell, Table, WidthType, BorderStyle } from "docx";
+import { Document, Packer, Paragraph, TextRun, HeadingLevel, TableRow, TableCell, Table, WidthType, BorderStyle, ExternalHyperlink } from "docx";
 import archiver from "archiver";
 
 // Server start time for version tracking
@@ -128,31 +128,87 @@ async function convertMarkdownToWord(markdown: string, title: string): Promise<B
         })
       );
     } else {
-      // Regular paragraph - handle bold text
-      const textRuns: TextRun[] = [];
-      const boldRegex = /\*\*(.+?)\*\*/g;
-      let lastIndex = 0;
-      let match;
+      // Regular paragraph - handle bold text and links
+      const paragraphChildren: (TextRun | ExternalHyperlink)[] = [];
       
-      while ((match = boldRegex.exec(trimmedLine)) !== null) {
-        if (match.index > lastIndex) {
-          textRuns.push(new TextRun({ text: trimmedLine.substring(lastIndex, match.index), font: WORD_FONT }));
+      // Combined regex for links and bold text
+      // Process the line by finding all special patterns
+      let remaining = trimmedLine;
+      
+      while (remaining.length > 0) {
+        // Find the next link or bold pattern
+        const linkMatch = remaining.match(/\[([^\]]+)\]\(([^)]+)\)/);
+        const boldMatch = remaining.match(/\*\*(.+?)\*\*/);
+        const urlMatch = remaining.match(/(https?:\/\/[^\s\)]+)/);
+        
+        // Find which comes first
+        let firstMatchIndex = remaining.length;
+        let matchType: 'link' | 'bold' | 'url' | 'none' = 'none';
+        let matchLength = 0;
+        let matchContent: { text: string; url?: string } = { text: '' };
+        
+        if (linkMatch && linkMatch.index !== undefined && linkMatch.index < firstMatchIndex) {
+          firstMatchIndex = linkMatch.index;
+          matchType = 'link';
+          matchLength = linkMatch[0].length;
+          matchContent = { text: linkMatch[1], url: linkMatch[2] };
         }
-        textRuns.push(new TextRun({ text: match[1], bold: true, font: WORD_FONT }));
-        lastIndex = match.index + match[0].length;
+        
+        if (boldMatch && boldMatch.index !== undefined && boldMatch.index < firstMatchIndex) {
+          firstMatchIndex = boldMatch.index;
+          matchType = 'bold';
+          matchLength = boldMatch[0].length;
+          matchContent = { text: boldMatch[1] };
+        }
+        
+        // Only match standalone URLs if not already inside a markdown link
+        if (urlMatch && urlMatch.index !== undefined && urlMatch.index < firstMatchIndex) {
+          // Check if this URL is part of a markdown link
+          const beforeUrl = remaining.substring(0, urlMatch.index);
+          if (!beforeUrl.endsWith('](')) {
+            firstMatchIndex = urlMatch.index;
+            matchType = 'url';
+            matchLength = urlMatch[0].length;
+            matchContent = { text: urlMatch[0], url: urlMatch[0] };
+          }
+        }
+        
+        // Add plain text before the match
+        if (firstMatchIndex > 0) {
+          paragraphChildren.push(new TextRun({ text: remaining.substring(0, firstMatchIndex), font: WORD_FONT }));
+        }
+        
+        // Add the matched content
+        if (matchType === 'link' || matchType === 'url') {
+          paragraphChildren.push(
+            new ExternalHyperlink({
+              children: [new TextRun({ text: matchContent.text, font: WORD_FONT, color: "0000FF", underline: {} })],
+              link: matchContent.url!,
+            })
+          );
+        } else if (matchType === 'bold') {
+          paragraphChildren.push(new TextRun({ text: matchContent.text, bold: true, font: WORD_FONT }));
+        }
+        
+        // Update remaining text
+        if (matchType === 'none') {
+          break;
+        }
+        remaining = remaining.substring(firstMatchIndex + matchLength);
       }
       
-      if (lastIndex < trimmedLine.length) {
-        textRuns.push(new TextRun({ text: trimmedLine.substring(lastIndex), font: WORD_FONT }));
+      // Add any remaining text
+      if (remaining.length > 0) {
+        paragraphChildren.push(new TextRun({ text: remaining, font: WORD_FONT }));
       }
       
-      if (textRuns.length === 0) {
-        textRuns.push(new TextRun({ text: trimmedLine, font: WORD_FONT }));
+      if (paragraphChildren.length === 0) {
+        paragraphChildren.push(new TextRun({ text: trimmedLine, font: WORD_FONT }));
       }
       
       children.push(
         new Paragraph({
-          children: textRuns,
+          children: paragraphChildren,
           spacing: { before: 100, after: 100 },
         })
       );
