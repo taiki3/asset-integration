@@ -99,6 +99,7 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, 
   const [debugPrompts, setDebugPrompts] = useState<DebugPromptEntry[]>([]);
   const [loadingDebugPrompts, setLoadingDebugPrompts] = useState(false);
   const [selectedDebugStep, setSelectedDebugStep] = useState<string>("");
+  const [siblingRuns, setSiblingRuns] = useState<HypothesisRun[]>([]);
 
   const getResourceName = (id: number) => {
     return resources.find((r) => r.id === id)?.name || "不明";
@@ -163,6 +164,24 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, 
     if (run.status === "completed") {
       fetchIndividualReports(run.id);
     }
+    // Find sibling runs with same jobName for multi-loop batches
+    if (run.jobName && run.totalLoops && run.totalLoops > 1) {
+      const siblings = runs.filter(r => r.jobName === run.jobName).sort((a, b) => (a.currentLoop || 0) - (b.currentLoop || 0));
+      setSiblingRuns(siblings);
+    } else {
+      setSiblingRuns([]);
+    }
+  };
+  
+  const handleLoopChange = (runId: string) => {
+    const targetRun = runs.find(r => r.id === parseInt(runId));
+    if (targetRun) {
+      setSelectedRun(targetRun);
+      setSelectedHypothesisIndex("");
+      if (targetRun.status === "completed") {
+        fetchIndividualReports(targetRun.id);
+      }
+    }
   };
 
   useEffect(() => {
@@ -170,6 +189,7 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, 
       setIndividualReports([]);
       setSelectedHypothesisIndex("");
       setSelectedReportContent("");
+      setSiblingRuns([]);
     }
   }, [detailsOpen]);
   
@@ -186,6 +206,11 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, 
       const updatedRun = runs.find((r) => r.id === selectedRun.id);
       if (updatedRun && JSON.stringify(updatedRun) !== JSON.stringify(selectedRun)) {
         setSelectedRun(updatedRun);
+      }
+      // Recompute sibling runs when runs list changes
+      if (updatedRun?.jobName && updatedRun?.totalLoops && updatedRun.totalLoops > 1) {
+        const siblings = runs.filter(r => r.jobName === updatedRun.jobName).sort((a, b) => (a.currentLoop || 0) - (b.currentLoop || 0));
+        setSiblingRuns(siblings);
       }
     }
   }, [runs, selectedRun, detailsOpen]);
@@ -320,19 +345,38 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, 
 
           {selectedRun && (
             <>
-              <div className="flex items-center gap-2 mb-2">
-                {(() => {
-                  const status = statusConfig[selectedRun.status] || defaultStatus;
-                  const StatusIcon = status.icon;
-                  return (
-                    <Badge variant={status.variant} className="gap-1">
-                      <StatusIcon className={`h-3 w-3 ${status.animate ? "animate-spin" : ""}`} />
-                      {status.label}
-                    </Badge>
-                  );
-                })()}
-                {selectedRun.errorMessage && (
-                  <span className="text-sm text-destructive">{selectedRun.errorMessage}</span>
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <div className="flex items-center gap-2">
+                  {(() => {
+                    const status = statusConfig[selectedRun.status] || defaultStatus;
+                    const StatusIcon = status.icon;
+                    return (
+                      <Badge variant={status.variant} className="gap-1">
+                        <StatusIcon className={`h-3 w-3 ${status.animate ? "animate-spin" : ""}`} />
+                        {status.label}
+                      </Badge>
+                    );
+                  })()}
+                  {selectedRun.errorMessage && (
+                    <span className="text-sm text-destructive">{selectedRun.errorMessage}</span>
+                  )}
+                </div>
+                {siblingRuns.length > 1 && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-muted-foreground">ループ:</span>
+                    <Select value={selectedRun.id.toString()} onValueChange={handleLoopChange}>
+                      <SelectTrigger className="w-[140px]" data-testid="select-loop">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {siblingRuns.map((run) => (
+                          <SelectItem key={run.id} value={run.id.toString()}>
+                            {run.currentLoop}/{run.totalLoops} 回目
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 )}
               </div>
 
