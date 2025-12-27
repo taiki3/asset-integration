@@ -35,34 +35,8 @@ export default function Dashboard() {
     },
   });
 
-  const deleteProjectMutation = useMutation({
-    mutationFn: async (id: number) => {
-      await apiRequest("DELETE", `/api/projects/${id}`);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
-      toast({
-        title: "プロジェクトを削除しました",
-        description: "プロジェクトが正常に削除されました。",
-      });
-    },
-    onError: () => {
-      toast({
-        title: "エラー",
-        description: "プロジェクトの削除に失敗しました。もう一度お試しください。",
-        variant: "destructive",
-      });
-    },
-  });
-
   const handleCreateProject = (name: string, description: string) => {
     createProjectMutation.mutate({ name, description });
-  };
-
-  const handleDeleteProject = (id: number) => {
-    if (window.confirm("このプロジェクトを削除しますか？この操作は取り消せません。")) {
-      deleteProjectMutation.mutate(id);
-    }
   };
 
   return (
@@ -94,7 +68,6 @@ export default function Dashboard() {
               <ProjectCard
                 key={project.id}
                 project={project}
-                onDelete={handleDeleteProject}
               />
             ))}
           </div>
