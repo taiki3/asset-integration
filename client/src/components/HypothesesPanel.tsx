@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
-import { Lightbulb, ChevronDown, ChevronUp, Trash2, LayoutGrid, Table, Download, Upload, FileText, Settings, Loader2, ArrowUp, ArrowDown } from "lucide-react";
+import { Lightbulb, ChevronDown, ChevronUp, Trash2, LayoutGrid, Table, Download, Upload, FileText, Settings, Loader2, ArrowUp, ArrowDown, Archive } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -302,6 +302,40 @@ export function HypothesesPanel({ hypotheses, resources, projectId, onDelete, on
     document.body.removeChild(a);
   };
 
+  const [downloadingReports, setDownloadingReports] = useState(false);
+
+  const handleDownloadAllReports = async () => {
+    setDownloadingReports(true);
+    try {
+      const response = await fetch(`/api/projects/${projectId}/hypotheses/download-all-reports`);
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "ダウンロードに失敗しました");
+      }
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `hypotheses-reports-${format(new Date(), "yyyyMMdd-HHmmss")}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      toast({
+        title: "ダウンロード完了",
+        description: "レポートのZIPファイルをダウンロードしました",
+      });
+    } catch (error) {
+      toast({
+        title: "ダウンロードエラー",
+        description: error instanceof Error ? error.message : "レポートのダウンロードに失敗しました",
+        variant: "destructive",
+      });
+    } finally {
+      setDownloadingReports(false);
+    }
+  };
+
   const handleImportCSV = useCallback(async (
     rows: Record<string, string>[],
     columnMapping: Record<string, string>
@@ -543,6 +577,24 @@ export function HypothesesPanel({ hypotheses, resources, projectId, onDelete, on
                     >
                       <Download className="h-4 w-4" />
                       CSVエクスポート
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDownloadAllReports();
+                      }}
+                      className="gap-2"
+                      disabled={downloadingReports || hypotheses.length === 0}
+                      data-testid="button-download-all-reports"
+                    >
+                      {downloadingReports ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Archive className="h-4 w-4" />
+                      )}
+                      一括Word
                     </Button>
                   </div>
                 </div>

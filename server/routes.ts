@@ -1073,7 +1073,7 @@ export async function registerRoutes(
       
       // Fetch all runs and their individual outputs
       const runReports = new Map<number, { outputs: string[], titles: string[] }>();
-      for (const runId of hypothesesByRun.keys()) {
+      for (const runId of Array.from(hypothesesByRun.keys())) {
         const run = await storage.getRun(runId);
         if (run) {
           const outputs = run.step2_2IndividualOutputs as string[] | null;
