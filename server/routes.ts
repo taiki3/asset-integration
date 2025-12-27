@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertProjectSchema, insertResourceSchema, insertHypothesisRunSchema, insertPromptVersionSchema } from "@shared/schema";
 import { STEP2_PROMPT, STEP2_1_DEEP_RESEARCH_PROMPT, STEP2_2_DEEP_RESEARCH_PROMPT, STEP3_INDIVIDUAL_PROMPT, STEP4_INDIVIDUAL_PROMPT, STEP5_INDIVIDUAL_PROMPT } from "./prompts";
-import { executeGMethodPipeline, requestPause, requestResume, requestStop, resumePipeline } from "./gmethod-pipeline";
+import { executeGMethodPipeline, requestPause, requestResume, requestStop, resumePipeline, isRunActive, getActiveRunIds, forceReleaseAllLocks } from "./gmethod-pipeline";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, TableRow, TableCell, Table, WidthType, BorderStyle } from "docx";
 
@@ -586,6 +586,12 @@ export async function registerRoutes(
   app.post("/api/runs/:id/resume-interrupted", isAuthenticated, requireAgcDomain, async (req, res) => {
     try {
       const id = parseInt(req.params.id);
+      
+      // Check if run is already active (prevents duplicate execution)
+      if (isRunActive(id)) {
+        return res.status(409).json({ error: "このパイプラインは既に実行中です" });
+      }
+      
       const run = await storage.getRun(id);
       if (!run) {
         return res.status(404).json({ error: "Run not found" });
@@ -659,6 +665,54 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error stopping run:", error);
       res.status(500).json({ error: "Failed to stop run" });
+    }
+  });
+
+  // Force reset a stuck run (emergency recovery)
+  app.post("/api/runs/:id/force-reset", isAuthenticated, requireAgcDomain, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const run = await storage.getRun(id);
+      if (!run) {
+        return res.status(404).json({ error: "Run not found" });
+      }
+      
+      // Force reset the run to interrupted status
+      await storage.updateRun(id, {
+        status: "interrupted",
+        errorMessage: "強制リセットにより中断されました",
+      });
+      
+      // Also request stop in case pipeline is still running
+      requestStop(id);
+      
+      console.log(`[Run ${id}] Force reset to interrupted status`);
+      res.json({ message: "ランを強制リセットしました。再開するには「途中から再開」をクリックしてください。" });
+    } catch (error) {
+      console.error("Error force resetting run:", error);
+      res.status(500).json({ error: "Failed to force reset run" });
+    }
+  });
+
+  // Get active run IDs (for debugging)
+  app.get("/api/debug/active-runs", isAuthenticated, requireAgcDomain, async (req, res) => {
+    try {
+      const activeRuns = getActiveRunIds();
+      res.json({ activeRuns, count: activeRuns.length });
+    } catch (error) {
+      console.error("Error getting active runs:", error);
+      res.status(500).json({ error: "Failed to get active runs" });
+    }
+  });
+
+  // Force release all run locks (emergency recovery)
+  app.post("/api/debug/force-release-locks", isAuthenticated, requireAgcDomain, async (req, res) => {
+    try {
+      forceReleaseAllLocks();
+      res.json({ message: "全てのロックを解放しました" });
+    } catch (error) {
+      console.error("Error releasing locks:", error);
+      res.status(500).json({ error: "Failed to release locks" });
     }
   });
 

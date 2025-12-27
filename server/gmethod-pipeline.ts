@@ -28,6 +28,38 @@ const DEEP_RESEARCH_AGENT = "deep-research-pro-preview-12-2025";
 const pauseRequests = new Map<number, boolean>();
 const stopRequests = new Map<number, boolean>();
 
+// Active run guard - prevents duplicate pipeline execution
+const activeRunIds = new Set<number>();
+
+export function isRunActive(runId: number): boolean {
+  return activeRunIds.has(runId);
+}
+
+export function acquireRunLock(runId: number): boolean {
+  if (activeRunIds.has(runId)) {
+    console.log(`[Run ${runId}] BLOCKED: Already running in this process`);
+    return false;
+  }
+  activeRunIds.add(runId);
+  console.log(`[Run ${runId}] Lock acquired (active runs: ${activeRunIds.size})`);
+  return true;
+}
+
+export function releaseRunLock(runId: number): void {
+  activeRunIds.delete(runId);
+  console.log(`[Run ${runId}] Lock released (active runs: ${activeRunIds.size})`);
+}
+
+export function getActiveRunIds(): number[] {
+  return Array.from(activeRunIds);
+}
+
+export function forceReleaseAllLocks(): void {
+  const count = activeRunIds.size;
+  activeRunIds.clear();
+  console.log(`[Recovery] Force released ${count} run locks`);
+}
+
 export function requestPause(runId: number): void {
   pauseRequests.set(runId, true);
 }
@@ -2062,6 +2094,12 @@ export async function executeGMethodPipeline(
   resumeFromStep?: number,
   existingFilter?: ExistingHypothesisFilter
 ): Promise<void> {
+  // Acquire lock to prevent duplicate execution
+  if (!acquireRunLock(runId)) {
+    console.error(`[Run ${runId}] Pipeline execution blocked - already running`);
+    return;
+  }
+
   try {
     if (!checkAIConfiguration()) {
       await storage.updateRun(runId, {
@@ -2256,6 +2294,9 @@ export async function executeGMethodPipeline(
       errorMessage: errorMessage,
     });
     clearControlRequests(runId);
+  } finally {
+    // Always release the lock when pipeline ends
+    releaseRunLock(runId);
   }
 }
 
