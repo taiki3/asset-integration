@@ -18,7 +18,7 @@ import {
   stepFileAttachments,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, max, or, and, ne, inArray, isNull } from "drizzle-orm";
+import { eq, desc, max, or, and, ne, inArray, isNull, sql } from "drizzle-orm";
 
 export interface IStorage {
   // Projects
@@ -44,6 +44,7 @@ export interface IStorage {
   getRun(id: number): Promise<HypothesisRun | undefined>;
   createRun(run: InsertHypothesisRun): Promise<HypothesisRun>;
   updateRun(id: number, updates: Partial<HypothesisRun>): Promise<HypothesisRun | undefined>;
+  appendDebugPrompt(id: number, entry: { step: string; prompt: string; attachments: string[]; timestamp: string }): Promise<void>;
   getInterruptedRuns(): Promise<HypothesisRun[]>;
 
   // Hypotheses
@@ -172,6 +173,21 @@ export class DatabaseStorage implements IStorage {
   async updateRun(id: number, updates: Partial<HypothesisRun>): Promise<HypothesisRun | undefined> {
     const [updated] = await db.update(hypothesisRuns).set(updates).where(eq(hypothesisRuns.id, id)).returning();
     return updated;
+  }
+
+  async appendDebugPrompt(id: number, entry: { step: string; prompt: string; attachments: string[]; timestamp: string }): Promise<void> {
+    // Use raw SQL to atomically append to the JSONB entries array
+    // This avoids race conditions when multiple parallel hypotheses try to add prompts
+    const entryJson = JSON.stringify(entry);
+    await db.execute(sql`
+      UPDATE hypothesis_runs 
+      SET debug_prompts = CASE 
+        WHEN debug_prompts IS NULL THEN jsonb_build_object('entries', jsonb_build_array(${entryJson}::jsonb))
+        WHEN debug_prompts->'entries' IS NULL THEN jsonb_set(debug_prompts, '{entries}', jsonb_build_array(${entryJson}::jsonb))
+        ELSE jsonb_set(debug_prompts, '{entries}', (debug_prompts->'entries') || ${entryJson}::jsonb)
+      END
+      WHERE id = ${id}
+    `);
   }
 
   async getInterruptedRuns(): Promise<HypothesisRun[]> {

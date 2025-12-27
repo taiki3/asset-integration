@@ -396,21 +396,15 @@ interface DebugPrompts {
   entries: DebugPromptEntry[];
 }
 
-// Helper function to add a debug prompt entry
+// Helper function to add a debug prompt entry (atomic operation to avoid race conditions)
 async function addDebugPrompt(runId: number, step: string, prompt: string, attachments: string[]): Promise<void> {
   try {
-    const run = await storage.getRun(runId);
-    if (!run) return;
-    
-    const debugPrompts: DebugPrompts = (run.debugPrompts as DebugPrompts) || { entries: [] };
-    debugPrompts.entries.push({
+    await storage.appendDebugPrompt(runId, {
       step,
       prompt,
       attachments,
       timestamp: new Date().toISOString(),
     });
-    
-    await storage.updateRun(runId, { debugPrompts });
   } catch (error) {
     console.warn(`[Run ${runId}] Failed to save debug prompt for ${step}:`, error);
   }
