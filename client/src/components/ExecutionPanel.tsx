@@ -989,12 +989,12 @@ export function ExecutionPanel({
                     </p>
                   </div>
                 ) : (
-                  <ScrollArea className="h-[300px] rounded-md border p-3">
-                    <div className="space-y-2">
+                  <ScrollArea className="h-[300px] rounded-md border p-3 overflow-hidden">
+                    <div className="space-y-2 overflow-hidden">
                       {filteredImportableProjects.map((item) => (
                         <div key={item.project.id} className="space-y-1">
                           <div
-                            className="flex items-center gap-2 p-2 rounded-md bg-muted/50 cursor-pointer"
+                            className="flex items-center gap-2 p-2 rounded-md bg-muted/50 cursor-pointer min-w-0"
                             onClick={() => toggleProjectExpanded(item.project.id)}
                             data-testid={`import-project-${item.project.id}`}
                           >
@@ -1008,16 +1008,17 @@ export function ExecutionPanel({
                               onCheckedChange={() => toggleProjectResources(item.project.id, item.resources)}
                               onClick={(e) => e.stopPropagation()}
                               data-testid={`checkbox-project-${item.project.id}`}
+                              className="shrink-0"
                             />
-                            <span className="font-medium text-sm flex-1 truncate">{item.project.name}</span>
-                            <span className="text-xs text-muted-foreground">{item.resources.length}件</span>
+                            <span className="font-medium text-sm flex-1 truncate min-w-0">{item.project.name}</span>
+                            <span className="text-xs text-muted-foreground shrink-0">{item.resources.length}件</span>
                           </div>
                           {expandedProjects.has(item.project.id) && (
                             <div className="ml-6 space-y-1">
                               {item.resources.map((resource) => (
                                 <div
                                   key={resource.id}
-                                  className="flex items-center gap-2 p-2 rounded-md hover-elevate cursor-pointer"
+                                  className="flex items-center gap-2 p-2 rounded-md hover-elevate cursor-pointer min-w-0"
                                   onClick={() => toggleResourceSelected(resource.id)}
                                   data-testid={`import-resource-${resource.id}`}
                                 >
@@ -1026,9 +1027,10 @@ export function ExecutionPanel({
                                     onCheckedChange={() => toggleResourceSelected(resource.id)}
                                     onClick={(e) => e.stopPropagation()}
                                     data-testid={`checkbox-resource-${resource.id}`}
+                                    className="shrink-0"
                                   />
                                   <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
-                                  <span className="text-sm flex-1 truncate">{resource.name}</span>
+                                  <span className="text-sm flex-1 truncate min-w-0">{resource.name}</span>
                                 </div>
                               ))}
                             </div>
