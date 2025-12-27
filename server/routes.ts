@@ -983,25 +983,20 @@ export async function registerRoutes(
       }
       
       const individualOutputs = run.step2_2IndividualOutputs as string[] | null;
+      const individualTitles = run.step2_2IndividualTitles as string[] | null;
       if (!individualOutputs || !Array.isArray(individualOutputs)) {
         return res.json({ available: false, count: 0, reports: [] });
       }
       
       const reports = individualOutputs.map((report, index) => {
-        const titleMatch = report.match(/(?:^|\n)#+\s*(?:仮説\s*\d+[:\s]*)?(.+?)(?:\n|$)/);
-        let title = titleMatch ? titleMatch[1].trim().slice(0, 100) : `仮説${index + 1}`;
+        // Use saved title if available, otherwise fallback to extraction
+        let title = (individualTitles && individualTitles[index]) 
+          ? individualTitles[index] 
+          : `仮説${index + 1}`;
         
         // Check if this report has an error (Step 2-2 failed)
         const hasError = report.includes("Deep Researchの実行に失敗しました") || 
                         report.includes("APIの起動に失敗しました");
-        
-        // Extract title from error message format if needed
-        if (hasError) {
-          const errorTitleMatch = report.match(/【仮説\d+:\s*(.+?)】/);
-          if (errorTitleMatch) {
-            title = errorTitleMatch[1].trim();
-          }
-        }
         
         return {
           index,

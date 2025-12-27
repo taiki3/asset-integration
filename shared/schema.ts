@@ -49,6 +49,7 @@ export const hypothesisRuns = pgTable("hypothesis_runs", {
   step2_1Output: text("step2_1_output"), // Step 2-1: Divergent selection phase
   step2_2Output: text("step2_2_output"), // Step 2-2: Convergent deep-dive phase (merged)
   step2_2IndividualOutputs: jsonb("step2_2_individual_outputs"), // Step 2-2: Individual hypothesis reports array
+  step2_2IndividualTitles: jsonb("step2_2_individual_titles"), // Step 2-2: Individual hypothesis titles array (parallel to outputs)
   step2Output: text("step2_output"), // Combined output of 2-1 and 2-2 (legacy, kept for backward compatibility)
   step3Output: text("step3_output"), // Legacy batch output (kept for backward compatibility)
   step3IndividualOutputs: jsonb("step3_individual_outputs"), // Step 3: Per-hypothesis scientific evaluation

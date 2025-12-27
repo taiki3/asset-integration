@@ -737,24 +737,41 @@ async function appendIndividualOutputs(
   runId: number,
   newOutputs: {
     step2_2IndividualOutputs?: string[];
+    step2_2IndividualTitles?: string[];
     step3IndividualOutputs?: string[];
     step4IndividualOutputs?: string[];
     step5IndividualOutputs?: string[];
   }
 ): Promise<{
   step2_2IndividualOutputs: string[];
+  step2_2IndividualTitles: string[];
   step3IndividualOutputs: string[];
   step4IndividualOutputs: string[];
   step5IndividualOutputs: string[];
 }> {
   const run = await storage.getRun(runId);
   const existing2_2 = (run?.step2_2IndividualOutputs as string[] | null) || [];
+  const existing2_2Titles = (run?.step2_2IndividualTitles as string[] | null) || [];
   const existing3 = (run?.step3IndividualOutputs as string[] | null) || [];
   const existing4 = (run?.step4IndividualOutputs as string[] | null) || [];
   const existing5 = (run?.step5IndividualOutputs as string[] | null) || [];
   
+  const newOutputsArray = newOutputs.step2_2IndividualOutputs || [];
+  const newTitlesArray = newOutputs.step2_2IndividualTitles || [];
+  
+  // Defensive: Generate placeholder titles if not provided or length mismatch
+  const adjustedNewTitles = newOutputsArray.map((_, i) => {
+    if (newTitlesArray[i]) {
+      return newTitlesArray[i];
+    }
+    // Generate placeholder title based on position
+    const currentTotal = existing2_2.length;
+    return `仮説${currentTotal + i + 1}`;
+  });
+  
   return {
-    step2_2IndividualOutputs: [...existing2_2, ...(newOutputs.step2_2IndividualOutputs || [])],
+    step2_2IndividualOutputs: [...existing2_2, ...newOutputsArray],
+    step2_2IndividualTitles: [...existing2_2Titles, ...adjustedNewTitles],
     step3IndividualOutputs: [...existing3, ...(newOutputs.step3IndividualOutputs || [])],
     step4IndividualOutputs: [...existing4, ...(newOutputs.step4IndividualOutputs || [])],
     step5IndividualOutputs: [...existing5, ...(newOutputs.step5IndividualOutputs || [])],
@@ -1221,9 +1238,10 @@ async function executeDeepResearchStep2(context: PipelineContext, runId: number)
     stepTimings["step2_2_parallel"] = Date.now() - phase2StartTime;
     console.log(`[Run ${runId}] All ${step2_2Results.length} Step 2-2 Deep Research completed in parallel`);
 
-    // Save Step 2-2 individual outputs immediately
+    // Save Step 2-2 individual outputs and titles immediately
     const step2_2IndividualOutputs = step2_2Results.map(r => r.step2_2Output);
-    await storage.updateRun(runId, { step2_2IndividualOutputs });
+    const step2_2IndividualTitles = step2_2Results.map(r => r.hypothesisTitle);
+    await storage.updateRun(runId, { step2_2IndividualOutputs, step2_2IndividualTitles });
 
     // Check for pause/stop request after parallel Step 2-2
     const runStatusCheck = await storage.getRun(runId);
@@ -1313,15 +1331,18 @@ async function executeDeepResearchStep2(context: PipelineContext, runId: number)
     // For multi-loop runs, append to existing individual outputs instead of overwriting
     const appendedOutputs = await appendIndividualOutputs(runId, {
       step2_2IndividualOutputs,
+      step2_2IndividualTitles,
       step3IndividualOutputs,
       step4IndividualOutputs,
       step5IndividualOutputs,
     });
     
     // Rebuild aggregated outputs from all accumulated individual outputs (for multi-loop support)
-    const fullStep2_2Output = appendedOutputs.step2_2IndividualOutputs.map((output, i) => 
-      `${'='.repeat(60)}\n【仮説${i + 1}】\n${'='.repeat(60)}\n\n${output}`
-    ).join('\n\n');
+    // Use saved titles for consistent display
+    const fullStep2_2Output = appendedOutputs.step2_2IndividualOutputs.map((output, i) => {
+      const title = appendedOutputs.step2_2IndividualTitles[i] || `仮説${i + 1}`;
+      return `${'='.repeat(60)}\n【仮説${i + 1}: ${title}】\n${'='.repeat(60)}\n\n${output}`;
+    }).join('\n\n');
     const fullStep3Output = appendedOutputs.step3IndividualOutputs.join('\n\n');
     const fullStep4Output = appendedOutputs.step4IndividualOutputs.join('\n\n');
     const fullStep5Output = aggregateStep5Outputs(appendedOutputs.step5IndividualOutputs);
@@ -1329,6 +1350,7 @@ async function executeDeepResearchStep2(context: PipelineContext, runId: number)
     await storage.updateRun(runId, { 
       step2_2Output: fullStep2_2Output,
       step2_2IndividualOutputs: appendedOutputs.step2_2IndividualOutputs,
+      step2_2IndividualTitles: appendedOutputs.step2_2IndividualTitles,
       step3Output: fullStep3Output,
       step3IndividualOutputs: appendedOutputs.step3IndividualOutputs,
       step4Output: fullStep4Output,
@@ -2641,14 +2663,19 @@ export async function executeReprocessPipeline(runId: number): Promise<void> {
       throw new Error("アップロードされたコンテンツから仮説を抽出できませんでした");
     }
 
-    // Store as STEP2-2 individual outputs
+    // Store as STEP2-2 individual outputs (as strings for consistency with normal pipeline)
+    const step2_2IndividualOutputs: string[] = hypothesisDocuments.map((doc) => doc.content);
+    const step2_2IndividualTitles: string[] = hypothesisDocuments.map((doc) => doc.title);
+
+    // Also create legacy format for backward compatibility
     const step2_2Outputs: Array<{ hypothesisIndex: number; content: string }> = hypothesisDocuments.map((doc, i) => ({
       hypothesisIndex: i + 1,
       content: doc.content,
     }));
 
     await storage.updateRun(runId, {
-      step2_2IndividualOutputs: step2_2Outputs,
+      step2_2IndividualOutputs,
+      step2_2IndividualTitles,
       currentStep: 3,
     });
 
