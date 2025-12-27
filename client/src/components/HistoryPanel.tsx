@@ -169,6 +169,15 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, 
     }
   }, [detailsOpen]);
 
+  useEffect(() => {
+    if (selectedRun && detailsOpen) {
+      const updatedRun = runs.find((r) => r.id === selectedRun.id);
+      if (updatedRun && JSON.stringify(updatedRun) !== JSON.stringify(selectedRun)) {
+        setSelectedRun(updatedRun);
+      }
+    }
+  }, [runs, selectedRun, detailsOpen]);
+
   const stepLabels = [
     { key: "step2Output", label: "ステップ2: 提案", step: 2 },
     { key: "step3Output", label: "ステップ3: 科学的評価", step: 3 },
