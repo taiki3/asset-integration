@@ -34,12 +34,12 @@ A web application for automating the "G-Method" business hypothesis generation p
   - Individual reports: `step2_2IndividualOutputs` (jsonb array) stores each STEP2-2 hypothesis report separately for individual download
 
 ## G-Method Pipeline
-The pipeline uses a hybrid parallel/sequential architecture: Step 2-2 runs in parallel for all hypotheses, then Steps 3→4→5 are processed sequentially for each.
+The pipeline uses a fully parallel architecture: Step 2-2 runs in parallel for all hypotheses, then Steps 3→4→5 also run in parallel for all hypotheses.
 
-### Pipeline Architecture (Parallel Step 2-2 + Sequential Steps 3-5)
+### Pipeline Architecture (Fully Parallel Processing)
 1. **Step 2-1 (発散・選定)**: One AI generates 30+ hypotheses and selects Top N using I/M/L/U criteria (weights: I:40%, M:30%, L:15%, U:15%)
 2. **Step 2-2 (並列Deep Research)**: N個のDeep Research タスクが**並列**で実行
-3. **Steps 3→4→5 (順次処理)**: 各仮説について順次実行
+3. **Steps 3→4→5 (並列処理)**: 全仮説についてSteps 3→4→5を**並列**で実行
    - **Step 3**: Scientific/economic evaluation (Dr. Kill-Switch)
    - **Step 4**: Strategic audit (War Gaming Mode)
    - **Step 5**: TSV row extraction for this hypothesis

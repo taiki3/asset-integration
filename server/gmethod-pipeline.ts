@@ -1056,36 +1056,30 @@ async function executeDeepResearchStep2(context: PipelineContext, runId: number)
       throw new Error(`処理が中断されました: ${runStatusCheck.status}`);
     }
 
-    // ===== PHASE 3: Sequential Steps 3→4→5 for each hypothesis =====
-    console.log(`[Run ${runId}] === PHASE 3: Sequential Steps 3→4→5 (${context.hypothesisCount}仮説を順次処理) ===`);
+    // ===== PHASE 3: PARALLEL Steps 3→4→5 for all hypotheses =====
+    console.log(`[Run ${runId}] === PHASE 3: Parallel Steps 3→4→5 (${context.hypothesisCount}仮説を並列処理) ===`);
     
     const phase3StartTime = Date.now();
-    const allResults: PerHypothesisResult[] = [];
-    const step3IndividualOutputs: string[] = [];
-    const step4IndividualOutputs: string[] = [];
-    const step5IndividualOutputs: string[] = [];
     
-    for (let i = 0; i < step2_2Results.length; i++) {
-      const step2_2Result = step2_2Results[i];
+    await updateProgress(runId, { 
+      currentPhase: "steps3to5_parallel", 
+      currentIteration: 3, 
+      maxIterations: 4,
+      planningAnalysis: `Steps 3→4→5: ${step2_2Results.length}個の仮説を並列で評価・監査・統合実行中...`,
+      stepTimings,
+      stepStartTime: startTime,
+    });
+    
+    // Run Steps 3→4→5 in PARALLEL for all hypotheses
+    const steps3to5Promises = step2_2Results.map((step2_2Result, i) => {
       const hypothesisNumber = step2_2Result.hypothesisNumber;
       const hypothesisTitle = step2_2Result.hypothesisTitle;
       const step2_2OutputForThisHypothesis = step2_2Result.step2_2Output;
       
-      // Debug: Log Step 2-2 output being passed to Steps 3-5
-      console.log(`[Run ${runId}] DEBUG: Passing Step 2-2 output for hypothesis ${hypothesisNumber} to Steps 3-5`);
+      console.log(`[Run ${runId}] Starting parallel Steps 3-5 for hypothesis ${hypothesisNumber}: ${hypothesisTitle}`);
       console.log(`[Run ${runId}] DEBUG: Step 2-2 output length: ${step2_2OutputForThisHypothesis.length} chars`);
-      console.log(`[Run ${runId}] DEBUG: Step 2-2 output first 200 chars: ${step2_2OutputForThisHypothesis.substring(0, 200)}`);
       
-      await updateProgress(runId, { 
-        currentPhase: `hypothesis_${hypothesisNumber}_steps3to5`, 
-        currentIteration: i + 3, 
-        maxIterations: context.hypothesisCount + 3,
-        planningAnalysis: `仮説${hypothesisNumber}/${step2_2Results.length}「${hypothesisTitle}」: Steps 3→4→5 実行中...`,
-        stepTimings,
-        stepStartTime: startTime,
-      });
-      
-      const result = await processSteps3to5ForHypothesis(
+      return processSteps3to5ForHypothesis(
         client,
         hypothesisNumber,
         hypothesisTitle,
@@ -1095,16 +1089,16 @@ async function executeDeepResearchStep2(context: PipelineContext, runId: number)
         startTime,
         stepTimings
       );
-      
-      allResults.push(result);
-      step3IndividualOutputs.push(result.step3Output);
-      step4IndividualOutputs.push(result.step4Output);
-      step5IndividualOutputs.push(result.step5Output);
-      
-      console.log(`[Run ${runId}] Hypothesis ${hypothesisNumber}/${step2_2Results.length} Steps 3→4→5 completed`);
-    }
+    });
     
-    stepTimings["phase3_steps3to5"] = Date.now() - phase3StartTime;
+    const allResults = await Promise.all(steps3to5Promises);
+    console.log(`[Run ${runId}] All ${allResults.length} hypotheses Steps 3→4→5 completed in parallel`);
+    
+    const step3IndividualOutputs = allResults.map(r => r.step3Output);
+    const step4IndividualOutputs = allResults.map(r => r.step4Output);
+    const step5IndividualOutputs = allResults.map(r => r.step5Output);
+    
+    stepTimings["phase3_steps3to5_parallel"] = Date.now() - phase3StartTime;
     stepTimings["phase2_total"] = Date.now() - phase2StartTime;
     console.log(`[Run ${runId}] All ${allResults.length} hypotheses fully processed`);
 
