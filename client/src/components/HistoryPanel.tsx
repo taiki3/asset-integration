@@ -89,10 +89,12 @@ function formatDuration(ms: number): string {
 export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, onDownloadStep2Word, onDownloadIndividualReport, onResumeInterrupted, isResuming }: HistoryPanelProps) {
   const [selectedRun, setSelectedRun] = useState<HypothesisRun | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState("step2Output");
+  const [activeTab, setActiveTab] = useState("step2_1Output");
   const [individualReports, setIndividualReports] = useState<IndividualReport[]>([]);
   const [selectedHypothesisIndex, setSelectedHypothesisIndex] = useState<string>("");
   const [loadingReports, setLoadingReports] = useState(false);
+  const [selectedReportContent, setSelectedReportContent] = useState<string>("");
+  const [loadingReportContent, setLoadingReportContent] = useState(false);
   const [debugPromptsOpen, setDebugPromptsOpen] = useState(false);
   const [debugPrompts, setDebugPrompts] = useState<DebugPromptEntry[]>([]);
   const [loadingDebugPrompts, setLoadingDebugPrompts] = useState(false);
@@ -167,8 +169,17 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, 
     if (!detailsOpen) {
       setIndividualReports([]);
       setSelectedHypothesisIndex("");
+      setSelectedReportContent("");
     }
   }, [detailsOpen]);
+  
+  useEffect(() => {
+    if (selectedHypothesisIndex && selectedRun) {
+      fetchReportContent(selectedRun.id, parseInt(selectedHypothesisIndex));
+    } else {
+      setSelectedReportContent("");
+    }
+  }, [selectedHypothesisIndex, selectedRun]);
 
   useEffect(() => {
     if (selectedRun && detailsOpen) {
@@ -180,11 +191,29 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, 
   }, [runs, selectedRun, detailsOpen]);
 
   const stepLabels = [
-    { key: "step2Output", label: "ステップ2: 提案", step: 2 },
-    { key: "step3Output", label: "ステップ3: 科学的評価", step: 3 },
-    { key: "step4Output", label: "ステップ4: 戦略的監査", step: 4 },
-    { key: "step5Output", label: "ステップ5: 統合", step: 5 },
+    { key: "step2_1Output", label: "S2-1: 発散・選定", step: 2, substep: 1 },
+    { key: "step2_2Output", label: "S2-2: Deep Research", step: 2, substep: 2 },
+    { key: "step3Output", label: "S3: 評価", step: 3 },
+    { key: "step4Output", label: "S4: 監査", step: 4 },
+    { key: "step5Output", label: "S5: 統合", step: 5 },
   ] as const;
+  
+  const fetchReportContent = async (runId: number, hypothesisIndex: number) => {
+    setLoadingReportContent(true);
+    try {
+      const response = await fetch(`/api/runs/${runId}/individual-reports/${hypothesisIndex}/content`, { credentials: "include" });
+      if (response.ok) {
+        const data = await response.json();
+        setSelectedReportContent(data.content || "");
+      } else {
+        setSelectedReportContent("");
+      }
+    } catch {
+      setSelectedReportContent("");
+    } finally {
+      setLoadingReportContent(false);
+    }
+  };
 
   return (
     <>
@@ -416,16 +445,16 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, 
                     )}
 
                     <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 min-w-0">
-                      <TabsList className="grid w-full grid-cols-4 shrink-0">
-                        {stepLabels.map(({ key, step }) => {
+                      <TabsList className="grid w-full grid-cols-5 shrink-0">
+                        {stepLabels.map(({ key, label, step }) => {
                           const status = getStepStatus(step);
                           const isDisabled = status === "pending";
                           return (
-                            <TabsTrigger key={key} value={key} className="gap-1" disabled={isDisabled}>
+                            <TabsTrigger key={key} value={key} className="gap-1 text-xs px-2" disabled={isDisabled}>
                               {status === "running" && (
                                 <Loader2 className="h-3 w-3 animate-spin" />
                               )}
-                              ステップ {step}
+                              {label}
                             </TabsTrigger>
                           );
                         })}
@@ -518,7 +547,114 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, 
                         return null;
                       })()}
                       
-                      {stepLabels.map(({ key, step }) => {
+                      {/* STEP 2-1 Tab */}
+                      <TabsContent value="step2_1Output" className="mt-4 overflow-hidden">
+                        <ScrollArea className="h-[45vh] rounded-md border bg-muted/30 p-4">
+                          {getStepStatus(2) === "completed" ? (
+                            <div className="w-full overflow-x-auto">
+                              <div className="prose prose-sm dark:prose-invert max-w-none [&_table]:text-xs [&_pre]:overflow-x-auto [&_pre]:max-w-full">
+                                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                  {selectedRun.step2_1Output || selectedRun.step2Output || "出力がありません"}
+                                </ReactMarkdown>
+                              </div>
+                            </div>
+                          ) : getStepStatus(2) === "running" ? (
+                            <div className="flex flex-col items-center justify-center h-full py-16">
+                              <Loader2 className="h-10 w-10 text-primary animate-spin mb-4" />
+                              <p className="text-sm text-muted-foreground">STEP 2-1 を処理中...</p>
+                              <p className="text-xs text-muted-foreground mt-1">完了まで数分かかる場合があります</p>
+                            </div>
+                          ) : (
+                            <div className="flex flex-col items-center justify-center h-full py-16">
+                              <Clock className="h-10 w-10 text-muted-foreground/50 mb-4" />
+                              <p className="text-sm text-muted-foreground">完了待ち</p>
+                            </div>
+                          )}
+                        </ScrollArea>
+                      </TabsContent>
+                      
+                      {/* STEP 2-2 Tab with hypothesis selector */}
+                      <TabsContent value="step2_2Output" className="mt-4 overflow-hidden">
+                        <div className="flex flex-col h-[45vh]">
+                          {/* Hypothesis selector */}
+                          <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+                            <div className="flex items-center gap-2">
+                              {loadingReports ? (
+                                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                  読込中...
+                                </div>
+                              ) : individualReports.length > 0 ? (
+                                <Select value={selectedHypothesisIndex} onValueChange={setSelectedHypothesisIndex}>
+                                  <SelectTrigger className="w-[280px]" data-testid="select-hypothesis-preview">
+                                    <SelectValue placeholder="仮説を選択してプレビュー" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {individualReports.map((report) => (
+                                      <SelectItem 
+                                        key={report.index} 
+                                        value={report.index.toString()}
+                                      >
+                                        {report.hasError ? (
+                                          <span className="flex items-center gap-1 text-destructive">
+                                            <XCircle className="h-3 w-3" />
+                                            仮説{report.index + 1}: エラー
+                                          </span>
+                                        ) : (
+                                          <>仮説{report.index + 1}: {report.title.slice(0, 30)}...</>
+                                        )}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              ) : (
+                                <span className="text-sm text-muted-foreground">個別レポートがありません</span>
+                              )}
+                            </div>
+                            {selectedHypothesisIndex && !individualReports.find(r => r.index.toString() === selectedHypothesisIndex)?.hasError && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="gap-2"
+                                onClick={() => selectedRun && onDownloadIndividualReport(selectedRun.id, parseInt(selectedHypothesisIndex))}
+                                data-testid="button-download-step2-2-word"
+                              >
+                                <FileText className="h-4 w-4" />
+                                Word出力
+                              </Button>
+                            )}
+                          </div>
+                          {/* Preview content */}
+                          <ScrollArea className="flex-1 rounded-md border bg-muted/30 p-4">
+                            {loadingReportContent ? (
+                              <div className="flex flex-col items-center justify-center h-full py-16">
+                                <Loader2 className="h-8 w-8 text-muted-foreground animate-spin mb-4" />
+                                <p className="text-sm text-muted-foreground">レポート読込中...</p>
+                              </div>
+                            ) : selectedReportContent ? (
+                              <div className="prose prose-sm dark:prose-invert max-w-none [&_table]:text-xs [&_pre]:overflow-x-auto [&_pre]:max-w-full">
+                                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                  {selectedReportContent}
+                                </ReactMarkdown>
+                              </div>
+                            ) : (
+                              <div className="flex flex-col items-center justify-center h-full py-16">
+                                <FileText className="h-10 w-10 text-muted-foreground/50 mb-4" />
+                                <p className="text-sm text-muted-foreground">
+                                  左のセレクトから仮説を選択してください
+                                </p>
+                              </div>
+                            )}
+                          </ScrollArea>
+                        </div>
+                      </TabsContent>
+                      
+                      {/* STEP 3, 4, 5 Tabs */}
+                      {[
+                        { key: "step3Output" as const, step: 3 },
+                        { key: "step4Output" as const, step: 4 },
+                        { key: "step5Output" as const, step: 5 },
+                      ].map(({ key, step }) => {
                         const status = getStepStatus(step);
                         return (
                           <TabsContent key={key} value={key} className="mt-4 overflow-hidden">
@@ -540,29 +676,19 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, 
                               ) : status === "running" ? (
                                 <div className="flex flex-col items-center justify-center h-full py-16">
                                   <Loader2 className="h-10 w-10 text-primary animate-spin mb-4" />
-                                  <p className="text-sm text-muted-foreground">
-                                    ステップ {step} を処理中...
-                                  </p>
-                                  <p className="text-xs text-muted-foreground mt-1">
-                                    完了まで数分かかる場合があります
-                                  </p>
+                                  <p className="text-sm text-muted-foreground">ステップ {step} を処理中...</p>
+                                  <p className="text-xs text-muted-foreground mt-1">完了まで数分かかる場合があります</p>
                                 </div>
                               ) : status === "error" ? (
                                 <div className="flex flex-col items-center justify-center h-full py-16">
                                   <XCircle className="h-10 w-10 text-destructive mb-4" />
-                                  <p className="text-sm text-destructive">
-                                    {selectedRun.errorMessage || "処理中にエラーが発生しました"}
-                                  </p>
+                                  <p className="text-sm text-destructive">{selectedRun.errorMessage || "処理中にエラーが発生しました"}</p>
                                 </div>
                               ) : (
                                 <div className="flex flex-col items-center justify-center h-full py-16">
                                   <Clock className="h-10 w-10 text-muted-foreground/50 mb-4" />
-                                  <p className="text-sm text-muted-foreground">
-                                    完了待ち
-                                  </p>
-                                  <p className="text-xs text-muted-foreground mt-1">
-                                    前のステップが完了すると開始されます
-                                  </p>
+                                  <p className="text-sm text-muted-foreground">完了待ち</p>
+                                  <p className="text-xs text-muted-foreground mt-1">前のステップが完了すると開始されます</p>
                                 </div>
                               )}
                             </ScrollArea>
@@ -578,52 +704,6 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, 
 
           <Separator />
           <DialogFooter className="gap-2 sm:gap-2 flex-wrap">
-            {selectedRun?.status === "completed" && activeTab === "step2Output" && selectedRun.step2Output && (
-              <>
-                {loadingReports ? (
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    個別レポート読込中...
-                  </div>
-                ) : individualReports.length > 0 && (
-                  <div className="flex items-center gap-2">
-                    <Select value={selectedHypothesisIndex} onValueChange={setSelectedHypothesisIndex}>
-                      <SelectTrigger className="w-[220px]" data-testid="select-individual-report">
-                        <SelectValue placeholder="仮説を選択" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {individualReports.map((report) => (
-                          <SelectItem 
-                            key={report.index} 
-                            value={report.index.toString()}
-                            disabled={report.hasError}
-                          >
-                            {report.hasError ? (
-                              <span className="flex items-center gap-1 text-destructive">
-                                <XCircle className="h-3 w-3" />
-                                仮説{report.index + 1}: エラー
-                              </span>
-                            ) : (
-                              <>仮説{report.index + 1}: {report.title.slice(0, 25)}...</>
-                            )}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Button
-                      variant="outline"
-                      className="gap-2"
-                      disabled={!selectedHypothesisIndex || individualReports.find(r => r.index.toString() === selectedHypothesisIndex)?.hasError}
-                      onClick={() => selectedRun && onDownloadIndividualReport(selectedRun.id, parseInt(selectedHypothesisIndex))}
-                      data-testid="button-download-individual-report"
-                    >
-                      <FileText className="h-4 w-4" />
-                      Word出力
-                    </Button>
-                  </div>
-                )}
-              </>
-            )}
             {selectedRun?.status === "completed" && activeTab === "step5Output" && (
               <>
                 <Button
