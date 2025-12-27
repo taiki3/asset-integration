@@ -100,6 +100,18 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, 
   const [loadingDebugPrompts, setLoadingDebugPrompts] = useState(false);
   const [selectedDebugStep, setSelectedDebugStep] = useState<string>("");
   const [siblingRuns, setSiblingRuns] = useState<HypothesisRun[]>([]);
+  // STEP 3 individual reports
+  const [step3Reports, setStep3Reports] = useState<IndividualReport[]>([]);
+  const [selectedStep3Index, setSelectedStep3Index] = useState<string>("");
+  const [step3Content, setStep3Content] = useState<string>("");
+  const [loadingStep3Reports, setLoadingStep3Reports] = useState(false);
+  const [loadingStep3Content, setLoadingStep3Content] = useState(false);
+  // STEP 4 individual reports
+  const [step4Reports, setStep4Reports] = useState<IndividualReport[]>([]);
+  const [selectedStep4Index, setSelectedStep4Index] = useState<string>("");
+  const [step4Content, setStep4Content] = useState<string>("");
+  const [loadingStep4Reports, setLoadingStep4Reports] = useState(false);
+  const [loadingStep4Content, setLoadingStep4Content] = useState(false);
 
   const getResourceName = (id: number) => {
     return resources.find((r) => r.id === id)?.name || "不明";
@@ -123,6 +135,82 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, 
       setIndividualReports([]);
     } finally {
       setLoadingReports(false);
+    }
+  };
+
+  const fetchStep3Reports = async (runId: number) => {
+    setLoadingStep3Reports(true);
+    try {
+      const response = await fetch(`/api/runs/${runId}/step3-reports`, { credentials: "include" });
+      if (response.ok) {
+        const data = await response.json();
+        if (data.available) {
+          setStep3Reports(data.reports);
+        } else {
+          setStep3Reports([]);
+        }
+      } else {
+        setStep3Reports([]);
+      }
+    } catch {
+      setStep3Reports([]);
+    } finally {
+      setLoadingStep3Reports(false);
+    }
+  };
+
+  const fetchStep3Content = async (runId: number, hypothesisIndex: number) => {
+    setLoadingStep3Content(true);
+    try {
+      const response = await fetch(`/api/runs/${runId}/step3-reports/${hypothesisIndex}/content`, { credentials: "include" });
+      if (response.ok) {
+        const data = await response.json();
+        setStep3Content(data.content || "");
+      } else {
+        setStep3Content("");
+      }
+    } catch {
+      setStep3Content("");
+    } finally {
+      setLoadingStep3Content(false);
+    }
+  };
+
+  const fetchStep4Reports = async (runId: number) => {
+    setLoadingStep4Reports(true);
+    try {
+      const response = await fetch(`/api/runs/${runId}/step4-reports`, { credentials: "include" });
+      if (response.ok) {
+        const data = await response.json();
+        if (data.available) {
+          setStep4Reports(data.reports);
+        } else {
+          setStep4Reports([]);
+        }
+      } else {
+        setStep4Reports([]);
+      }
+    } catch {
+      setStep4Reports([]);
+    } finally {
+      setLoadingStep4Reports(false);
+    }
+  };
+
+  const fetchStep4Content = async (runId: number, hypothesisIndex: number) => {
+    setLoadingStep4Content(true);
+    try {
+      const response = await fetch(`/api/runs/${runId}/step4-reports/${hypothesisIndex}/content`, { credentials: "include" });
+      if (response.ok) {
+        const data = await response.json();
+        setStep4Content(data.content || "");
+      } else {
+        setStep4Content("");
+      }
+    } catch {
+      setStep4Content("");
+    } finally {
+      setLoadingStep4Content(false);
     }
   };
 
@@ -161,8 +249,15 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, 
     setSelectedRun(run);
     setDetailsOpen(true);
     setSelectedHypothesisIndex("");
+    setSelectedReportContent("");
+    setSelectedStep3Index("");
+    setStep3Content("");
+    setSelectedStep4Index("");
+    setStep4Content("");
     if (run.status === "completed") {
       fetchIndividualReports(run.id);
+      fetchStep3Reports(run.id);
+      fetchStep4Reports(run.id);
     }
     // Find sibling runs with same jobName for multi-loop batches
     if (run.jobName && run.totalLoops && run.totalLoops > 1) {
@@ -178,8 +273,15 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, 
     if (targetRun) {
       setSelectedRun(targetRun);
       setSelectedHypothesisIndex("");
+      setSelectedReportContent("");
+      setSelectedStep3Index("");
+      setStep3Content("");
+      setSelectedStep4Index("");
+      setStep4Content("");
       if (targetRun.status === "completed") {
         fetchIndividualReports(targetRun.id);
+        fetchStep3Reports(targetRun.id);
+        fetchStep4Reports(targetRun.id);
       }
     }
   };
@@ -190,8 +292,30 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, 
       setSelectedHypothesisIndex("");
       setSelectedReportContent("");
       setSiblingRuns([]);
+      setStep3Reports([]);
+      setSelectedStep3Index("");
+      setStep3Content("");
+      setStep4Reports([]);
+      setSelectedStep4Index("");
+      setStep4Content("");
     }
   }, [detailsOpen]);
+
+  useEffect(() => {
+    if (selectedStep3Index && selectedRun) {
+      fetchStep3Content(selectedRun.id, parseInt(selectedStep3Index));
+    } else {
+      setStep3Content("");
+    }
+  }, [selectedStep3Index, selectedRun]);
+
+  useEffect(() => {
+    if (selectedStep4Index && selectedRun) {
+      fetchStep4Content(selectedRun.id, parseInt(selectedStep4Index));
+    } else {
+      setStep4Content("");
+    }
+  }, [selectedStep4Index, selectedRun]);
   
   useEffect(() => {
     if (selectedHypothesisIndex && selectedRun) {
@@ -693,52 +817,149 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, 
                         </div>
                       </TabsContent>
                       
-                      {/* STEP 3, 4, 5 Tabs */}
-                      {[
-                        { key: "step3Output" as const, step: 3 },
-                        { key: "step4Output" as const, step: 4 },
-                        { key: "step5Output" as const, step: 5 },
-                      ].map(({ key, step }) => {
-                        const status = getStepStatus(step);
-                        return (
-                          <TabsContent key={key} value={key} className="mt-4 overflow-hidden">
-                            <ScrollArea className="h-[45vh] rounded-md border bg-muted/30 p-4">
-                              {status === "completed" ? (
-                                <div className="w-full overflow-x-auto">
-                                  {key === "step5Output" ? (
-                                    <pre className="text-sm font-mono whitespace-pre-wrap break-words">
-                                      {selectedRun[key] || "出力がありません"}
-                                    </pre>
-                                  ) : (
-                                    <div className="prose prose-sm dark:prose-invert max-w-none [&_table]:text-xs [&_pre]:overflow-x-auto [&_pre]:max-w-full">
-                                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                                        {selectedRun[key] || "出力がありません"}
-                                      </ReactMarkdown>
-                                    </div>
-                                  )}
-                                </div>
-                              ) : status === "running" ? (
-                                <div className="flex flex-col items-center justify-center h-full py-16">
-                                  <Loader2 className="h-10 w-10 text-primary animate-spin mb-4" />
-                                  <p className="text-sm text-muted-foreground">ステップ {step} を処理中...</p>
-                                  <p className="text-xs text-muted-foreground mt-1">完了まで数分かかる場合があります</p>
-                                </div>
-                              ) : status === "error" ? (
-                                <div className="flex flex-col items-center justify-center h-full py-16">
-                                  <XCircle className="h-10 w-10 text-destructive mb-4" />
-                                  <p className="text-sm text-destructive">{selectedRun.errorMessage || "処理中にエラーが発生しました"}</p>
-                                </div>
-                              ) : (
-                                <div className="flex flex-col items-center justify-center h-full py-16">
-                                  <Clock className="h-10 w-10 text-muted-foreground/50 mb-4" />
-                                  <p className="text-sm text-muted-foreground">完了待ち</p>
-                                  <p className="text-xs text-muted-foreground mt-1">前のステップが完了すると開始されます</p>
-                                </div>
-                              )}
-                            </ScrollArea>
-                          </TabsContent>
-                        );
-                      })}
+                      {/* STEP 3 Tab with hypothesis selector */}
+                      <TabsContent value="step3Output" className="mt-4 overflow-hidden">
+                        <div className="flex flex-col h-[45vh]">
+                          <div className="flex items-center gap-2 mb-3">
+                            {loadingStep3Reports ? (
+                              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                読込中...
+                              </div>
+                            ) : step3Reports.length > 0 ? (
+                              <Select value={selectedStep3Index} onValueChange={setSelectedStep3Index}>
+                                <SelectTrigger className="w-[280px]" data-testid="select-step3-hypothesis">
+                                  <SelectValue placeholder="仮説を選択してプレビュー" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {step3Reports.map((report) => (
+                                    <SelectItem key={report.index} value={report.index.toString()}>
+                                      {report.hasError ? (
+                                        <span className="flex items-center gap-1 text-destructive">
+                                          <XCircle className="h-3 w-3" />
+                                          仮説{report.index + 1}: エラー
+                                        </span>
+                                      ) : (
+                                        <>仮説{report.index + 1}: {report.title.slice(0, 30)}...</>
+                                      )}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            ) : (
+                              <span className="text-sm text-muted-foreground">個別レポートがありません</span>
+                            )}
+                          </div>
+                          <ScrollArea className="flex-1 rounded-md border bg-muted/30 p-4">
+                            {loadingStep3Content ? (
+                              <div className="flex flex-col items-center justify-center h-full py-16">
+                                <Loader2 className="h-8 w-8 text-muted-foreground animate-spin mb-4" />
+                                <p className="text-sm text-muted-foreground">レポート読込中...</p>
+                              </div>
+                            ) : step3Content ? (
+                              <div className="prose prose-sm dark:prose-invert max-w-none [&_table]:text-xs [&_pre]:overflow-x-auto [&_pre]:max-w-full">
+                                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                  {step3Content}
+                                </ReactMarkdown>
+                              </div>
+                            ) : (
+                              <div className="flex flex-col items-center justify-center h-full py-16">
+                                <FileText className="h-10 w-10 text-muted-foreground/50 mb-4" />
+                                <p className="text-sm text-muted-foreground">
+                                  左のセレクトから仮説を選択してください
+                                </p>
+                              </div>
+                            )}
+                          </ScrollArea>
+                        </div>
+                      </TabsContent>
+                      
+                      {/* STEP 4 Tab with hypothesis selector */}
+                      <TabsContent value="step4Output" className="mt-4 overflow-hidden">
+                        <div className="flex flex-col h-[45vh]">
+                          <div className="flex items-center gap-2 mb-3">
+                            {loadingStep4Reports ? (
+                              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                読込中...
+                              </div>
+                            ) : step4Reports.length > 0 ? (
+                              <Select value={selectedStep4Index} onValueChange={setSelectedStep4Index}>
+                                <SelectTrigger className="w-[280px]" data-testid="select-step4-hypothesis">
+                                  <SelectValue placeholder="仮説を選択してプレビュー" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {step4Reports.map((report) => (
+                                    <SelectItem key={report.index} value={report.index.toString()}>
+                                      {report.hasError ? (
+                                        <span className="flex items-center gap-1 text-destructive">
+                                          <XCircle className="h-3 w-3" />
+                                          仮説{report.index + 1}: エラー
+                                        </span>
+                                      ) : (
+                                        <>仮説{report.index + 1}: {report.title.slice(0, 30)}...</>
+                                      )}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            ) : (
+                              <span className="text-sm text-muted-foreground">個別レポートがありません</span>
+                            )}
+                          </div>
+                          <ScrollArea className="flex-1 rounded-md border bg-muted/30 p-4">
+                            {loadingStep4Content ? (
+                              <div className="flex flex-col items-center justify-center h-full py-16">
+                                <Loader2 className="h-8 w-8 text-muted-foreground animate-spin mb-4" />
+                                <p className="text-sm text-muted-foreground">レポート読込中...</p>
+                              </div>
+                            ) : step4Content ? (
+                              <div className="prose prose-sm dark:prose-invert max-w-none [&_table]:text-xs [&_pre]:overflow-x-auto [&_pre]:max-w-full">
+                                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                  {step4Content}
+                                </ReactMarkdown>
+                              </div>
+                            ) : (
+                              <div className="flex flex-col items-center justify-center h-full py-16">
+                                <FileText className="h-10 w-10 text-muted-foreground/50 mb-4" />
+                                <p className="text-sm text-muted-foreground">
+                                  左のセレクトから仮説を選択してください
+                                </p>
+                              </div>
+                            )}
+                          </ScrollArea>
+                        </div>
+                      </TabsContent>
+                      
+                      {/* STEP 5 Tab - integrated output */}
+                      <TabsContent value="step5Output" className="mt-4 overflow-hidden">
+                        <ScrollArea className="h-[45vh] rounded-md border bg-muted/30 p-4">
+                          {getStepStatus(5) === "completed" ? (
+                            <div className="w-full overflow-x-auto">
+                              <pre className="text-sm font-mono whitespace-pre-wrap break-words">
+                                {selectedRun.step5Output || "出力がありません"}
+                              </pre>
+                            </div>
+                          ) : getStepStatus(5) === "running" ? (
+                            <div className="flex flex-col items-center justify-center h-full py-16">
+                              <Loader2 className="h-10 w-10 text-primary animate-spin mb-4" />
+                              <p className="text-sm text-muted-foreground">ステップ 5 を処理中...</p>
+                              <p className="text-xs text-muted-foreground mt-1">完了まで数分かかる場合があります</p>
+                            </div>
+                          ) : getStepStatus(5) === "error" ? (
+                            <div className="flex flex-col items-center justify-center h-full py-16">
+                              <XCircle className="h-10 w-10 text-destructive mb-4" />
+                              <p className="text-sm text-destructive">{selectedRun.errorMessage || "処理中にエラーが発生しました"}</p>
+                            </div>
+                          ) : (
+                            <div className="flex flex-col items-center justify-center h-full py-16">
+                              <Clock className="h-10 w-10 text-muted-foreground/50 mb-4" />
+                              <p className="text-sm text-muted-foreground">完了待ち</p>
+                              <p className="text-xs text-muted-foreground mt-1">前のステップが完了すると開始されます</p>
+                            </div>
+                          )}
+                        </ScrollArea>
+                      </TabsContent>
                     </Tabs>
                   </>
                 );
