@@ -61,7 +61,6 @@ function getDisplayValue(data: FullDataRow, keys: string[]): string {
   return "";
 }
 
-const COLUMN_SETTINGS_KEY = "hypotheses-display-columns";
 
 export function HypothesesPanel({ hypotheses, resources, projectId, onDelete, onDownloadWord }: HypothesesPanelProps) {
   const [isOpen, setIsOpen] = useState(true);
@@ -69,23 +68,24 @@ export function HypothesesPanel({ hypotheses, resources, projectId, onDelete, on
   const [selectedHypothesis, setSelectedHypothesis] = useState<Hypothesis | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [columnSettingsOpen, setColumnSettingsOpen] = useState(false);
-  const [orderedColumns, setOrderedColumns] = useState<string[]>([]);
+  const [columnOrder, setColumnOrder] = useState<string[]>([]);
+  const [visibleColumns, setVisibleColumns] = useState<Set<string>>(new Set());
   const [detailsTab, setDetailsTab] = useState<"summary" | "report">("summary");
   const [reportContent, setReportContent] = useState<string | null>(null);
   const [reportLoading, setReportLoading] = useState(false);
   const [importModalOpen, setImportModalOpen] = useState(false);
   const { toast } = useToast();
 
-  // Get all unique columns, ordered by the oldest hypothesis's fullData keys (preserves STEP5 TSV order)
-  const allColumns = useMemo(() => {
+  // Get default column order from the newest hypothesis's fullData keys (preserves latest STEP5 TSV order)
+  const defaultColumnOrder = useMemo(() => {
     const columnSet = new Set<string>();
-    // Find the oldest hypothesis (smallest hypothesisNumber) to get original STEP5 column order
+    // Find the newest hypothesis (largest hypothesisNumber) to get latest STEP5 column order
     if (hypotheses.length > 0) {
-      const oldestHypothesis = hypotheses.reduce((oldest, current) => 
-        current.hypothesisNumber < oldest.hypothesisNumber ? current : oldest
+      const newestHypothesis = hypotheses.reduce((newest, current) => 
+        current.hypothesisNumber > newest.hypothesisNumber ? current : newest
       , hypotheses[0]);
-      const oldestData = getFullData(oldestHypothesis);
-      Object.keys(oldestData).forEach((key) => columnSet.add(key));
+      const newestData = getFullData(newestHypothesis);
+      Object.keys(newestData).forEach((key) => columnSet.add(key));
     }
     // Then add any additional columns from other hypotheses
     hypotheses.forEach((h) => {
@@ -95,62 +95,105 @@ export function HypothesesPanel({ hypotheses, resources, projectId, onDelete, on
     return Array.from(columnSet);
   }, [hypotheses]);
 
+  const COLUMN_ORDER_KEY = "hypotheses-column-order";
+  const COLUMN_VISIBILITY_KEY = "hypotheses-column-visibility";
+
   // Load saved column settings from localStorage
   useEffect(() => {
+    let loadedOrder: string[] = [];
+    let loadedVisible: Set<string> = new Set();
+    
     try {
-      const saved = localStorage.getItem(COLUMN_SETTINGS_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved) as string[];
-        // Only keep columns that actually exist in current data
-        const validColumns = parsed.filter(col => allColumns.includes(col));
-        if (validColumns.length > 0) {
-          setOrderedColumns(validColumns);
-          return;
-        }
+      const savedOrder = localStorage.getItem(COLUMN_ORDER_KEY);
+      if (savedOrder) {
+        const parsed = JSON.parse(savedOrder) as string[];
+        // Keep saved order, add any new columns at the end
+        const validSaved = parsed.filter(col => defaultColumnOrder.includes(col));
+        const newCols = defaultColumnOrder.filter(col => !parsed.includes(col));
+        loadedOrder = [...validSaved, ...newCols];
       }
     } catch {
       // Ignore parse errors
     }
-    // Default: use the order from the first hypothesis's STEP5 output
-    setOrderedColumns(allColumns);
-  }, [allColumns]);
+    
+    try {
+      const savedVisible = localStorage.getItem(COLUMN_VISIBILITY_KEY);
+      if (savedVisible) {
+        const parsed = JSON.parse(savedVisible) as string[];
+        loadedVisible = new Set(parsed.filter(col => defaultColumnOrder.includes(col)));
+      }
+    } catch {
+      // Ignore parse errors
+    }
+    
+    // If no saved order, use default
+    if (loadedOrder.length === 0) {
+      loadedOrder = defaultColumnOrder;
+    }
+    
+    // If no saved visibility, show all columns
+    if (loadedVisible.size === 0) {
+      loadedVisible = new Set(defaultColumnOrder);
+    }
+    
+    setColumnOrder(loadedOrder);
+    setVisibleColumns(loadedVisible);
+  }, [defaultColumnOrder]);
 
-  // Save column settings to localStorage
-  const saveColumnSettings = (columns: string[]) => {
-    setOrderedColumns(columns);
-    localStorage.setItem(COLUMN_SETTINGS_KEY, JSON.stringify(columns));
+  // Save column order to localStorage
+  const saveColumnOrder = (order: string[]) => {
+    setColumnOrder(order);
+    localStorage.setItem(COLUMN_ORDER_KEY, JSON.stringify(order));
+  };
+
+  // Save column visibility to localStorage
+  const saveColumnVisibility = (visible: Set<string>) => {
+    setVisibleColumns(visible);
+    localStorage.setItem(COLUMN_VISIBILITY_KEY, JSON.stringify(Array.from(visible)));
   };
 
   // Toggle column visibility
   const toggleColumn = (column: string) => {
-    if (orderedColumns.includes(column)) {
-      saveColumnSettings(orderedColumns.filter(c => c !== column));
+    const newVisible = new Set(visibleColumns);
+    if (newVisible.has(column)) {
+      newVisible.delete(column);
     } else {
-      saveColumnSettings([...orderedColumns, column]);
+      newVisible.add(column);
     }
+    saveColumnVisibility(newVisible);
   };
 
   // Move column up in order
   const moveColumnUp = (column: string) => {
-    const index = orderedColumns.indexOf(column);
+    const index = columnOrder.indexOf(column);
     if (index > 0) {
-      const newColumns = [...orderedColumns];
-      [newColumns[index - 1], newColumns[index]] = [newColumns[index], newColumns[index - 1]];
-      saveColumnSettings(newColumns);
+      const newOrder = [...columnOrder];
+      [newOrder[index - 1], newOrder[index]] = [newOrder[index], newOrder[index - 1]];
+      saveColumnOrder(newOrder);
     }
   };
 
   // Move column down in order
   const moveColumnDown = (column: string) => {
-    const index = orderedColumns.indexOf(column);
-    if (index < orderedColumns.length - 1) {
-      const newColumns = [...orderedColumns];
-      [newColumns[index], newColumns[index + 1]] = [newColumns[index + 1], newColumns[index]];
-      saveColumnSettings(newColumns);
+    const index = columnOrder.indexOf(column);
+    if (index < columnOrder.length - 1) {
+      const newOrder = [...columnOrder];
+      [newOrder[index], newOrder[index + 1]] = [newOrder[index + 1], newOrder[index]];
+      saveColumnOrder(newOrder);
     }
   };
 
-  const displayColumns = orderedColumns;
+  // Reset to default order from latest TSV
+  const resetColumnSettings = () => {
+    saveColumnOrder(defaultColumnOrder);
+    saveColumnVisibility(new Set(defaultColumnOrder));
+  };
+
+  // Display columns: visible columns in the saved order
+  const displayColumns = columnOrder.filter(col => visibleColumns.has(col));
+  
+  // All columns in order (for CSV export)
+  const allColumnsInOrder = columnOrder;
 
   const getResourceName = (resourceId: number | null): string => {
     if (!resourceId) return "-";
@@ -223,13 +266,14 @@ export function HypothesesPanel({ hypotheses, resources, projectId, onDelete, on
   };
 
   const handleExportCSV = () => {
-    const headers = ["仮説番号", ...allColumns, "作成日"];
+    // Use saved column order for CSV export
+    const headers = ["仮説番号", ...allColumnsInOrder, "作成日"];
 
     const rows = hypotheses.map((h) => {
       const data = getFullData(h);
       return [
         h.hypothesisNumber.toString(),
-        ...allColumns.map((col) => String(data[col] ?? "")),
+        ...allColumnsInOrder.map((col) => String(data[col] ?? "")),
         format(new Date(h.createdAt), "yyyy/MM/dd HH:mm"),
       ];
     });
@@ -632,19 +676,19 @@ export function HypothesesPanel({ hypotheses, resources, projectId, onDelete, on
 
           <ScrollArea className="max-h-[400px]">
             <div className="space-y-1 pr-4">
-              <p className="text-xs text-muted-foreground mb-2">表示中のカラム（上から順に表示）</p>
-              {orderedColumns.map((column, index) => (
+              <p className="text-xs text-muted-foreground mb-2">カラム順序（チェックで表示/非表示、矢印で並び替え）</p>
+              {columnOrder.map((column, index) => (
                 <div
                   key={column}
-                  className="flex items-center gap-2 p-2 rounded-md bg-muted/50"
+                  className={`flex items-center gap-2 p-2 rounded-md ${visibleColumns.has(column) ? 'bg-muted/50' : 'opacity-60'}`}
                   data-testid={`column-setting-${column}`}
                 >
                   <Checkbox
-                    checked={true}
+                    checked={visibleColumns.has(column)}
                     onCheckedChange={() => toggleColumn(column)}
                     className="shrink-0"
                   />
-                  <Label className="text-sm flex-1 truncate">{column}</Label>
+                  <Label className={`text-sm flex-1 truncate ${!visibleColumns.has(column) ? 'text-muted-foreground' : ''}`}>{column}</Label>
                   <div className="flex items-center gap-1">
                     <Button
                       size="icon"
@@ -659,7 +703,7 @@ export function HypothesesPanel({ hypotheses, resources, projectId, onDelete, on
                     <Button
                       size="icon"
                       variant="ghost"
-                      disabled={index === orderedColumns.length - 1}
+                      disabled={index === columnOrder.length - 1}
                       onClick={() => moveColumnDown(column)}
                       className="h-6 w-6"
                       data-testid={`button-move-down-${column}`}
@@ -669,28 +713,6 @@ export function HypothesesPanel({ hypotheses, resources, projectId, onDelete, on
                   </div>
                 </div>
               ))}
-              
-              {allColumns.filter(col => !orderedColumns.includes(col)).length > 0 && (
-                <>
-                  <p className="text-xs text-muted-foreground mt-4 mb-2">非表示のカラム</p>
-                  {allColumns.filter(col => !orderedColumns.includes(col)).map((column) => (
-                    <div
-                      key={column}
-                      className="flex items-center gap-2 p-2 rounded-md hover-elevate cursor-pointer"
-                      onClick={() => toggleColumn(column)}
-                      data-testid={`column-setting-hidden-${column}`}
-                    >
-                      <Checkbox
-                        checked={false}
-                        onCheckedChange={() => toggleColumn(column)}
-                        onClick={(e) => e.stopPropagation()}
-                        className="shrink-0"
-                      />
-                      <Label className="text-sm cursor-pointer flex-1 text-muted-foreground truncate">{column}</Label>
-                    </div>
-                  ))}
-                </>
-              )}
             </div>
           </ScrollArea>
 
@@ -699,15 +721,15 @@ export function HypothesesPanel({ hypotheses, resources, projectId, onDelete, on
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => saveColumnSettings(allColumns)}
+                onClick={() => saveColumnVisibility(new Set(columnOrder))}
                 data-testid="button-select-all-columns"
               >
-                すべて選択
+                すべて表示
               </Button>
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => saveColumnSettings(allColumns)}
+                onClick={resetColumnSettings}
                 data-testid="button-reset-columns"
               >
                 リセット
@@ -724,7 +746,7 @@ export function HypothesesPanel({ hypotheses, resources, projectId, onDelete, on
         open={importModalOpen}
         onClose={() => setImportModalOpen(false)}
         onImport={handleImportCSV}
-        existingColumns={allColumns}
+        existingColumns={defaultColumnOrder}
       />
     </Card>
   );
