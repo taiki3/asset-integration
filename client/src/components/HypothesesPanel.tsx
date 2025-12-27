@@ -663,14 +663,14 @@ export function HypothesesPanel({ hypotheses, resources, projectId, onDelete, on
                 </ScrollArea>
               </TabsContent>
               <TabsContent value="report">
-                <ScrollArea className="max-h-[50vh]">
+                <div className="max-h-[50vh] overflow-auto">
                   {reportLoading ? (
                     <div className="flex items-center justify-center py-8">
                       <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                       <span className="ml-2 text-sm text-muted-foreground">読み込み中...</span>
                     </div>
                   ) : reportContent ? (
-                    <div className="prose prose-sm dark:prose-invert max-w-none pr-4 overflow-x-auto break-words [&_pre]:overflow-x-auto [&_table]:overflow-x-auto [&_code]:break-all">
+                    <div className="prose prose-sm dark:prose-invert max-w-full pr-4 break-words [&_pre]:whitespace-pre-wrap [&_pre]:break-all [&_table]:text-xs [&_code]:break-all [&_*]:max-w-full">
                       <ReactMarkdown remarkPlugins={[remarkGfm]}>
                         {reportContent}
                       </ReactMarkdown>
@@ -690,7 +690,7 @@ export function HypothesesPanel({ hypotheses, resources, projectId, onDelete, on
                       </p>
                     </div>
                   )}
-                </ScrollArea>
+                </div>
               </TabsContent>
             </Tabs>
           )}
