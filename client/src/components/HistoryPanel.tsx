@@ -112,6 +112,8 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, 
   const [step4Content, setStep4Content] = useState<string>("");
   const [loadingStep4Reports, setLoadingStep4Reports] = useState(false);
   const [loadingStep4Content, setLoadingStep4Content] = useState(false);
+  // Loop filter for viewing specific loop results
+  const [viewingLoop, setViewingLoop] = useState<string>("all");
 
   const getResourceName = (id: number) => {
     return resources.find((r) => r.id === id)?.name || "不明";
@@ -254,11 +256,11 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, 
     setStep3Content("");
     setSelectedStep4Index("");
     setStep4Content("");
-    if (run.status === "completed") {
-      fetchIndividualReports(run.id);
-      fetchStep3Reports(run.id);
-      fetchStep4Reports(run.id);
-    }
+    setViewingLoop("all"); // Reset loop filter
+    // Fetch individual reports even during execution (to view completed loop results)
+    fetchIndividualReports(run.id);
+    fetchStep3Reports(run.id);
+    fetchStep4Reports(run.id);
     // Find sibling runs with same jobName for multi-loop batches
     if (run.jobName && run.totalLoops && run.totalLoops > 1) {
       const siblings = runs.filter(r => r.jobName === run.jobName).sort((a, b) => (a.currentLoop || 0) - (b.currentLoop || 0));
@@ -278,12 +280,30 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, 
       setStep3Content("");
       setSelectedStep4Index("");
       setStep4Content("");
-      if (targetRun.status === "completed") {
-        fetchIndividualReports(targetRun.id);
-        fetchStep3Reports(targetRun.id);
-        fetchStep4Reports(targetRun.id);
-      }
+      setViewingLoop("all"); // Reset loop filter when switching runs
+      fetchIndividualReports(targetRun.id);
+      fetchStep3Reports(targetRun.id);
+      fetchStep4Reports(targetRun.id);
     }
+  };
+
+  // Helper to filter reports by loop
+  const getFilteredReports = (reports: IndividualReport[], loopFilter: string): IndividualReport[] => {
+    if (!selectedRun || loopFilter === "all") return reports;
+    const hypothesisCount = selectedRun.hypothesisCount || 5;
+    const loopNum = parseInt(loopFilter);
+    const startIndex = (loopNum - 1) * hypothesisCount;
+    const endIndex = loopNum * hypothesisCount;
+    return reports.filter(r => r.index >= startIndex && r.index < endIndex);
+  };
+
+  // Get available loops based on completed hypotheses
+  const getAvailableLoops = (): number[] => {
+    if (!selectedRun) return [];
+    const hypothesisCount = selectedRun.hypothesisCount || 5;
+    const totalReports = individualReports.length;
+    const completedLoops = Math.ceil(totalReports / hypothesisCount);
+    return Array.from({ length: completedLoops }, (_, i) => i + 1);
   };
 
   useEffect(() => {
@@ -298,6 +318,7 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, 
       setStep4Reports([]);
       setSelectedStep4Index("");
       setStep4Content("");
+      setViewingLoop("all");
     }
   }, [detailsOpen]);
 
@@ -330,6 +351,12 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, 
       const updatedRun = runs.find((r) => r.id === selectedRun.id);
       if (updatedRun && JSON.stringify(updatedRun) !== JSON.stringify(selectedRun)) {
         setSelectedRun(updatedRun);
+        // Refetch individual reports when run updates (to show newly completed hypotheses)
+        if (updatedRun.status === "running" || updatedRun.status === "completed") {
+          fetchIndividualReports(updatedRun.id);
+          fetchStep3Reports(updatedRun.id);
+          fetchStep4Reports(updatedRun.id);
+        }
       }
       // Recompute sibling runs when runs list changes
       if (updatedRun?.jobName && updatedRun?.totalLoops && updatedRun.totalLoops > 1) {
@@ -496,6 +523,33 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, 
                         {siblingRuns.map((run) => (
                           <SelectItem key={run.id} value={run.id.toString()}>
                             {run.currentLoop}/{run.totalLoops} 回目
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+                {/* Loop filter for multi-loop runs with accumulated results */}
+                {selectedRun.totalLoops && selectedRun.totalLoops > 1 && getAvailableLoops().length > 0 && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-muted-foreground">表示:</span>
+                    <Select value={viewingLoop} onValueChange={(value) => {
+                      setViewingLoop(value);
+                      setSelectedHypothesisIndex("");
+                      setSelectedReportContent("");
+                      setSelectedStep3Index("");
+                      setStep3Content("");
+                      setSelectedStep4Index("");
+                      setStep4Content("");
+                    }}>
+                      <SelectTrigger className="w-[160px]" data-testid="select-viewing-loop">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">全ループ</SelectItem>
+                        {getAvailableLoops().map((loop) => (
+                          <SelectItem key={loop} value={loop.toString()}>
+                            {loop}回目のみ
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -752,13 +806,13 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, 
                                   <Loader2 className="h-4 w-4 animate-spin" />
                                   読込中...
                                 </div>
-                              ) : individualReports.length > 0 ? (
+                              ) : getFilteredReports(individualReports, viewingLoop).length > 0 ? (
                                 <Select value={selectedHypothesisIndex} onValueChange={setSelectedHypothesisIndex}>
                                   <SelectTrigger className="w-[280px]" data-testid="select-hypothesis-preview">
                                     <SelectValue placeholder="仮説を選択してプレビュー" />
                                   </SelectTrigger>
                                   <SelectContent>
-                                    {individualReports.map((report) => (
+                                    {getFilteredReports(individualReports, viewingLoop).map((report) => (
                                       <SelectItem 
                                         key={report.index} 
                                         value={report.index.toString()}
@@ -826,13 +880,13 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, 
                                 <Loader2 className="h-4 w-4 animate-spin" />
                                 読込中...
                               </div>
-                            ) : step3Reports.length > 0 ? (
+                            ) : getFilteredReports(step3Reports, viewingLoop).length > 0 ? (
                               <Select value={selectedStep3Index} onValueChange={setSelectedStep3Index}>
                                 <SelectTrigger className="w-[280px]" data-testid="select-step3-hypothesis">
                                   <SelectValue placeholder="仮説を選択してプレビュー" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  {step3Reports.map((report) => (
+                                  {getFilteredReports(step3Reports, viewingLoop).map((report) => (
                                     <SelectItem key={report.index} value={report.index.toString()}>
                                       {report.hasError ? (
                                         <span className="flex items-center gap-1 text-destructive">
@@ -883,13 +937,13 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, 
                                 <Loader2 className="h-4 w-4 animate-spin" />
                                 読込中...
                               </div>
-                            ) : step4Reports.length > 0 ? (
+                            ) : getFilteredReports(step4Reports, viewingLoop).length > 0 ? (
                               <Select value={selectedStep4Index} onValueChange={setSelectedStep4Index}>
                                 <SelectTrigger className="w-[280px]" data-testid="select-step4-hypothesis">
                                   <SelectValue placeholder="仮説を選択してプレビュー" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  {step4Reports.map((report) => (
+                                  {getFilteredReports(step4Reports, viewingLoop).map((report) => (
                                     <SelectItem key={report.index} value={report.index.toString()}>
                                       {report.hasError ? (
                                         <span className="flex items-center gap-1 text-destructive">
