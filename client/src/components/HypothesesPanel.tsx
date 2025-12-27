@@ -76,13 +76,16 @@ export function HypothesesPanel({ hypotheses, resources, projectId, onDelete, on
   const [importModalOpen, setImportModalOpen] = useState(false);
   const { toast } = useToast();
 
-  // Get all unique columns, ordered by the first hypothesis's fullData keys
+  // Get all unique columns, ordered by the oldest hypothesis's fullData keys (preserves STEP5 TSV order)
   const allColumns = useMemo(() => {
     const columnSet = new Set<string>();
-    // First, add columns from the first hypothesis to preserve STEP5 order
+    // Find the oldest hypothesis (smallest hypothesisNumber) to get original STEP5 column order
     if (hypotheses.length > 0) {
-      const firstData = getFullData(hypotheses[0]);
-      Object.keys(firstData).forEach((key) => columnSet.add(key));
+      const oldestHypothesis = hypotheses.reduce((oldest, current) => 
+        current.hypothesisNumber < oldest.hypothesisNumber ? current : oldest
+      , hypotheses[0]);
+      const oldestData = getFullData(oldestHypothesis);
+      Object.keys(oldestData).forEach((key) => columnSet.add(key));
     }
     // Then add any additional columns from other hypotheses
     hypotheses.forEach((h) => {
