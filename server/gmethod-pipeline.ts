@@ -416,6 +416,60 @@ async function addDebugPrompt(runId: number, step: string, prompt: string, attac
   }
 }
 
+// Helper function to aggregate Step 5 outputs
+// New prompt design: each Step 5 output includes "header line + data line"
+// We take the header from the first hypothesis, then only data rows from all
+function aggregateStep5Outputs(step5Outputs: string[]): string {
+  const validOutputs = step5Outputs.filter(output => output && output.trim().length > 0);
+  
+  if (validOutputs.length === 0) {
+    return "";
+  }
+  
+  // Each output should be: header\ndata (2 lines)
+  // Extract header from first output, then all data rows
+  const lines: string[] = [];
+  let headerLine: string | null = null;
+  
+  for (let i = 0; i < validOutputs.length; i++) {
+    const output = validOutputs[i].trim();
+    const outputLines = output.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+    
+    if (outputLines.length === 0) continue;
+    
+    if (outputLines.length >= 2) {
+      // Has header and data
+      if (headerLine === null) {
+        headerLine = outputLines[0]; // Take header from first valid output
+      }
+      // Add data row (second line)
+      lines.push(outputLines[1]);
+    } else if (outputLines.length === 1) {
+      // Only one line - could be just data or just header
+      // If we don't have a header yet, this might be an error output or just data
+      if (headerLine === null) {
+        // Check if it looks like a header (contains "仮説番号")
+        if (outputLines[0].includes("仮説番号")) {
+          headerLine = outputLines[0];
+        } else {
+          // Assume it's a data row
+          lines.push(outputLines[0]);
+        }
+      } else {
+        // We have a header, so this is likely a data row
+        lines.push(outputLines[0]);
+      }
+    }
+  }
+  
+  // If no header was found from outputs, return just the data rows
+  if (headerLine) {
+    return headerLine + '\n' + lines.join('\n');
+  } else {
+    return lines.join('\n');
+  }
+}
+
 interface PipelineContext {
   targetSpec: string;
   technicalAssets: string;
@@ -1227,10 +1281,10 @@ async function executeDeepResearchStep2(context: PipelineContext, runId: number)
       `${r.step4Output}`
     ).join('\n\n');
     
-    // Combine Step 5 outputs into final TSV (with header)
-    const tsvHeader = "仮説番号\t仮説タイトル\t業界\t分野\t素材が活躍する舞台\t素材の役割\t使用する技術資産\t原料(物質)\t成型体/モジュール形態\t事業仮説概要\t顧客の解決不能な課題\tデバイス・プロセスLvのソリューション\t素材・部材Lvのソリューション\t科学×経済判定\t条件\t総合スコア\t総評\tミッションクリティカリティ判定\t素材の必然性(Refutation)\t主要リスク\t補足\t科学的妥当性\t製造実現性\t性能優位\t単位経済\t市場魅力度\t規制・EHS\tIP防衛\t戦略適合\t戦略判定\t戦略勝算ランク\t結論\t撤退ライン\t顧客アクセス\t資本的持久力\t製造基盤\t対象競合\tMoat係数\tMake期間\tMakeコスト\tBuy期間\tBuyコスト\t非対称戦の勝算";
-    const tsvRows = allResults.map(r => r.step5Output).filter(row => row.trim().length > 0);
-    const aggregatedStep5Output = tsvHeader + '\n' + tsvRows.join('\n');
+    // Combine Step 5 outputs into final TSV
+    // New prompt design: each Step 5 output includes "header line + data line"
+    // We take the header from the first hypothesis, then only data rows from all
+    const aggregatedStep5Output = aggregateStep5Outputs(allResults.map(r => r.step5Output));
 
     // Save all outputs to database (both individual and aggregated for backward compatibility)
     await storage.updateRun(runId, { 
@@ -2389,14 +2443,11 @@ export async function executeGMethodPipeline(
       // The per-hypothesis processing already saved step5IndividualOutputs
       const step5IndividualOutputs = currentRun?.step5IndividualOutputs as string[] | null;
       
-      // Build Step 5 output (TSV with header) from individual outputs
-      const tsvHeader = "仮説番号\t仮説タイトル\t業界\t分野\t素材が活躍する舞台\t素材の役割\t使用する技術資産\t原料(物質)\t成型体/モジュール形態\t事業仮説概要\t顧客の解決不能な課題\tデバイス・プロセスLvのソリューション\t素材・部材Lvのソリューション\t科学×経済判定\t条件\t総合スコア\t総評\tミッションクリティカリティ判定\t素材の必然性(Refutation)\t主要リスク\t補足\t科学的妥当性\t製造実現性\t性能優位\t単位経済\t市場魅力度\t規制・EHS\tIP防衛\t戦略適合\t戦略判定\t戦略勝算ランク\t結論\t撤退ライン\t顧客アクセス\t資本的持久力\t製造基盤\t対象競合\tMoat係数\tMake期間\tMakeコスト\tBuy期間\tBuyコスト\t非対称戦の勝算";
-      
+      // Build Step 5 output (TSV) from individual outputs using dynamic header extraction
       if (step5IndividualOutputs && step5IndividualOutputs.length > 0) {
-        const tsvRows = step5IndividualOutputs.filter(row => row && row.trim().length > 0);
-        context.step5Output = tsvHeader + '\n' + tsvRows.join('\n');
+        context.step5Output = aggregateStep5Outputs(step5IndividualOutputs);
       } else {
-        context.step5Output = tsvHeader;
+        context.step5Output = "";
       }
       
       console.log(`[Run ${runId}] Loop ${loopIndex} Step 5 TSV built from ${step5IndividualOutputs?.length || 0} individual outputs`);

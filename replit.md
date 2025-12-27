@@ -52,7 +52,7 @@ Key implementation details:
 - `processSteps3to5ForHypothesis()`: Executes Steps 3→4→5 sequentially for a single hypothesis
 - `executeStep3Individual()`, `executeStep4Individual()`, `executeStep5Individual()`: Per-hypothesis step execution functions
 - Individual outputs stored in jsonb arrays: `step2_2IndividualOutputs`, `step3IndividualOutputs`, `step4IndividualOutputs`, `step5IndividualOutputs`
-- Final TSV is built by aggregating all individual Step 5 outputs with a header row
+- **Step 5 TSV Aggregation**: Uses `aggregateStep5Outputs()` to dynamically extract header from first hypothesis output (new prompt design: each Step 5 outputs "header line + data line"), then combines all data rows
 - 429エラー検出: レート制限エラーが発生した場合、明確なエラーメッセージを表示
 - **Hypothesis Numbering**: Uses 1-based array index (`i + 1`) for consistent hypothesis numbering throughout all steps, not the `number` field from extracted hypotheses (which may be incorrect from AI extraction)
 
