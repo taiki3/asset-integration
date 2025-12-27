@@ -787,8 +787,8 @@ export async function registerRoutes(
   app.get("/api/projects/:projectId/hypotheses", isAuthenticated, requireAgcDomain, async (req, res) => {
     try {
       const projectId = parseInt(req.params.projectId);
-      const hypotheses = await storage.getHypothesesByProject(projectId);
-      res.json(hypotheses);
+      const hypothesesWithNames = await storage.getHypothesesWithResourceNames(projectId);
+      res.json(hypothesesWithNames);
     } catch (error) {
       console.error("Error fetching hypotheses:", error);
       res.status(500).json({ error: "Failed to fetch hypotheses" });

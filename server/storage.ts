@@ -49,6 +49,7 @@ export interface IStorage {
 
   // Hypotheses
   getHypothesesByProject(projectId: number): Promise<Hypothesis[]>;
+  getHypothesesWithResourceNames(projectId: number): Promise<(Hypothesis & { targetSpecName: string | null; technicalAssetsName: string | null })[]>;
   getActiveHypothesesByProject(projectId: number): Promise<Hypothesis[]>; // Excludes soft-deleted
   createHypothesis(hypothesis: InsertHypothesis): Promise<Hypothesis>;
   createHypotheses(hypothesesData: InsertHypothesis[]): Promise<Hypothesis[]>;
@@ -213,6 +214,35 @@ export class DatabaseStorage implements IStorage {
   async getActiveHypothesesByProject(projectId: number): Promise<Hypothesis[]> {
     // Alias for clarity - excludes soft-deleted hypotheses
     return this.getHypothesesByProject(projectId);
+  }
+
+  async getHypothesesWithResourceNames(projectId: number): Promise<(Hypothesis & { targetSpecName: string | null; technicalAssetsName: string | null })[]> {
+    // Use a single query with LEFT JOINs to avoid N+1 queries
+    const targetSpecAlias = db.select({ id: resources.id, name: resources.name }).from(resources).as("ts");
+    const technicalAssetsAlias = db.select({ id: resources.id, name: resources.name }).from(resources).as("ta");
+    
+    const result = await db
+      .select({
+        hypothesis: hypotheses,
+        targetSpecName: targetSpecAlias.name,
+        technicalAssetsName: technicalAssetsAlias.name,
+      })
+      .from(hypotheses)
+      .leftJoin(targetSpecAlias, eq(hypotheses.targetSpecId, targetSpecAlias.id))
+      .leftJoin(technicalAssetsAlias, eq(hypotheses.technicalAssetsId, technicalAssetsAlias.id))
+      .where(
+        and(
+          eq(hypotheses.projectId, projectId),
+          isNull(hypotheses.deletedAt)
+        )
+      )
+      .orderBy(desc(hypotheses.createdAt));
+    
+    return result.map(r => ({
+      ...r.hypothesis,
+      targetSpecName: r.targetSpecName,
+      technicalAssetsName: r.technicalAssetsName,
+    }));
   }
 
   async createHypothesis(hypothesis: InsertHypothesis): Promise<Hypothesis> {

@@ -31,12 +31,18 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { format } from "date-fns";
-import type { Hypothesis, Resource } from "@shared/schema";
+import type { Hypothesis as BaseHypothesis, Resource } from "@shared/schema";
 import { CsvImportModal } from "@/components/CsvImportModal";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
 type FullDataRow = Record<string, string | number | null>;
+
+// Extended hypothesis type with resource names from API
+type Hypothesis = BaseHypothesis & {
+  targetSpecName?: string | null;
+  technicalAssetsName?: string | null;
+};
 
 interface HypothesesPanelProps {
   hypotheses: Hypothesis[];
@@ -608,8 +614,8 @@ export function HypothesesPanel({ hypotheses, resources, projectId, onDelete, on
       </Collapsible>
 
       <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
-        <DialogContent className="sm:max-w-2xl">
-          <DialogHeader>
+        <DialogContent className="sm:max-w-2xl max-h-[85vh] flex flex-col overflow-hidden">
+          <DialogHeader className="shrink-0">
             <div className="flex items-center justify-between gap-2">
               <DialogTitle className="flex items-center gap-2">
                 <Lightbulb className="h-5 w-5" />
@@ -638,59 +644,61 @@ export function HypothesesPanel({ hypotheses, resources, projectId, onDelete, on
           </DialogHeader>
 
           {selectedHypothesis && (
-            <Tabs value={detailsTab} onValueChange={handleTabChange} className="w-full">
-              <TabsList className="grid w-full grid-cols-2">
+            <Tabs value={detailsTab} onValueChange={handleTabChange} className="w-full flex-1 flex flex-col min-h-0">
+              <TabsList className="grid w-full grid-cols-2 shrink-0">
                 <TabsTrigger value="summary" data-testid="tab-hypothesis-summary">概要</TabsTrigger>
                 <TabsTrigger value="report" data-testid="tab-hypothesis-report">レポート</TabsTrigger>
               </TabsList>
-              <TabsContent value="summary">
-                <ScrollArea className="max-h-[50vh]">
-                  <div className="space-y-4 pr-4">
-                    {(() => {
-                      const data = getFullData(selectedHypothesis);
-                      const entries = Object.entries(data).filter(([, v]) => v != null && v !== "");
-                      return entries.map(([key, value]) => (
-                        <div key={key}>
-                          <h4 className="text-sm font-medium mb-1">{key}</h4>
-                          <p className="text-sm text-muted-foreground whitespace-pre-wrap">{String(value)}</p>
-                        </div>
-                      ));
-                    })()}
-                    <div className="text-xs text-muted-foreground pt-2 border-t">
-                      作成日: {format(new Date(selectedHypothesis.createdAt), "yyyy/MM/dd HH:mm")}
-                    </div>
+              <TabsContent value="summary" className="flex-1 overflow-auto mt-2">
+                <div className="space-y-4 pr-2">
+                  {(() => {
+                    const data = getFullData(selectedHypothesis);
+                    const entries = Object.entries(data).filter(([, v]) => v != null && v !== "");
+                    return entries.map(([key, value]) => (
+                      <div key={key}>
+                        <h4 className="text-sm font-medium mb-1">{key}</h4>
+                        <p className="text-sm text-muted-foreground whitespace-pre-wrap break-words">{String(value)}</p>
+                      </div>
+                    ));
+                  })()}
+                  <div className="text-xs text-muted-foreground pt-2 border-t space-y-1">
+                    <div>作成日: {format(new Date(selectedHypothesis.createdAt), "yyyy/MM/dd HH:mm")}</div>
+                    {selectedHypothesis.targetSpecName && (
+                      <div>市場・顧客ニーズ: {selectedHypothesis.targetSpecName}</div>
+                    )}
+                    {selectedHypothesis.technicalAssetsName && (
+                      <div>技術シーズ: {selectedHypothesis.technicalAssetsName}</div>
+                    )}
                   </div>
-                </ScrollArea>
-              </TabsContent>
-              <TabsContent value="report">
-                <div className="max-h-[50vh] overflow-auto">
-                  {reportLoading ? (
-                    <div className="flex items-center justify-center py-8">
-                      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                      <span className="ml-2 text-sm text-muted-foreground">読み込み中...</span>
-                    </div>
-                  ) : reportContent ? (
-                    <div className="prose prose-sm dark:prose-invert max-w-full pr-4 break-words [&_pre]:whitespace-pre-wrap [&_pre]:break-all [&_table]:text-xs [&_code]:break-all [&_*]:max-w-full">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                        {reportContent}
-                      </ReactMarkdown>
-                    </div>
-                  ) : !selectedHypothesis.runId ? (
-                    <div className="flex flex-col items-center justify-center py-8 text-center">
-                      <FileText className="h-8 w-8 text-muted-foreground/30 mb-2" />
-                      <p className="text-sm text-muted-foreground">
-                        この仮説にはレポートが関連付けられていません
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col items-center justify-center py-8 text-center">
-                      <FileText className="h-8 w-8 text-muted-foreground/30 mb-2" />
-                      <p className="text-sm text-muted-foreground">
-                        レポートを読み込むにはこのタブを選択してください
-                      </p>
-                    </div>
-                  )}
                 </div>
+              </TabsContent>
+              <TabsContent value="report" className="flex-1 overflow-auto mt-2">
+                {reportLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                    <span className="ml-2 text-sm text-muted-foreground">読み込み中...</span>
+                  </div>
+                ) : reportContent ? (
+                  <div className="prose prose-sm dark:prose-invert max-w-none pr-2 break-words overflow-x-hidden [&_pre]:whitespace-pre-wrap [&_pre]:break-all [&_pre]:overflow-x-hidden [&_table]:block [&_table]:overflow-x-auto [&_table]:text-xs [&_code]:break-all">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {reportContent}
+                    </ReactMarkdown>
+                  </div>
+                ) : !selectedHypothesis.runId ? (
+                  <div className="flex flex-col items-center justify-center py-8 text-center">
+                    <FileText className="h-8 w-8 text-muted-foreground/30 mb-2" />
+                    <p className="text-sm text-muted-foreground">
+                      この仮説にはレポートが関連付けられていません
+                    </p>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-8 text-center">
+                    <FileText className="h-8 w-8 text-muted-foreground/30 mb-2" />
+                    <p className="text-sm text-muted-foreground">
+                      レポートを読み込むにはこのタブを選択してください
+                    </p>
+                  </div>
+                )}
               </TabsContent>
             </Tabs>
           )}
