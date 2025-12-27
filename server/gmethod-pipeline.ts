@@ -241,7 +241,9 @@ async function uploadTextToFileSearchStore(
   const client = getAIClient();
   
   const tempDir = os.tmpdir();
-  const tempFile = path.join(tempDir, `${displayName.replace(/[^a-zA-Z0-9]/g, '_')}.txt`);
+  // Add unique identifier to prevent parallel execution conflicts
+  const uniqueId = `${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+  const tempFile = path.join(tempDir, `${displayName.replace(/[^a-zA-Z0-9]/g, '_')}_${uniqueId}.txt`);
   
   // Convert to Buffer first to ensure consistent byte size handling
   const contentBuffer = Buffer.from(content, 'utf-8');
