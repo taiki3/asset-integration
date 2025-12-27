@@ -82,6 +82,22 @@ export function HypothesesPanel({ hypotheses, resources, onDelete, onDownloadWor
     setDetailsOpen(true);
   };
 
+  // Calculate the index of a hypothesis within its run's individual outputs array
+  // This is needed because hypothesisNumber is a global project-level number,
+  // but step2_2IndividualOutputs is indexed per-run (0-based)
+  const getHypothesisIndexInRun = (hypothesis: Hypothesis): number => {
+    if (!hypothesis.runId) return 0;
+    
+    // Get all hypotheses from the same run, sorted by hypothesisNumber
+    const sameRunHypotheses = hypotheses
+      .filter(h => h.runId === hypothesis.runId)
+      .sort((a, b) => a.hypothesisNumber - b.hypothesisNumber);
+    
+    // Find the index of the current hypothesis in this list
+    const index = sameRunHypotheses.findIndex(h => h.id === hypothesis.id);
+    return index >= 0 ? index : 0;
+  };
+
   const handleDelete = (id: number, e?: React.MouseEvent) => {
     e?.stopPropagation();
     if (window.confirm("この仮説をリストから削除しますか？\n（将来の生成時に重複チェックから除外されます）")) {
@@ -379,7 +395,7 @@ export function HypothesesPanel({ hypotheses, resources, onDelete, onDownloadWor
               <Button
                 variant="outline"
                 className="gap-2"
-                onClick={() => onDownloadWord(selectedHypothesis.runId!, selectedHypothesis.hypothesisNumber - 1)}
+                onClick={() => onDownloadWord(selectedHypothesis.runId!, getHypothesisIndexInRun(selectedHypothesis))}
                 data-testid="button-download-hypothesis-word"
               >
                 <FileText className="h-4 w-4" />
