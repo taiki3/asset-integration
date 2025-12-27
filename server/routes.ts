@@ -2,7 +2,7 @@ import type { Express, RequestHandler } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertProjectSchema, insertResourceSchema, insertHypothesisRunSchema, insertPromptVersionSchema } from "@shared/schema";
-import { STEP2_PROMPT, STEP2_1_DEEP_RESEARCH_PROMPT, STEP2_2_DEEP_RESEARCH_PROMPT, STEP3_PROMPT, STEP4_PROMPT, STEP5_PROMPT } from "./prompts";
+import { STEP2_PROMPT, STEP2_1_DEEP_RESEARCH_PROMPT, STEP2_2_DEEP_RESEARCH_PROMPT, STEP3_INDIVIDUAL_PROMPT, STEP4_INDIVIDUAL_PROMPT, STEP5_INDIVIDUAL_PROMPT } from "./prompts";
 import { executeGMethodPipeline, requestPause, requestResume, requestStop, resumePipeline } from "./gmethod-pipeline";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, TableRow, TableCell, Table, WidthType, BorderStyle } from "docx";
@@ -887,9 +887,9 @@ export async function registerRoutes(
     21: STEP2_1_DEEP_RESEARCH_PROMPT,
     22: STEP2_2_DEEP_RESEARCH_PROMPT,
     2: STEP2_PROMPT,
-    3: STEP3_PROMPT,
-    4: STEP4_PROMPT,
-    5: STEP5_PROMPT,
+    3: STEP3_INDIVIDUAL_PROMPT,
+    4: STEP4_INDIVIDUAL_PROMPT,
+    5: STEP5_INDIVIDUAL_PROMPT,
   };
   
   const VALID_STEP_NUMBERS = [21, 22, 2, 3, 4, 5];

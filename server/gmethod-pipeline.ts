@@ -1,6 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
 import { storage } from "./storage";
-import { STEP2_PROMPT, STEP2_DEEP_RESEARCH_PROMPT, STEP2_1_DEEP_RESEARCH_PROMPT, STEP2_2_DEEP_RESEARCH_PROMPT, STEP2_3_MERGE_PROMPT, STEP2_3_SUMMARIZE_PROMPT, STEP3_PROMPT, STEP4_PROMPT, STEP5_PROMPT, STEP3_INDIVIDUAL_PROMPT, STEP4_INDIVIDUAL_PROMPT, STEP5_INDIVIDUAL_PROMPT } from "./prompts";
+import { STEP2_PROMPT, STEP2_DEEP_RESEARCH_PROMPT, STEP2_1_DEEP_RESEARCH_PROMPT, STEP2_2_DEEP_RESEARCH_PROMPT, STEP2_3_MERGE_PROMPT, STEP2_3_SUMMARIZE_PROMPT, STEP3_INDIVIDUAL_PROMPT, STEP4_INDIVIDUAL_PROMPT, STEP5_INDIVIDUAL_PROMPT } from "./prompts";
 import type { InsertHypothesis } from "@shared/schema";
 import * as fs from "fs";
 import * as path from "path";
@@ -74,9 +74,9 @@ export class StopRequestedError extends Error {
 async function getPromptForStep(stepNumber: number): Promise<string> {
   const DEFAULT_PROMPTS: Record<number, string> = {
     2: STEP2_PROMPT,
-    3: STEP3_PROMPT,
-    4: STEP4_PROMPT,
-    5: STEP5_PROMPT,
+    3: STEP3_INDIVIDUAL_PROMPT,
+    4: STEP4_INDIVIDUAL_PROMPT,
+    5: STEP5_INDIVIDUAL_PROMPT,
   };
   
   const defaultPrompt = DEFAULT_PROMPTS[stepNumber];
@@ -1348,7 +1348,9 @@ async function executeStep3Individual(
   console.log(`[Run ${runId}] Received step2_2Report length: ${step2_2Report.length} chars`);
   console.log(`[Run ${runId}] step2_2Report first 200 chars: ${step2_2Report.substring(0, 200)}`);
   
-  const prompt = STEP3_INDIVIDUAL_PROMPT
+  // Get prompt from database or use default
+  const basePrompt = await getPromptForStep(3);
+  const prompt = basePrompt
     .replace(/{HYPOTHESIS_NUMBER}/g, hypothesisNumber.toString())
     .replace(/{HYPOTHESIS_TITLE}/g, hypothesisTitle);
   
@@ -1425,7 +1427,9 @@ async function executeStep4Individual(
   runId: number,
   startTime: number
 ): Promise<string> {
-  const prompt = STEP4_INDIVIDUAL_PROMPT
+  // Get prompt from database or use default
+  const basePrompt = await getPromptForStep(4);
+  const prompt = basePrompt
     .replace(/{HYPOTHESIS_NUMBER}/g, hypothesisNumber.toString())
     .replace(/{HYPOTHESIS_TITLE}/g, hypothesisTitle);
   
@@ -1509,7 +1513,9 @@ async function executeStep5Individual(
   runId: number,
   startTime: number
 ): Promise<string> {
-  const prompt = STEP5_INDIVIDUAL_PROMPT
+  // Get prompt from database or use default
+  const basePrompt = await getPromptForStep(5);
+  const prompt = basePrompt
     .replace(/{HYPOTHESIS_NUMBER}/g, hypothesisNumber.toString())
     .replace(/{HYPOTHESIS_TITLE}/g, hypothesisTitle);
   
