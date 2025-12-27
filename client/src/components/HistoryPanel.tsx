@@ -932,8 +932,8 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, 
                       </TabsContent>
                       
                       {/* STEP 5 Tab - integrated output as table */}
-                      <TabsContent value="step5Output" className="mt-4 overflow-hidden">
-                        <ScrollArea className="h-[45vh] rounded-md border bg-muted/30">
+                      <TabsContent value="step5Output" className="mt-4">
+                        <div className="h-[45vh] rounded-md border bg-muted/30 overflow-auto">
                           {getStepStatus(5) === "completed" ? (
                             (() => {
                               const tsvContent = selectedRun.step5Output || "";
@@ -950,37 +950,35 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, 
                               const headers = lines[0].split("\t");
                               const rows = lines.slice(1).map(line => line.split("\t"));
                               return (
-                                <div className="overflow-x-auto">
-                                  <table className="w-max min-w-full text-xs border-collapse">
-                                    <thead className="sticky top-0 bg-muted z-10">
-                                      <tr>
-                                        {headers.map((header, i) => (
-                                          <th 
-                                            key={`h-${i}`} 
-                                            className="border border-border px-2 py-1.5 text-left font-medium whitespace-nowrap bg-muted"
+                                <table className="w-max min-w-full text-xs border-collapse">
+                                  <thead className="sticky top-0 bg-muted z-10">
+                                    <tr>
+                                      {headers.map((header, i) => (
+                                        <th 
+                                          key={`h-${i}`} 
+                                          className="border border-border px-2 py-1.5 text-left font-medium whitespace-nowrap bg-muted"
+                                        >
+                                          {header}
+                                        </th>
+                                      ))}
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {rows.map((row, rowIdx) => (
+                                      <tr key={`r-${rowIdx}`} className="hover:bg-muted/50">
+                                        {row.map((cell, cellIdx) => (
+                                          <td 
+                                            key={`c-${rowIdx}-${cellIdx}`} 
+                                            className="border border-border px-2 py-1 whitespace-nowrap max-w-[300px] truncate"
+                                            title={cell}
                                           >
-                                            {header}
-                                          </th>
+                                            {cell}
+                                          </td>
                                         ))}
                                       </tr>
-                                    </thead>
-                                    <tbody>
-                                      {rows.map((row, rowIdx) => (
-                                        <tr key={`r-${rowIdx}`} className="hover:bg-muted/50">
-                                          {row.map((cell, cellIdx) => (
-                                            <td 
-                                              key={`c-${rowIdx}-${cellIdx}`} 
-                                              className="border border-border px-2 py-1 whitespace-nowrap max-w-[300px] truncate"
-                                              title={cell}
-                                            >
-                                              {cell}
-                                            </td>
-                                          ))}
-                                        </tr>
-                                      ))}
-                                    </tbody>
-                                  </table>
-                                </div>
+                                    ))}
+                                  </tbody>
+                                </table>
                               );
                             })()
                           ) : getStepStatus(5) === "running" ? (
@@ -1001,7 +999,7 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, 
                               <p className="text-xs text-muted-foreground mt-1">前のステップが完了すると開始されます</p>
                             </div>
                           )}
-                        </ScrollArea>
+                        </div>
                       </TabsContent>
                     </Tabs>
                   </>
