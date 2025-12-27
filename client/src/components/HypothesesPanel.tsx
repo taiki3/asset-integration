@@ -85,6 +85,33 @@ export function HypothesesPanel({ hypotheses, resources, projectId, onDelete, on
     return Array.from(columnSet);
   }, [hypotheses]);
 
+  // Preferred default columns (if they exist in data)
+  const DEFAULT_DISPLAY_COLUMNS = [
+    "仮説番号",
+    "仮説タイトル",
+    "業界",
+    "分野",
+    "素材が活躍する舞台",
+    "素材の役割",
+    "使用する技術資産",
+    "原料(物質)",
+    "製品形態(成型体/モジュール形態）",
+    "事業仮説概要",
+    "顧客が解決できていない課題",
+    "顧客にとっての切迫度",
+    "素材による解決の必然性",
+    "素材・成形体レベルのソリューション",
+    "他の素材ソリューションに対する優位性",
+    "最低限達成すべき技術水準",
+    "「全技術シーズ」を活用できた場合の魅力度",
+    "「全技術シーズ」を活用できた場合の結論",
+    "AGCの参入方式",
+    "AGCの参入確率",
+    "AGCの事業価値×参入確率に基づく魅力度",
+    "AGCとしての結論",
+    "参考：AGCの強みを生かした戦術",
+  ];
+
   // Load saved column settings from localStorage
   useEffect(() => {
     try {
@@ -101,8 +128,13 @@ export function HypothesesPanel({ hypotheses, resources, projectId, onDelete, on
     } catch {
       // Ignore parse errors
     }
-    // Default: first 6 columns
-    setSelectedColumns(new Set(allColumns.slice(0, 6)));
+    // Default: use preferred columns that exist, otherwise first 6
+    const preferredDefaults = DEFAULT_DISPLAY_COLUMNS.filter(col => allColumns.includes(col));
+    if (preferredDefaults.length > 0) {
+      setSelectedColumns(new Set(preferredDefaults));
+    } else {
+      setSelectedColumns(new Set(allColumns.slice(0, 6)));
+    }
   }, [allColumns]);
 
   // Save column settings to localStorage
