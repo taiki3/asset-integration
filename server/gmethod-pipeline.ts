@@ -1148,6 +1148,31 @@ ${step2_2Output}`;
 
     stepTimings["total"] = Date.now() - startTime;
 
+    // Build execution timing data
+    const executionTiming = {
+      overallMs: stepTimings["total"],
+      step2_1Ms: stepTimings["step2_1_deep_research"] || 0,
+      step2_2ParallelMs: stepTimings["step2_2_parallel"] || 0,
+      steps3to5ParallelMs: stepTimings["phase3_steps3to5_parallel"] || 0,
+      hypotheses: extractedHypotheses.map((h, i) => {
+        const hNum = i + 1;
+        const step2_2Result = step2_2Results[i];
+        const steps3to5Result = allResults[i];
+        return {
+          hypothesisNumber: hNum,
+          hypothesisTitle: h.title,
+          step2_2Ms: step2_2Result?.durationMs || 0,
+          step3Ms: steps3to5Result?.timing?.step3Ms || 0,
+          step4Ms: steps3to5Result?.timing?.step4Ms || 0,
+          step5Ms: steps3to5Result?.timing?.step5Ms || 0,
+          steps3to5TotalMs: steps3to5Result?.timing?.totalMs || 0,
+        };
+      }),
+    };
+    
+    // Save execution timing
+    await storage.updateRun(runId, { executionTiming });
+
     // Validate combined report
     const validationStartTime = Date.now();
     await updateProgress(runId, { 
@@ -1332,6 +1357,12 @@ interface PerHypothesisResult {
   step3Output: string;
   step4Output: string;
   step5Output: string; // Single TSV row (no header)
+  timing: {
+    step3Ms: number;
+    step4Ms: number;
+    step5Ms: number;
+    totalMs: number;
+  };
 }
 
 async function executeStep3Individual(
@@ -1590,7 +1621,8 @@ async function executeStep2_2ForHypothesis(
   context: PipelineContext,
   runId: number,
   startTime: number
-): Promise<{ hypothesisNumber: number; hypothesisTitle: string; step2_2Output: string }> {
+): Promise<{ hypothesisNumber: number; hypothesisTitle: string; step2_2Output: string; durationMs: number }> {
+  const step2_2Start = Date.now();
   const hypothesisTitle = hypothesis.title;
   
   // Check for pause/stop before starting Deep Research - throw to abort entire parallel batch
@@ -1659,15 +1691,18 @@ ${step2_1Output}`;
     await deleteFileSearchStore(storeName);
     storeName = null;
     
-    console.log(`[Run ${runId}] Hypothesis ${hypothesisNumber} Step 2-2 completed (${step2_2Report.length} chars)`);
+    const durationMs = Date.now() - step2_2Start;
+    console.log(`[Run ${runId}] Hypothesis ${hypothesisNumber} Step 2-2 completed (${step2_2Report.length} chars, ${(durationMs / 1000).toFixed(1)}s)`);
     
     return {
       hypothesisNumber,
       hypothesisTitle,
-      step2_2Output: step2_2Report
+      step2_2Output: step2_2Report,
+      durationMs
     };
   } catch (error: any) {
-    console.error(`[Run ${runId}] Hypothesis ${hypothesisNumber} Step 2-2 failed:`, error);
+    const durationMs = Date.now() - step2_2Start;
+    console.error(`[Run ${runId}] Hypothesis ${hypothesisNumber} Step 2-2 failed after ${(durationMs / 1000).toFixed(1)}s:`, error);
     if (storeName) {
       await deleteFileSearchStore(storeName).catch(e => console.error("Failed to cleanup store:", e));
     }
@@ -1678,7 +1713,8 @@ ${step2_1Output}`;
     return {
       hypothesisNumber,
       hypothesisTitle,
-      step2_2Output: `【Step 2-2エラー】仮説${hypothesisNumber}のDeep Research失敗: ${error?.message || error}`
+      step2_2Output: `【Step 2-2エラー】仮説${hypothesisNumber}のDeep Research失敗: ${error?.message || error}`,
+      durationMs
     };
   }
 }
@@ -1694,12 +1730,15 @@ async function processSteps3to5ForHypothesis(
   startTime: number,
   stepTimings: { [key: string]: number }
 ): Promise<PerHypothesisResult> {
+  const processStart = Date.now();
   console.log(`[Run ${runId}] Processing Steps 3-5 for Hypothesis ${hypothesisNumber}: ${hypothesisTitle}`);
+  
+  let step3Ms = 0, step4Ms = 0, step5Ms = 0;
   
   // === Step 3: Scientific Evaluation for this hypothesis ===
   let step3Output = "";
+  const step3Start = Date.now();
   try {
-    const step3Start = Date.now();
     
     await updateProgress(runId, { 
       currentPhase: `hypothesis_${hypothesisNumber}_step3`, 
@@ -1719,18 +1758,19 @@ async function processSteps3to5ForHypothesis(
       startTime
     );
     
-    stepTimings[`h${hypothesisNumber}_step3`] = Date.now() - step3Start;
-    console.log(`[Run ${runId}] Hypothesis ${hypothesisNumber} Step 3 completed (${step3Output.length} chars)`);
+    step3Ms = Date.now() - step3Start;
+    stepTimings[`h${hypothesisNumber}_step3`] = step3Ms;
+    console.log(`[Run ${runId}] Hypothesis ${hypothesisNumber} Step 3 completed (${step3Output.length} chars, ${(step3Ms / 1000).toFixed(1)}s)`);
   } catch (step3Error: any) {
+    step3Ms = Date.now() - step3Start;
     console.error(`[Run ${runId}] Hypothesis ${hypothesisNumber} Step 3 failed:`, step3Error);
     step3Output = `【Step 3エラー】仮説${hypothesisNumber}の科学的評価に失敗: ${step3Error?.message || step3Error}`;
   }
   
   // === Step 4: Strategic Audit for this hypothesis ===
   let step4Output = "";
+  const step4Start = Date.now();
   try {
-    const step4Start = Date.now();
-    
     await updateProgress(runId, { 
       currentPhase: `hypothesis_${hypothesisNumber}_step4`, 
       planningAnalysis: `仮説${hypothesisNumber}「${hypothesisTitle}」: Step 4 戦略監査実行中...`,
@@ -1750,18 +1790,19 @@ async function processSteps3to5ForHypothesis(
       startTime
     );
     
-    stepTimings[`h${hypothesisNumber}_step4`] = Date.now() - step4Start;
-    console.log(`[Run ${runId}] Hypothesis ${hypothesisNumber} Step 4 completed (${step4Output.length} chars)`);
+    step4Ms = Date.now() - step4Start;
+    stepTimings[`h${hypothesisNumber}_step4`] = step4Ms;
+    console.log(`[Run ${runId}] Hypothesis ${hypothesisNumber} Step 4 completed (${step4Output.length} chars, ${(step4Ms / 1000).toFixed(1)}s)`);
   } catch (step4Error: any) {
+    step4Ms = Date.now() - step4Start;
     console.error(`[Run ${runId}] Hypothesis ${hypothesisNumber} Step 4 failed:`, step4Error);
     step4Output = `【Step 4エラー】仮説${hypothesisNumber}の戦略監査に失敗: ${step4Error?.message || step4Error}`;
   }
   
   // === Step 5: TSV Row Generation for this hypothesis ===
   let step5Output = "";
+  const step5Start = Date.now();
   try {
-    const step5Start = Date.now();
-    
     await updateProgress(runId, { 
       currentPhase: `hypothesis_${hypothesisNumber}_step5`, 
       planningAnalysis: `仮説${hypothesisNumber}「${hypothesisTitle}」: Step 5 データ抽出実行中...`,
@@ -1780,12 +1821,17 @@ async function processSteps3to5ForHypothesis(
       startTime
     );
     
-    stepTimings[`h${hypothesisNumber}_step5`] = Date.now() - step5Start;
-    console.log(`[Run ${runId}] Hypothesis ${hypothesisNumber} Step 5 completed (${step5Output.length} chars)`);
+    step5Ms = Date.now() - step5Start;
+    stepTimings[`h${hypothesisNumber}_step5`] = step5Ms;
+    console.log(`[Run ${runId}] Hypothesis ${hypothesisNumber} Step 5 completed (${step5Output.length} chars, ${(step5Ms / 1000).toFixed(1)}s)`);
   } catch (step5Error: any) {
+    step5Ms = Date.now() - step5Start;
     console.error(`[Run ${runId}] Hypothesis ${hypothesisNumber} Step 5 failed:`, step5Error);
     step5Output = `${hypothesisNumber}\t${hypothesisTitle}\t【エラー】データ抽出失敗`;
   }
+  
+  const totalMs = Date.now() - processStart;
+  console.log(`[Run ${runId}] Hypothesis ${hypothesisNumber} Steps 3-5 total: ${(totalMs / 1000).toFixed(1)}s (S3:${(step3Ms/1000).toFixed(1)}s, S4:${(step4Ms/1000).toFixed(1)}s, S5:${(step5Ms/1000).toFixed(1)}s)`);
   
   return {
     hypothesisNumber,
@@ -1793,7 +1839,13 @@ async function processSteps3to5ForHypothesis(
     step2_2Output,
     step3Output,
     step4Output,
-    step5Output: step5Output.trim()
+    step5Output: step5Output.trim(),
+    timing: {
+      step3Ms,
+      step4Ms,
+      step5Ms,
+      totalMs
+    }
   };
 }
 
