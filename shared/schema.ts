@@ -38,6 +38,10 @@ export const hypothesisRuns = pgTable("hypothesis_runs", {
   loopIndex: integer("loop_index").default(0), // This run's loop index (0 for single, 1-N for multi-loop batches)
   hypothesisCount: integer("hypothesis_count").notNull().default(5), // Number of hypotheses per loop
   loopCount: integer("loop_count").notNull().default(1), // Number of generation loops
+  reprocessMode: integer("reprocess_mode").default(0), // 1 = reprocessing mode, 0 = normal mode
+  reprocessUploadedContent: text("reprocess_uploaded_content"), // Content of uploaded file for reprocessing
+  reprocessCustomPrompt: text("reprocess_custom_prompt"), // Custom prompt for document splitting
+  reprocessModelChoice: text("reprocess_model_choice"), // 'pro' or 'flash' for reprocessing
   status: text("status").notNull().default("pending"), // 'pending', 'running', 'completed', 'error'
   currentStep: integer("current_step").default(0), // 0-5 (0=not started, 2-5 = G-Method steps)
   currentLoop: integer("current_loop").default(0), // Current loop iteration (1-based)

@@ -64,12 +64,22 @@ interface ExistingHypothesisFilter {
   technicalAssetsIds: number[];
 }
 
+interface ReprocessParams {
+  uploadedContent: string;
+  technicalAssetsId: number;
+  hypothesisCount: number;
+  modelChoice: "pro" | "flash";
+  customPrompt: string;
+  jobName: string;
+}
+
 interface ExecutionPanelProps {
   targetSpecs: Resource[];
   technicalAssets: Resource[];
   hypotheses: Hypothesis[];
   projectId: number;
   onExecute: (targetSpecId: number, technicalAssetsId: number, hypothesisCount: number, loopCount: number, jobName: string, existingFilter?: ExistingHypothesisFilter) => void;
+  onReprocessExecute: (params: ReprocessParams) => void;
   onAddResource: (type: "target_spec" | "technical_assets", name: string, content: string) => Promise<void>;
   onUpdateResource: (id: number, name: string, content: string) => Promise<void>;
   onDeleteResource: (id: number) => void;
@@ -94,6 +104,7 @@ export function ExecutionPanel({
   hypotheses,
   projectId,
   onExecute,
+  onReprocessExecute,
   onAddResource,
   onUpdateResource,
   onDeleteResource,
@@ -106,6 +117,13 @@ export function ExecutionPanel({
   const [hypothesisCount, setHypothesisCount] = useState<number>(5);
   const [loopCount, setLoopCount] = useState<number>(1);
   const [jobName, setJobName] = useState<string>(generateDefaultJobName());
+  
+  // Reprocess mode state
+  const [reprocessMode, setReprocessMode] = useState(false);
+  const [reprocessContent, setReprocessContent] = useState("");
+  const [reprocessFileName, setReprocessFileName] = useState("");
+  const [reprocessModelChoice, setReprocessModelChoice] = useState<"pro" | "flash">("pro");
+  const [reprocessCustomPrompt, setReprocessCustomPrompt] = useState("");
   const [resourceModalOpen, setResourceModalOpen] = useState(false);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [addType, setAddType] = useState<"target_spec" | "technical_assets">("target_spec");
@@ -191,6 +209,12 @@ export function ExecutionPanel({
     selectedTechnicalAssets &&
     !isExecuting;
 
+  const canReprocessExecute =
+    reprocessContent &&
+    selectedTechnicalAssets &&
+    hypothesisCount > 0 &&
+    !isExecuting;
+
   const handleExecute = () => {
     if (!canExecute) return;
     const existingFilter: ExistingHypothesisFilter = {
@@ -200,6 +224,45 @@ export function ExecutionPanel({
     };
     onExecute(parseInt(selectedTargetSpec), parseInt(selectedTechnicalAssets), hypothesisCount, loopCount, jobName, existingFilter);
     setJobName(generateDefaultJobName());
+  };
+
+  const handleReprocessExecute = () => {
+    if (!canReprocessExecute) return;
+    onReprocessExecute({
+      uploadedContent: reprocessContent,
+      technicalAssetsId: parseInt(selectedTechnicalAssets),
+      hypothesisCount,
+      modelChoice: reprocessModelChoice,
+      customPrompt: reprocessCustomPrompt,
+      jobName,
+    });
+    setJobName(generateDefaultJobName());
+    setReprocessContent("");
+    setReprocessFileName("");
+    setReprocessCustomPrompt("");
+  };
+
+  const handleReprocessFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    const isWord = file.name.endsWith(".docx") || file.name.endsWith(".doc");
+    
+    if (isWord) {
+      const arrayBuffer = await file.arrayBuffer();
+      const result = await mammoth.extractRawText({ arrayBuffer });
+      setReprocessContent(result.value);
+      setReprocessFileName(file.name);
+    } else {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const content = event.target?.result as string;
+        setReprocessContent(content);
+        setReprocessFileName(file.name);
+      };
+      reader.readAsText(file);
+    }
+    e.target.value = "";
   };
   
   const totalHypotheses = hypothesisCount * loopCount;
@@ -419,85 +482,254 @@ export function ExecutionPanel({
     <>
       <Card className="flex flex-col overflow-hidden h-full">
         <CardHeader className="pb-3 shrink-0">
-          <CardTitle className="text-lg font-medium flex items-center gap-2">
-            <Play className="h-5 w-5" />
-            G-Methodを実行
-          </CardTitle>
+          <div className="flex items-center justify-between gap-4">
+            <CardTitle className="text-lg font-medium flex items-center gap-2">
+              <Play className="h-5 w-5" />
+              {reprocessMode ? "再処理モード" : "G-Methodを実行"}
+            </CardTitle>
+            <div className="flex items-center gap-2">
+              <Label htmlFor="reprocess-toggle" className="text-xs text-muted-foreground cursor-pointer">
+                再処理
+              </Label>
+              <Switch
+                id="reprocess-toggle"
+                checked={reprocessMode}
+                onCheckedChange={setReprocessMode}
+                disabled={isExecuting}
+                data-testid="switch-reprocess-mode"
+              />
+            </div>
+          </div>
           <CardDescription>
-            リソースを選択して仮説生成パイプラインを実行
+            {reprocessMode 
+              ? "STEP2-2出力をアップロードしてSTEP3以降を実行"
+              : "リソースを選択して仮説生成パイプラインを実行"
+            }
           </CardDescription>
         </CardHeader>
         <CardContent className="flex-1 flex flex-col min-h-0 p-0">
           <ScrollArea className="flex-1 px-6">
             <div className="space-y-6 py-2">
-              <div className="space-y-3">
-              <Label className="flex items-center gap-2">
-                <Target className="h-4 w-4 text-muted-foreground" />
-                市場・顧客ニーズ
-              </Label>
-              <Select
-                value={selectedTargetSpec}
-                onValueChange={setSelectedTargetSpec}
-                disabled={isExecuting}
-              >
-                <SelectTrigger data-testid="select-target-spec">
-                  <SelectValue placeholder="市場・顧客ニーズを選択..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {targetSpecs.length === 0 ? (
-                    <div className="py-4 px-2 text-sm text-muted-foreground text-center">
-                      市場・顧客ニーズがありません。先に追加してください。
+              {reprocessMode ? (
+                <>
+                  {/* Reprocess Mode UI */}
+                  <div className="space-y-3">
+                    <Label className="flex items-center gap-2">
+                      <Upload className="h-4 w-4 text-muted-foreground" />
+                      STEP2-2出力ファイル
+                    </Label>
+                    <div className="space-y-2">
+                      {reprocessContent ? (
+                        <div className="flex items-center gap-2 p-3 rounded-md bg-muted/30">
+                          <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+                          <span className="text-sm truncate flex-1">{reprocessFileName}</span>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => { setReprocessContent(""); setReprocessFileName(""); }}
+                            disabled={isExecuting}
+                            data-testid="button-clear-reprocess-file"
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col gap-2">
+                          <input
+                            type="file"
+                            accept=".txt,.docx,.doc,.md"
+                            onChange={handleReprocessFileUpload}
+                            className="hidden"
+                            id="reprocess-file-input"
+                            disabled={isExecuting}
+                          />
+                          <Button
+                            variant="outline"
+                            onClick={() => document.getElementById("reprocess-file-input")?.click()}
+                            disabled={isExecuting}
+                            className="w-full gap-2"
+                            data-testid="button-upload-reprocess-file"
+                          >
+                            <Upload className="h-4 w-4" />
+                            ファイルを選択
+                          </Button>
+                          <p className="text-xs text-muted-foreground">
+                            .txt, .docx, .doc, .md形式に対応
+                          </p>
+                        </div>
+                      )}
                     </div>
-                  ) : (
-                    targetSpecs.map((spec) => (
-                      <SelectItem key={spec.id} value={spec.id.toString()}>
-                        {spec.name}
-                      </SelectItem>
-                    ))
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
+                  </div>
 
-            <div className="space-y-3">
-              <Label className="flex items-center gap-2">
-                <Cpu className="h-4 w-4 text-muted-foreground" />
-                技術シーズ
-              </Label>
-              <Select
-                value={selectedTechnicalAssets}
-                onValueChange={setSelectedTechnicalAssets}
-                disabled={isExecuting}
-              >
-                <SelectTrigger data-testid="select-technical-assets">
-                  <SelectValue placeholder="技術シーズを選択..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {technicalAssets.length === 0 ? (
-                    <div className="py-4 px-2 text-sm text-muted-foreground text-center">
-                      技術シーズがありません。先に追加してください。
+                  <div className="space-y-3">
+                    <Label className="flex items-center gap-2">
+                      <Cpu className="h-4 w-4 text-muted-foreground" />
+                      技術シーズ
+                    </Label>
+                    <Select
+                      value={selectedTechnicalAssets}
+                      onValueChange={setSelectedTechnicalAssets}
+                      disabled={isExecuting}
+                    >
+                      <SelectTrigger data-testid="select-technical-assets-reprocess">
+                        <SelectValue placeholder="技術シーズを選択..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {technicalAssets.length === 0 ? (
+                          <div className="py-4 px-2 text-sm text-muted-foreground text-center">
+                            技術シーズがありません。先に追加してください。
+                          </div>
+                        ) : (
+                          technicalAssets.map((asset) => (
+                            <SelectItem key={asset.id} value={asset.id.toString()}>
+                              {asset.name}
+                            </SelectItem>
+                          ))
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-3">
+                    <Label className="flex items-center gap-2">
+                      <Settings2 className="h-4 w-4 text-muted-foreground" />
+                      再処理設定
+                    </Label>
+                    <div className="space-y-3 p-3 rounded-md bg-muted/30">
+                      <div className="flex items-center gap-3">
+                        <span className="text-sm w-24">ジョブ名:</span>
+                        <Input
+                          type="text"
+                          value={jobName}
+                          onChange={(e) => setJobName(e.target.value)}
+                          disabled={isExecuting}
+                          className="flex-1"
+                          placeholder="YYYYMMDDHHMM形式"
+                          data-testid="input-job-name-reprocess"
+                        />
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="text-sm w-24">仮説数:</span>
+                        <Input
+                          type="number"
+                          min={1}
+                          max={20}
+                          value={hypothesisCount}
+                          onChange={(e) => setHypothesisCount(Math.max(1, Math.min(20, parseInt(e.target.value) || 5)))}
+                          disabled={isExecuting}
+                          className="w-20"
+                          data-testid="input-hypothesis-count-reprocess"
+                        />
+                        <span className="text-sm text-muted-foreground">件に分解</span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="text-sm w-24">モデル:</span>
+                        <Select
+                          value={reprocessModelChoice}
+                          onValueChange={(v) => setReprocessModelChoice(v as "pro" | "flash")}
+                          disabled={isExecuting}
+                        >
+                          <SelectTrigger className="w-40" data-testid="select-reprocess-model">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="pro">Gemini 3.0 Pro</SelectItem>
+                            <SelectItem value="flash">Gemini 3.0 Flash</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </div>
-                  ) : (
-                    technicalAssets.map((asset) => (
-                      <SelectItem key={asset.id} value={asset.id.toString()}>
-                        {asset.name}
-                      </SelectItem>
-                    ))
-                  )}
-                </SelectContent>
-              </Select>
-              <button
-                type="button"
-                className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
-                onClick={() => setResourceModalOpen(true)}
-                data-testid="link-edit-resources"
-              >
-                <Settings2 className="h-3 w-3" />
-                リソースの編集
-              </button>
-            </div>
+                  </div>
 
-            <Collapsible open={filterOpen} onOpenChange={setFilterOpen}>
+                  <div className="space-y-3">
+                    <Label className="flex items-center gap-2">
+                      <FileText className="h-4 w-4 text-muted-foreground" />
+                      カスタムプロンプト（任意）
+                    </Label>
+                    <Textarea
+                      value={reprocessCustomPrompt}
+                      onChange={(e) => setReprocessCustomPrompt(e.target.value)}
+                      disabled={isExecuting}
+                      placeholder="例: このレポートには○○観点のスコアが入っていないため補ってください"
+                      className="min-h-[100px] resize-y"
+                      data-testid="textarea-reprocess-custom-prompt"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      ドキュメント分解処理の際に追加で指示したい内容を入力してください
+                    </p>
+                  </div>
+                </>
+              ) : (
+                <>
+                  {/* Normal Mode UI */}
+                  <div className="space-y-3">
+                    <Label className="flex items-center gap-2">
+                      <Target className="h-4 w-4 text-muted-foreground" />
+                      市場・顧客ニーズ
+                    </Label>
+                    <Select
+                      value={selectedTargetSpec}
+                      onValueChange={setSelectedTargetSpec}
+                      disabled={isExecuting}
+                    >
+                      <SelectTrigger data-testid="select-target-spec">
+                        <SelectValue placeholder="市場・顧客ニーズを選択..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {targetSpecs.length === 0 ? (
+                          <div className="py-4 px-2 text-sm text-muted-foreground text-center">
+                            市場・顧客ニーズがありません。先に追加してください。
+                          </div>
+                        ) : (
+                          targetSpecs.map((spec) => (
+                            <SelectItem key={spec.id} value={spec.id.toString()}>
+                              {spec.name}
+                            </SelectItem>
+                          ))
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-3">
+                    <Label className="flex items-center gap-2">
+                      <Cpu className="h-4 w-4 text-muted-foreground" />
+                      技術シーズ
+                    </Label>
+                    <Select
+                      value={selectedTechnicalAssets}
+                      onValueChange={setSelectedTechnicalAssets}
+                      disabled={isExecuting}
+                    >
+                      <SelectTrigger data-testid="select-technical-assets">
+                        <SelectValue placeholder="技術シーズを選択..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {technicalAssets.length === 0 ? (
+                          <div className="py-4 px-2 text-sm text-muted-foreground text-center">
+                            技術シーズがありません。先に追加してください。
+                          </div>
+                        ) : (
+                          technicalAssets.map((asset) => (
+                            <SelectItem key={asset.id} value={asset.id.toString()}>
+                              {asset.name}
+                            </SelectItem>
+                          ))
+                        )}
+                      </SelectContent>
+                    </Select>
+                    <button
+                      type="button"
+                      className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
+                      onClick={() => setResourceModalOpen(true)}
+                      data-testid="link-edit-resources"
+                    >
+                      <Settings2 className="h-3 w-3" />
+                      リソースの編集
+                    </button>
+                  </div>
+
+                  <Collapsible open={filterOpen} onOpenChange={setFilterOpen}>
               <CollapsibleTrigger asChild>
                 <button
                   type="button"
@@ -651,6 +883,8 @@ export function ExecutionPanel({
                 </div>
               </div>
             </div>
+                </>
+              )}
             </div>
           </ScrollArea>
 
@@ -658,14 +892,19 @@ export function ExecutionPanel({
             <Button
               size="lg"
               className="w-full gap-2"
-              disabled={!canExecute}
-              onClick={handleExecute}
-              data-testid="button-run-gmethod"
+              disabled={reprocessMode ? !canReprocessExecute : !canExecute}
+              onClick={reprocessMode ? handleReprocessExecute : handleExecute}
+              data-testid={reprocessMode ? "button-run-reprocess" : "button-run-gmethod"}
             >
               {isExecuting ? (
                 <>
                   <Loader2 className="h-5 w-5 animate-spin" />
                   処理中...
+                </>
+              ) : reprocessMode ? (
+                <>
+                  <Play className="h-5 w-5" />
+                  再処理を実行
                 </>
               ) : (
                 <>
@@ -674,10 +913,18 @@ export function ExecutionPanel({
                 </>
               )}
             </Button>
-            {!selectedTargetSpec && !selectedTechnicalAssets && (
-              <p className="text-xs text-muted-foreground text-center mt-3">
-                両方のリソースを選択すると実行できます
-              </p>
+            {reprocessMode ? (
+              !reprocessContent && (
+                <p className="text-xs text-muted-foreground text-center mt-3">
+                  STEP2-2出力ファイルをアップロードしてください
+                </p>
+              )
+            ) : (
+              !selectedTargetSpec && !selectedTechnicalAssets && (
+                <p className="text-xs text-muted-foreground text-center mt-3">
+                  両方のリソースを選択すると実行できます
+                </p>
+              )
             )}
           </div>
         </CardContent>

@@ -195,6 +195,35 @@ export default function ProjectWorkspace({ projectId }: ProjectWorkspaceProps) {
     },
   });
 
+  const reprocessRunMutation = useMutation({
+    mutationFn: async (params: {
+      uploadedContent: string;
+      technicalAssetsId: number;
+      hypothesisCount: number;
+      modelChoice: "pro" | "flash";
+      customPrompt: string;
+      jobName: string;
+    }) => {
+      const res = await apiRequest("POST", `/api/projects/${id}/runs/reprocess`, params);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", id, "runs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", id, "hypotheses"] });
+      toast({
+        title: "再処理を開始しました",
+        description: "STEP3以降の処理を開始しました。",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "エラー",
+        description: "再処理の開始に失敗しました。もう一度お試しください。",
+        variant: "destructive",
+      });
+    },
+  });
+
   const deleteHypothesisMutation = useMutation({
     mutationFn: async (hypothesisId: number) => {
       await apiRequest("DELETE", `/api/hypotheses/${hypothesisId}`);
@@ -300,6 +329,17 @@ export default function ProjectWorkspace({ projectId }: ProjectWorkspaceProps) {
     existingFilter?: { enabled: boolean; targetSpecIds: number[]; technicalAssetsIds: number[] }
   ) => {
     executeRunMutation.mutate({ targetSpecId, technicalAssetsId, hypothesisCount, loopCount, jobName, existingFilter });
+  };
+
+  const handleReprocessExecute = (params: {
+    uploadedContent: string;
+    technicalAssetsId: number;
+    hypothesisCount: number;
+    modelChoice: "pro" | "flash";
+    customPrompt: string;
+    jobName: string;
+  }) => {
+    reprocessRunMutation.mutate(params);
   };
 
   const handleDeleteHypothesis = (hypothesisId: number) => {
@@ -662,11 +702,12 @@ export default function ProjectWorkspace({ projectId }: ProjectWorkspaceProps) {
               hypotheses={hypotheses}
               projectId={Number(id) || 0}
               onExecute={handleExecute}
+              onReprocessExecute={handleReprocessExecute}
               onAddResource={handleAddResource}
               onUpdateResource={handleUpdateResource}
               onDeleteResource={handleDeleteResource}
               onImportResources={handleImportResources}
-              isExecuting={isExecuting || executeRunMutation.isPending}
+              isExecuting={isExecuting || executeRunMutation.isPending || reprocessRunMutation.isPending}
               isPending={addResourceMutation.isPending}
             />
           </div>
