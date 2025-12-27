@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertProjectSchema, insertResourceSchema, insertHypothesisRunSchema, insertPromptVersionSchema } from "@shared/schema";
 import { STEP2_PROMPT, STEP2_1_DEEP_RESEARCH_PROMPT, STEP2_2_DEEP_RESEARCH_PROMPT, STEP3_INDIVIDUAL_PROMPT, STEP4_INDIVIDUAL_PROMPT, STEP5_INDIVIDUAL_PROMPT } from "./prompts";
-import { executeGMethodPipeline, requestPause, requestResume, requestStop, resumePipeline, isRunActive, getActiveRunIds, forceReleaseAllLocks } from "./gmethod-pipeline";
+import { executeGMethodPipeline, executeReprocessPipeline, requestPause, requestResume, requestStop, resumePipeline, isRunActive, getActiveRunIds, forceReleaseAllLocks } from "./gmethod-pipeline";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, TableRow, TableCell, Table, WidthType, BorderStyle } from "docx";
 
@@ -523,6 +523,72 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error creating run:", error);
       res.status(500).json({ error: "Failed to create run" });
+    }
+  });
+
+  // Reprocess endpoint - upload STEP2-2 output and run STEP3 onwards
+  app.post("/api/projects/:projectId/runs/reprocess", isAuthenticated, requireAgcDomain, async (req, res) => {
+    try {
+      const projectId = parseInt(req.params.projectId);
+      const { uploadedContent, technicalAssetsId, hypothesisCount, modelChoice, customPrompt, jobName } = req.body;
+      
+      // Validate required fields
+      if (!uploadedContent || typeof uploadedContent !== "string" || uploadedContent.trim().length === 0) {
+        return res.status(400).json({ error: "アップロードされたコンテンツが必要です" });
+      }
+      
+      if (!technicalAssetsId || typeof technicalAssetsId !== "number" || technicalAssetsId <= 0) {
+        return res.status(400).json({ error: "技術シーズの選択が必要です" });
+      }
+      
+      // Validate technicalAssetsId exists
+      const technicalAssets = await storage.getResource(technicalAssetsId);
+      if (!technicalAssets) {
+        return res.status(404).json({ error: "指定された技術シーズが見つかりません" });
+      }
+      
+      // Validate hypothesisCount (must be 1-100)
+      const validHypothesisCount = typeof hypothesisCount === "number" && hypothesisCount >= 1 && hypothesisCount <= 100
+        ? hypothesisCount : 5;
+      
+      // Validate modelChoice (must be 'pro' or 'flash')
+      const validModelChoice = (modelChoice === "pro" || modelChoice === "flash") ? modelChoice : "pro";
+      
+      // Generate default job name if not provided
+      const finalJobName = jobName || (() => {
+        const now = new Date();
+        const yyyy = String(now.getFullYear());
+        const mm = String(now.getMonth() + 1).padStart(2, '0');
+        const dd = String(now.getDate()).padStart(2, '0');
+        const hh = String(now.getHours()).padStart(2, '0');
+        const min = String(now.getMinutes()).padStart(2, '0');
+        return `${yyyy}${mm}${dd}${hh}${min}_reprocess`;
+      })();
+      
+      // Create run with reprocess mode flags
+      // For reprocess mode, targetSpecId is set to technicalAssetsId as a placeholder
+      // to maintain database consistency
+      const run = await storage.createRun({
+        projectId,
+        targetSpecId: technicalAssetsId,  // Use technicalAssetsId as placeholder for consistency
+        technicalAssetsId,
+        hypothesisCount: validHypothesisCount,
+        jobName: finalJobName,
+        reprocessMode: 1,  // 1 = reprocessing mode
+        reprocessUploadedContent: uploadedContent,
+        reprocessCustomPrompt: customPrompt || "",
+        reprocessModelChoice: validModelChoice,
+      });
+      
+      // Start reprocess pipeline execution asynchronously
+      executeReprocessPipeline(run.id).catch((error) => {
+        console.error("Reprocess pipeline execution error:", error);
+      });
+      
+      res.status(201).json(run);
+    } catch (error) {
+      console.error("Error creating reprocess run:", error);
+      res.status(500).json({ error: "Failed to create reprocess run" });
     }
   });
 

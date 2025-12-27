@@ -2598,3 +2598,330 @@ export async function resumePipeline(runId: number): Promise<void> {
   
   await executeGMethodPipeline(runId, resumeStep);
 }
+
+// Reprocess pipeline - upload STEP2-2 output and run STEP3 onwards
+export async function executeReprocessPipeline(runId: number): Promise<void> {
+  // Acquire lock to prevent duplicate execution
+  if (!acquireRunLock(runId)) {
+    console.error(`[Run ${runId}] Reprocess pipeline execution blocked - already running`);
+    return;
+  }
+
+  try {
+    if (!checkAIConfiguration()) {
+      await storage.updateRun(runId, {
+        status: "error",
+        errorMessage: "GEMINI_API_KEY が設定されていません。Secretsに APIキーを設定してください。",
+      });
+      return;
+    }
+
+    const run = await storage.getRun(runId);
+    if (!run) {
+      throw new Error("Run not found");
+    }
+
+    if (run.reprocessMode !== 1 || !run.reprocessUploadedContent) {
+      throw new Error("This run is not in reprocess mode or missing uploaded content");
+    }
+
+    const technicalAssets = run.technicalAssetsId ? await storage.getResource(run.technicalAssetsId) : null;
+    const customPrompt = run.reprocessCustomPrompt || "";
+    const modelChoice = run.reprocessModelChoice || "pro";
+    const hypothesisCount = run.hypothesisCount || 5;
+
+    console.log(`[Run ${runId}] Starting reprocess pipeline with model=${modelChoice}, hypotheses=${hypothesisCount}`);
+    await storage.updateRun(runId, { status: "running", currentStep: 2 });
+
+    // Split uploaded content into individual hypothesis documents
+    const hypothesisDocuments = splitReprocessContent(run.reprocessUploadedContent, customPrompt, hypothesisCount);
+    console.log(`[Run ${runId}] Split into ${hypothesisDocuments.length} hypothesis documents`);
+
+    if (hypothesisDocuments.length === 0) {
+      throw new Error("アップロードされたコンテンツから仮説を抽出できませんでした");
+    }
+
+    // Store as STEP2-2 individual outputs
+    const step2_2Outputs: Array<{ hypothesisIndex: number; content: string }> = hypothesisDocuments.map((doc, i) => ({
+      hypothesisIndex: i + 1,
+      content: doc.content,
+    }));
+
+    await storage.updateRun(runId, {
+      step2_2IndividualOutputs: step2_2Outputs,
+      currentStep: 3,
+    });
+
+    // Initialize progress info for parallel execution
+    const progressInfo = {
+      totalHypotheses: hypothesisDocuments.length,
+      completedHypotheses: 0,
+      currentlyProcessing: [] as number[],
+      parallelSteps: { step3: 0, step4: 0, step5: 0 },
+    };
+    await storage.updateRun(runId, { progressInfo });
+
+    // Execute STEP3→4→5 for each hypothesis in parallel
+    const processingPromises = hypothesisDocuments.map(async (doc, index) => {
+      const hypothesisNumber = index + 1;
+      console.log(`[Run ${runId}] Processing hypothesis ${hypothesisNumber}/${hypothesisDocuments.length}`);
+
+      try {
+        // Create context for this hypothesis
+        const hypothesisContext = {
+          title: doc.title,
+          content: doc.content,
+          technicalAssets: technicalAssets?.content || "",
+        };
+
+        // Execute STEP3
+        const step3Output = await executeReprocessStep3(hypothesisContext, modelChoice, runId, hypothesisNumber);
+        
+        // Execute STEP4
+        const step4Output = await executeReprocessStep4(hypothesisContext, step3Output, modelChoice, runId, hypothesisNumber);
+        
+        // Execute STEP5
+        const step5Output = await executeReprocessStep5(hypothesisContext, step3Output, step4Output, modelChoice, runId, hypothesisNumber);
+
+        return {
+          hypothesisNumber,
+          title: doc.title,
+          step3Output,
+          step4Output,
+          step5Output,
+          success: true as const,
+        };
+      } catch (error) {
+        console.error(`[Run ${runId}] Error processing hypothesis ${hypothesisNumber}:`, error);
+        return {
+          hypothesisNumber,
+          title: doc.title,
+          step3Output: "",
+          step4Output: "",
+          step5Output: "",
+          success: false as const,
+          error: error instanceof Error ? error.message : "Unknown error",
+        };
+      }
+    });
+    
+    const results = await Promise.all(processingPromises);
+
+    // Aggregate outputs
+    const step3IndividualOutputs = results.map(r => ({
+      hypothesisIndex: r.hypothesisNumber,
+      content: r.step3Output,
+    }));
+    const step4IndividualOutputs = results.map(r => ({
+      hypothesisIndex: r.hypothesisNumber,
+      content: r.step4Output,
+    }));
+    const step5IndividualOutputs = results.map(r => ({
+      hypothesisIndex: r.hypothesisNumber,
+      content: r.step5Output,
+    }));
+
+    // Aggregate STEP5 outputs into TSV
+    const step5Outputs = results.filter(r => r.success).map(r => r.step5Output);
+    const aggregatedTSV = aggregateStep5Outputs(step5Outputs);
+
+    // Create integrated list
+    const integratedList = step2_2Outputs.map((h, i) => ({
+      number: i + 1,
+      title: hypothesisDocuments[i]?.title || `仮説${i + 1}`,
+      step2_2: h.content,
+      step3: step3IndividualOutputs[i]?.content || "",
+      step4: step4IndividualOutputs[i]?.content || "",
+      step5: step5IndividualOutputs[i]?.content || "",
+    }));
+
+    // Save hypotheses to database using the correct schema
+    const nextHypothesisNumber = await storage.getNextHypothesisNumber(run.projectId);
+    const hypothesesToCreate: InsertHypothesis[] = [];
+    
+    for (let i = 0; i < results.length; i++) {
+      const result = results[i];
+      if (result && result.success) {
+        // Parse STEP5 output to get fullData
+        const step5Lines = result.step5Output.split('\n').filter(line => line.trim());
+        let fullData: Record<string, string> = {};
+        
+        if (step5Lines.length >= 2) {
+          const headers = step5Lines[0].split('\t');
+          const values = step5Lines[1].split('\t');
+          headers.forEach((h, idx) => {
+            fullData[h.trim()] = values[idx]?.trim() || '';
+          });
+        } else {
+          // Fallback if STEP5 output doesn't have expected format
+          fullData = {
+            'タイトル': result.title,
+            'STEP2-2レポート': hypothesisDocuments[i]?.content.slice(0, 500) || '',
+            'STEP3評価': result.step3Output.slice(0, 500),
+            'STEP4評価': result.step4Output.slice(0, 500),
+          };
+        }
+        
+        const displayTitle = extractDisplayTitle(fullData, nextHypothesisNumber + i);
+        const contentHash = computeContentHash(fullData);
+        
+        hypothesesToCreate.push({
+          projectId: run.projectId,
+          runId: runId,
+          targetSpecId: run.targetSpecId,  // Use the same as technicalAssetsId (placeholder for reprocess)
+          technicalAssetsId: run.technicalAssetsId,
+          hypothesisNumber: nextHypothesisNumber + i,
+          displayTitle,
+          contentHash,
+          fullData,
+        });
+      }
+    }
+    
+    if (hypothesesToCreate.length > 0) {
+      await storage.createHypotheses(hypothesesToCreate);
+      console.log(`[Run ${runId}] Saved ${hypothesesToCreate.length} hypotheses to database`);
+    }
+
+    // Update run with final outputs
+    await storage.updateRun(runId, {
+      step3Output: step3IndividualOutputs.map(o => o.content).join("\n\n---\n\n"),
+      step4Output: step4IndividualOutputs.map(o => o.content).join("\n\n---\n\n"),
+      step5Output: aggregatedTSV,
+      step3IndividualOutputs,
+      step4IndividualOutputs,
+      step5IndividualOutputs,
+      integratedList,
+      status: "completed",
+      completedAt: new Date(),
+      currentStep: 5,
+    });
+
+    console.log(`[Run ${runId}] Reprocess pipeline completed successfully`);
+  } catch (error) {
+    console.error(`[Run ${runId}] Reprocess pipeline error:`, error);
+    const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+    await storage.updateRun(runId, {
+      status: "error",
+      errorMessage: errorMessage,
+    });
+    clearControlRequests(runId);
+  } finally {
+    releaseRunLock(runId);
+  }
+}
+
+// Helper function to split reprocess uploaded content into individual hypothesis documents
+function splitReprocessContent(content: string, customPrompt: string, maxHypotheses: number): Array<{ title: string; content: string }> {
+  const documents: Array<{ title: string; content: string }> = [];
+  
+  // Try to split by common delimiters (--- or ### or numbered sections)
+  // First, try splitting by horizontal rules
+  let sections = content.split(/\n---+\n/);
+  
+  if (sections.length === 1) {
+    // Try splitting by markdown headers (## or ###)
+    sections = content.split(/\n(?=#{2,3}\s)/);
+  }
+  
+  if (sections.length === 1) {
+    // Try splitting by numbered sections like "1. " or "【1】"
+    sections = content.split(/\n(?=\d+[\.。]\s|【\d+】)/);
+  }
+  
+  for (let i = 0; i < Math.min(sections.length, maxHypotheses); i++) {
+    const section = sections[i].trim();
+    if (!section) continue;
+    
+    // Extract title from first line or heading
+    const lines = section.split("\n");
+    let title = lines[0].replace(/^#{1,3}\s*/, "").replace(/^【\d+】\s*/, "").replace(/^\d+[\.。]\s*/, "").trim();
+    if (title.length > 100) {
+      title = title.substring(0, 100) + "...";
+    }
+    
+    // Prepend custom prompt if provided
+    const finalContent = customPrompt ? `${customPrompt}\n\n${section}` : section;
+    
+    documents.push({
+      title: title || `仮説${i + 1}`,
+      content: finalContent,
+    });
+  }
+  
+  return documents;
+}
+
+// Execute STEP3 for reprocess mode
+async function executeReprocessStep3(
+  context: { title: string; content: string; technicalAssets: string },
+  modelChoice: string,
+  runId: number,
+  hypothesisNumber: number
+): Promise<string> {
+  const prompt = STEP3_INDIVIDUAL_PROMPT
+    .replace("{HYPOTHESIS_TITLE}", context.title)
+    .replace("{STEP2_2_REPORT}", context.content)
+    .replace("{TARGET_SPECIFICATION}", "")  // Not available in reprocess mode
+    .replace("{TECHNICAL_ASSETS}", context.technicalAssets);
+  
+  console.log(`[Run ${runId}] Reprocess STEP3 for hypothesis ${hypothesisNumber} (${modelChoice})`);
+  
+  if (modelChoice === "flash") {
+    return await generateWithFlash(prompt);
+  } else {
+    return await generateWithPro(prompt);
+  }
+}
+
+// Execute STEP4 for reprocess mode
+async function executeReprocessStep4(
+  context: { title: string; content: string; technicalAssets: string },
+  step3Output: string,
+  modelChoice: string,
+  runId: number,
+  hypothesisNumber: number
+): Promise<string> {
+  const prompt = STEP4_INDIVIDUAL_PROMPT
+    .replace("{HYPOTHESIS_TITLE}", context.title)
+    .replace("{STEP2_2_REPORT}", context.content)
+    .replace("{STEP3_OUTPUT}", step3Output)
+    .replace("{TARGET_SPECIFICATION}", "")  // Not available in reprocess mode
+    .replace("{TECHNICAL_ASSETS}", context.technicalAssets);
+  
+  console.log(`[Run ${runId}] Reprocess STEP4 for hypothesis ${hypothesisNumber} (${modelChoice})`);
+  
+  if (modelChoice === "flash") {
+    return await generateWithFlash(prompt);
+  } else {
+    return await generateWithPro(prompt);
+  }
+}
+
+// Execute STEP5 for reprocess mode
+async function executeReprocessStep5(
+  context: { title: string; content: string; technicalAssets: string },
+  step3Output: string,
+  step4Output: string,
+  modelChoice: string,
+  runId: number,
+  hypothesisNumber: number
+): Promise<string> {
+  // Get STEP5 template from database or use default
+  const step5Template = await storage.getActivePrompt(5);
+  const step5Prompt = step5Template?.content || STEP5_INDIVIDUAL_PROMPT;
+  
+  const prompt = step5Prompt
+    .replace("{HYPOTHESIS_TITLE}", context.title)
+    .replace("{STEP2_2_REPORT}", context.content)
+    .replace("{STEP3_OUTPUT}", step3Output)
+    .replace("{STEP4_OUTPUT}", step4Output);
+  
+  console.log(`[Run ${runId}] Reprocess STEP5 for hypothesis ${hypothesisNumber} (${modelChoice})`);
+  
+  if (modelChoice === "flash") {
+    return await generateWithFlash(prompt);
+  } else {
+    return await generateWithPro(prompt);
+  }
+}
