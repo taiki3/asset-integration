@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
-import { Lightbulb, ChevronDown, ChevronUp, Trash2, LayoutGrid, Table, Download, Upload, FileText, Settings, Loader2 } from "lucide-react";
+import { Lightbulb, ChevronDown, ChevronUp, Trash2, LayoutGrid, Table, Download, Upload, FileText, Settings, Loader2, ArrowUp, ArrowDown } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -69,48 +69,28 @@ export function HypothesesPanel({ hypotheses, resources, projectId, onDelete, on
   const [selectedHypothesis, setSelectedHypothesis] = useState<Hypothesis | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [columnSettingsOpen, setColumnSettingsOpen] = useState(false);
-  const [selectedColumns, setSelectedColumns] = useState<Set<string>>(new Set());
+  const [orderedColumns, setOrderedColumns] = useState<string[]>([]);
   const [detailsTab, setDetailsTab] = useState<"summary" | "report">("summary");
   const [reportContent, setReportContent] = useState<string | null>(null);
   const [reportLoading, setReportLoading] = useState(false);
   const [importModalOpen, setImportModalOpen] = useState(false);
   const { toast } = useToast();
 
+  // Get all unique columns, ordered by the first hypothesis's fullData keys
   const allColumns = useMemo(() => {
     const columnSet = new Set<string>();
+    // First, add columns from the first hypothesis to preserve STEP5 order
+    if (hypotheses.length > 0) {
+      const firstData = getFullData(hypotheses[0]);
+      Object.keys(firstData).forEach((key) => columnSet.add(key));
+    }
+    // Then add any additional columns from other hypotheses
     hypotheses.forEach((h) => {
       const data = getFullData(h);
       Object.keys(data).forEach((key) => columnSet.add(key));
     });
     return Array.from(columnSet);
   }, [hypotheses]);
-
-  // Preferred default columns (if they exist in data)
-  const DEFAULT_DISPLAY_COLUMNS = [
-    "仮説番号",
-    "仮説タイトル",
-    "業界",
-    "分野",
-    "素材が活躍する舞台",
-    "素材の役割",
-    "使用する技術資産",
-    "原料(物質)",
-    "製品形態(成型体/モジュール形態）",
-    "事業仮説概要",
-    "顧客が解決できていない課題",
-    "顧客にとっての切迫度",
-    "素材による解決の必然性",
-    "素材・成形体レベルのソリューション",
-    "他の素材ソリューションに対する優位性",
-    "最低限達成すべき技術水準",
-    "「全技術シーズ」を活用できた場合の魅力度",
-    "「全技術シーズ」を活用できた場合の結論",
-    "AGCの参入方式",
-    "AGCの参入確率",
-    "AGCの事業価値×参入確率に基づく魅力度",
-    "AGCとしての結論",
-    "参考：AGCの強みを生かした戦術",
-  ];
 
   // Load saved column settings from localStorage
   useEffect(() => {
@@ -121,32 +101,53 @@ export function HypothesesPanel({ hypotheses, resources, projectId, onDelete, on
         // Only keep columns that actually exist in current data
         const validColumns = parsed.filter(col => allColumns.includes(col));
         if (validColumns.length > 0) {
-          setSelectedColumns(new Set(validColumns));
+          setOrderedColumns(validColumns);
           return;
         }
       }
     } catch {
       // Ignore parse errors
     }
-    // Default: use preferred columns that exist, otherwise first 6
-    const preferredDefaults = DEFAULT_DISPLAY_COLUMNS.filter(col => allColumns.includes(col));
-    if (preferredDefaults.length > 0) {
-      setSelectedColumns(new Set(preferredDefaults));
-    } else {
-      setSelectedColumns(new Set(allColumns.slice(0, 6)));
-    }
+    // Default: use the order from the first hypothesis's STEP5 output
+    setOrderedColumns(allColumns);
   }, [allColumns]);
 
   // Save column settings to localStorage
-  const saveColumnSettings = (columns: Set<string>) => {
-    setSelectedColumns(columns);
-    localStorage.setItem(COLUMN_SETTINGS_KEY, JSON.stringify(Array.from(columns)));
+  const saveColumnSettings = (columns: string[]) => {
+    setOrderedColumns(columns);
+    localStorage.setItem(COLUMN_SETTINGS_KEY, JSON.stringify(columns));
   };
 
-  const displayColumns = useMemo(() => {
-    // Maintain order from allColumns, filter by selectedColumns
-    return allColumns.filter(col => selectedColumns.has(col));
-  }, [allColumns, selectedColumns]);
+  // Toggle column visibility
+  const toggleColumn = (column: string) => {
+    if (orderedColumns.includes(column)) {
+      saveColumnSettings(orderedColumns.filter(c => c !== column));
+    } else {
+      saveColumnSettings([...orderedColumns, column]);
+    }
+  };
+
+  // Move column up in order
+  const moveColumnUp = (column: string) => {
+    const index = orderedColumns.indexOf(column);
+    if (index > 0) {
+      const newColumns = [...orderedColumns];
+      [newColumns[index - 1], newColumns[index]] = [newColumns[index], newColumns[index - 1]];
+      saveColumnSettings(newColumns);
+    }
+  };
+
+  // Move column down in order
+  const moveColumnDown = (column: string) => {
+    const index = orderedColumns.indexOf(column);
+    if (index < orderedColumns.length - 1) {
+      const newColumns = [...orderedColumns];
+      [newColumns[index], newColumns[index + 1]] = [newColumns[index + 1], newColumns[index]];
+      saveColumnSettings(newColumns);
+    }
+  };
+
+  const displayColumns = orderedColumns;
 
   const getResourceName = (resourceId: number | null): string => {
     if (!resourceId) return "-";
@@ -622,44 +623,71 @@ export function HypothesesPanel({ hypotheses, resources, projectId, onDelete, on
               表示カラム設定
             </DialogTitle>
             <DialogDescription>
-              カード表示・テーブル表示で表示するカラムを選択してください
+              表示するカラムを選択し、順序を変更できます
             </DialogDescription>
           </DialogHeader>
 
-          <ScrollArea className="max-h-[300px]">
-            <div className="space-y-3 pr-4">
-              {allColumns.map((column) => (
+          <ScrollArea className="max-h-[400px]">
+            <div className="space-y-1 pr-4">
+              <p className="text-xs text-muted-foreground mb-2">表示中のカラム（上から順に表示）</p>
+              {orderedColumns.map((column, index) => (
                 <div
                   key={column}
-                  className="flex items-center gap-3 p-2 rounded-md hover-elevate cursor-pointer"
-                  onClick={() => {
-                    const newSelected = new Set(selectedColumns);
-                    if (newSelected.has(column)) {
-                      newSelected.delete(column);
-                    } else {
-                      newSelected.add(column);
-                    }
-                    saveColumnSettings(newSelected);
-                  }}
+                  className="flex items-center gap-2 p-2 rounded-md bg-muted/50"
                   data-testid={`column-setting-${column}`}
                 >
                   <Checkbox
-                    checked={selectedColumns.has(column)}
-                    onCheckedChange={(checked) => {
-                      const newSelected = new Set(selectedColumns);
-                      if (checked) {
-                        newSelected.add(column);
-                      } else {
-                        newSelected.delete(column);
-                      }
-                      saveColumnSettings(newSelected);
-                    }}
-                    onClick={(e) => e.stopPropagation()}
+                    checked={true}
+                    onCheckedChange={() => toggleColumn(column)}
                     className="shrink-0"
                   />
-                  <Label className="text-sm cursor-pointer flex-1">{column}</Label>
+                  <Label className="text-sm flex-1 truncate">{column}</Label>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      disabled={index === 0}
+                      onClick={() => moveColumnUp(column)}
+                      className="h-6 w-6"
+                      data-testid={`button-move-up-${column}`}
+                    >
+                      <ArrowUp className="h-3 w-3" />
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      disabled={index === orderedColumns.length - 1}
+                      onClick={() => moveColumnDown(column)}
+                      className="h-6 w-6"
+                      data-testid={`button-move-down-${column}`}
+                    >
+                      <ArrowDown className="h-3 w-3" />
+                    </Button>
+                  </div>
                 </div>
               ))}
+              
+              {allColumns.filter(col => !orderedColumns.includes(col)).length > 0 && (
+                <>
+                  <p className="text-xs text-muted-foreground mt-4 mb-2">非表示のカラム</p>
+                  {allColumns.filter(col => !orderedColumns.includes(col)).map((column) => (
+                    <div
+                      key={column}
+                      className="flex items-center gap-2 p-2 rounded-md hover-elevate cursor-pointer"
+                      onClick={() => toggleColumn(column)}
+                      data-testid={`column-setting-hidden-${column}`}
+                    >
+                      <Checkbox
+                        checked={false}
+                        onCheckedChange={() => toggleColumn(column)}
+                        onClick={(e) => e.stopPropagation()}
+                        className="shrink-0"
+                      />
+                      <Label className="text-sm cursor-pointer flex-1 text-muted-foreground truncate">{column}</Label>
+                    </div>
+                  ))}
+                </>
+              )}
             </div>
           </ScrollArea>
 
@@ -668,7 +696,7 @@ export function HypothesesPanel({ hypotheses, resources, projectId, onDelete, on
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => saveColumnSettings(new Set(allColumns))}
+                onClick={() => saveColumnSettings(allColumns)}
                 data-testid="button-select-all-columns"
               >
                 すべて選択
@@ -676,7 +704,7 @@ export function HypothesesPanel({ hypotheses, resources, projectId, onDelete, on
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => saveColumnSettings(new Set(allColumns.slice(0, 6)))}
+                onClick={() => saveColumnSettings(allColumns)}
                 data-testid="button-reset-columns"
               >
                 リセット
