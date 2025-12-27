@@ -55,6 +55,7 @@ export const hypothesisRuns = pgTable("hypothesis_runs", {
   integratedList: jsonb("integrated_list"), // Parsed TSV data
   validationMetadata: jsonb("validation_metadata"), // Deep Research validation results
   progressInfo: jsonb("progress_info"), // Detailed progress info (planning result, step timings, etc.)
+  executionTiming: jsonb("execution_timing"), // Detailed timing: per-hypothesis durations, step totals, overall duration
   debugPrompts: jsonb("debug_prompts"), // Debug: actual prompts sent (after parameter substitution) and attachments
   resumeCount: integer("resume_count").default(0), // Number of times this run has been resumed
   errorMessage: text("error_message"),
