@@ -526,15 +526,6 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, 
           <DialogFooter className="gap-2 sm:gap-2 flex-wrap">
             {selectedRun?.status === "completed" && activeTab === "step2Output" && selectedRun.step2Output && (
               <>
-                <Button
-                  variant="outline"
-                  className="gap-2"
-                  onClick={() => onDownloadStep2Word(selectedRun.id)}
-                  data-testid="button-download-step2-word"
-                >
-                  <FileText className="h-4 w-4" />
-                  STEP2をWord出力
-                </Button>
                 {loadingReports ? (
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -562,7 +553,7 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, 
                       data-testid="button-download-individual-report"
                     >
                       <FileText className="h-4 w-4" />
-                      個別Word出力
+                      Word出力
                     </Button>
                   </div>
                 )}

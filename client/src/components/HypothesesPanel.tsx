@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { Lightbulb, ChevronDown, ChevronUp, Trash2, LayoutGrid, Table, Download } from "lucide-react";
+import { Lightbulb, ChevronDown, ChevronUp, Trash2, LayoutGrid, Table, Download, FileText } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -34,6 +34,7 @@ interface HypothesesPanelProps {
   hypotheses: Hypothesis[];
   resources: Resource[];
   onDelete: (id: number) => void;
+  onDownloadWord?: (runId: number, hypothesisIndex: number) => void;
 }
 
 type ViewMode = "card" | "table";
@@ -51,7 +52,7 @@ function getDisplayValue(data: FullDataRow, keys: string[]): string {
   return "";
 }
 
-export function HypothesesPanel({ hypotheses, resources, onDelete }: HypothesesPanelProps) {
+export function HypothesesPanel({ hypotheses, resources, onDelete, onDownloadWord }: HypothesesPanelProps) {
   const [isOpen, setIsOpen] = useState(true);
   const [viewMode, setViewMode] = useState<ViewMode>("card");
   const [selectedHypothesis, setSelectedHypothesis] = useState<Hypothesis | null>(null);
@@ -373,7 +374,18 @@ export function HypothesesPanel({ hypotheses, resources, onDelete }: HypothesesP
             </ScrollArea>
           )}
 
-          <DialogFooter>
+          <DialogFooter className="gap-2 sm:gap-2">
+            {selectedHypothesis?.runId && onDownloadWord && (
+              <Button
+                variant="outline"
+                className="gap-2"
+                onClick={() => onDownloadWord(selectedHypothesis.runId!, selectedHypothesis.hypothesisNumber - 1)}
+                data-testid="button-download-hypothesis-word"
+              >
+                <FileText className="h-4 w-4" />
+                Word出力
+              </Button>
+            )}
             <Button variant="outline" onClick={() => setDetailsOpen(false)}>
               閉じる
             </Button>

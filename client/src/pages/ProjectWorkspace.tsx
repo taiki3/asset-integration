@@ -689,6 +689,7 @@ export default function ProjectWorkspace({ projectId }: ProjectWorkspaceProps) {
             hypotheses={hypotheses}
             resources={resources}
             onDelete={handleDeleteHypothesis}
+            onDownloadWord={handleDownloadIndividualReport}
           />
         </div>
       </main>
