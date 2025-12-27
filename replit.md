@@ -54,6 +54,7 @@ Key implementation details:
 - Individual outputs stored in jsonb arrays: `step2_2IndividualOutputs`, `step3IndividualOutputs`, `step4IndividualOutputs`, `step5IndividualOutputs`
 - Final TSV is built by aggregating all individual Step 5 outputs with a header row
 - 429エラー検出: レート制限エラーが発生した場合、明確なエラーメッセージを表示
+- **Hypothesis Numbering**: Uses 1-based array index (`i + 1`) for consistent hypothesis numbering throughout all steps, not the `number` field from extracted hypotheses (which may be incorrect from AI extraction)
 
 ### Per-Hypothesis Prompts
 - `STEP3_INDIVIDUAL_PROMPT`: Scientific evaluation for single hypothesis

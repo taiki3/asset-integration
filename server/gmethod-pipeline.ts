@@ -1112,8 +1112,9 @@ async function executeDeepResearchStep2(context: PipelineContext, runId: number)
     console.log(`[Run ${runId}] Extracted ${extractedHypotheses.length} hypotheses for parallel Step 2-2 processing`);
 
     // Initialize parallel items for UI visualization
-    await initializeParallelItems(runId, extractedHypotheses.map(h => ({ 
-      number: h.number, 
+    // Use 1-based index for consistent numbering
+    await initializeParallelItems(runId, extractedHypotheses.map((h, i) => ({ 
+      number: i + 1, 
       title: h.title 
     })));
 
@@ -1160,8 +1161,9 @@ async function executeDeepResearchStep2(context: PipelineContext, runId: number)
     const phase3StartTime = Date.now();
     
     // Reset parallel items for Phase 3 visualization
-    await initializeParallelItems(runId, step2_2Results.map(r => ({ 
-      number: r.hypothesisNumber, 
+    // Use 1-based index for consistent numbering
+    await initializeParallelItems(runId, step2_2Results.map((r, i) => ({ 
+      number: i + 1, 
       title: r.hypothesisTitle 
     })));
     
@@ -1175,13 +1177,16 @@ async function executeDeepResearchStep2(context: PipelineContext, runId: number)
     });
     
     // Run Steps 3→4→5 in PARALLEL for all hypotheses
+    // IMPORTANT: Use 1-based index (i + 1) as hypothesisNumber to ensure correct numbering
+    // regardless of what hypothesisNumber is stored in step2_2Result
     const steps3to5Promises = step2_2Results.map((step2_2Result, i) => {
-      const hypothesisNumber = step2_2Result.hypothesisNumber;
+      const hypothesisNumber = i + 1; // Use 1-based index for consistent numbering
       const hypothesisTitle = step2_2Result.hypothesisTitle;
       const step2_2OutputForThisHypothesis = step2_2Result.step2_2Output;
       
       console.log(`[Run ${runId}] Starting parallel Steps 3-5 for hypothesis ${hypothesisNumber}: ${hypothesisTitle}`);
       console.log(`[Run ${runId}] DEBUG: Step 2-2 output length: ${step2_2OutputForThisHypothesis.length} chars`);
+      console.log(`[Run ${runId}] DEBUG: Original step2_2Result.hypothesisNumber was: ${step2_2Result.hypothesisNumber}`);
       
       return processSteps3to5ForHypothesisWithProgress(
         client,
@@ -1833,8 +1838,8 @@ async function executeStep2_2ForHypothesisWithProgress(
   runId: number,
   startTime: number
 ): Promise<{ hypothesisNumber: number; hypothesisTitle: string; step2_2Output: string; durationMs: number }> {
-  // Mark as running
-  await updateParallelItemStatus(runId, hypothesis.number, {
+  // Mark as running - use hypothesisNumber parameter for consistent numbering
+  await updateParallelItemStatus(runId, hypothesisNumber, {
     status: "running",
     currentStep: "Step 2-2",
     startTime: Date.now(),
@@ -1852,7 +1857,7 @@ async function executeStep2_2ForHypothesisWithProgress(
     );
     
     // Mark as completed
-    await updateParallelItemStatus(runId, hypothesis.number, {
+    await updateParallelItemStatus(runId, hypothesisNumber, {
       status: "completed",
       endTime: Date.now(),
     });
@@ -1860,7 +1865,7 @@ async function executeStep2_2ForHypothesisWithProgress(
     return result;
   } catch (error) {
     // Mark as error
-    await updateParallelItemStatus(runId, hypothesis.number, {
+    await updateParallelItemStatus(runId, hypothesisNumber, {
       status: "error",
       endTime: Date.now(),
     });
