@@ -484,7 +484,7 @@ export function HypothesesPanel({ hypotheses, resources, onDelete, onDownloadWor
                       <span className="ml-2 text-sm text-muted-foreground">読み込み中...</span>
                     </div>
                   ) : reportContent ? (
-                    <div className="prose prose-sm dark:prose-invert max-w-none pr-4">
+                    <div className="prose prose-sm dark:prose-invert max-w-none pr-4 overflow-x-auto break-words [&_pre]:overflow-x-auto [&_table]:overflow-x-auto [&_code]:break-all">
                       <ReactMarkdown remarkPlugins={[remarkGfm]}>
                         {reportContent}
                       </ReactMarkdown>
