@@ -304,13 +304,13 @@ export function HypothesesPanel({ hypotheses, resources, projectId, onDelete, on
   );
 
   const TableView = () => (
-    <div className="w-full overflow-x-auto border rounded-md">
-      <TableComponent>
+    <div className="border rounded-md">
+      <TableComponent className="w-max min-w-full">
         <TableHeader>
           <TableRow>
             <TableHead className="w-[50px] whitespace-nowrap">No.</TableHead>
             {displayColumns.map((col) => (
-              <TableHead key={col} className="min-w-[100px] whitespace-nowrap">
+              <TableHead key={col} className="min-w-[150px] whitespace-nowrap">
                 {col}
               </TableHead>
             ))}
@@ -327,13 +327,13 @@ export function HypothesesPanel({ hypotheses, resources, projectId, onDelete, on
                 onClick={() => handleHypothesisClick(hypothesis)}
                 data-testid={`hypothesis-row-${hypothesis.id}`}
               >
-                <TableCell className="font-mono text-xs">{hypothesis.hypothesisNumber}</TableCell>
+                <TableCell className="font-mono text-xs whitespace-nowrap">{hypothesis.hypothesisNumber}</TableCell>
                 {displayColumns.map((col) => (
-                  <TableCell key={col} className="text-xs">
+                  <TableCell key={col} className="text-xs max-w-[300px]">
                     <span className="line-clamp-2">{String(data[col] ?? "-")}</span>
                   </TableCell>
                 ))}
-                <TableCell>
+                <TableCell className="whitespace-nowrap">
                   <Button
                     size="icon"
                     variant="ghost"
