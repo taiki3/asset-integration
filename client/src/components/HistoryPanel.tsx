@@ -665,8 +665,8 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, 
                                     仮説別タイミング詳細
                                   </summary>
                                   <div className="mt-2 space-y-1 pl-2 border-l-2 border-muted">
-                                    {executionTiming.hypotheses.map((h) => (
-                                      <div key={h.hypothesisNumber} className="flex gap-2 text-muted-foreground flex-wrap" data-testid={`timing-hypothesis-${h.hypothesisNumber}`}>
+                                    {executionTiming.hypotheses.map((h, idx) => (
+                                      <div key={`timing-${idx}-${h.hypothesisNumber}`} className="flex gap-2 text-muted-foreground flex-wrap" data-testid={`timing-hypothesis-${h.hypothesisNumber}`}>
                                         <span className="font-medium min-w-[60px]">H{h.hypothesisNumber}:</span>
                                         <span className="truncate max-w-[150px]" title={h.hypothesisTitle}>{h.hypothesisTitle}</span>
                                         <span className="text-nowrap">S2-2:{formatDuration(h.step2_2Ms)}</span>

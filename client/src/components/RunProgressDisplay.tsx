@@ -276,9 +276,9 @@ export function RunProgressDisplay({
               並列処理状況 ({progressInfo.parallelItems.filter(i => i.status === "completed").length}/{progressInfo.parallelItems.length} 完了)
             </div>
             <div className="flex flex-wrap gap-2">
-              {progressInfo.parallelItems.map((item) => (
+              {progressInfo.parallelItems.map((item, idx) => (
                 <div
-                  key={item.hypothesisNumber}
+                  key={`parallel-${idx}-${item.hypothesisNumber}`}
                   className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-xs border ${
                     item.status === "running" 
                       ? "bg-blue-500/10 border-blue-500/30 text-blue-700 dark:text-blue-300" 

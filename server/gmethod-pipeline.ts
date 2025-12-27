@@ -738,6 +738,35 @@ async function initializeParallelItems(
   await updateProgress(runId, { parallelItems });
 }
 
+// Helper to append individual outputs (for multi-loop runs)
+async function appendIndividualOutputs(
+  runId: number,
+  newOutputs: {
+    step2_2IndividualOutputs?: string[];
+    step3IndividualOutputs?: string[];
+    step4IndividualOutputs?: string[];
+    step5IndividualOutputs?: string[];
+  }
+): Promise<{
+  step2_2IndividualOutputs: string[];
+  step3IndividualOutputs: string[];
+  step4IndividualOutputs: string[];
+  step5IndividualOutputs: string[];
+}> {
+  const run = await storage.getRun(runId);
+  const existing2_2 = (run?.step2_2IndividualOutputs as string[] | null) || [];
+  const existing3 = (run?.step3IndividualOutputs as string[] | null) || [];
+  const existing4 = (run?.step4IndividualOutputs as string[] | null) || [];
+  const existing5 = (run?.step5IndividualOutputs as string[] | null) || [];
+  
+  return {
+    step2_2IndividualOutputs: [...existing2_2, ...(newOutputs.step2_2IndividualOutputs || [])],
+    step3IndividualOutputs: [...existing3, ...(newOutputs.step3IndividualOutputs || [])],
+    step4IndividualOutputs: [...existing4, ...(newOutputs.step4IndividualOutputs || [])],
+    step5IndividualOutputs: [...existing5, ...(newOutputs.step5IndividualOutputs || [])],
+  };
+}
+
 // Extended DeepResearchResult to include 2-phase outputs
 interface TwoPhaseDeepResearchResult extends DeepResearchResult {
   step2_1Output: string;
@@ -1287,15 +1316,23 @@ async function executeDeepResearchStep2(context: PipelineContext, runId: number)
     const aggregatedStep5Output = aggregateStep5Outputs(allResults.map(r => r.step5Output));
 
     // Save all outputs to database (both individual and aggregated for backward compatibility)
+    // For multi-loop runs, append to existing individual outputs instead of overwriting
+    const appendedOutputs = await appendIndividualOutputs(runId, {
+      step2_2IndividualOutputs,
+      step3IndividualOutputs,
+      step4IndividualOutputs,
+      step5IndividualOutputs,
+    });
+    
     await storage.updateRun(runId, { 
       step2_2Output,
-      step2_2IndividualOutputs,
+      step2_2IndividualOutputs: appendedOutputs.step2_2IndividualOutputs,
       step3Output: aggregatedStep3Output,
-      step3IndividualOutputs,
+      step3IndividualOutputs: appendedOutputs.step3IndividualOutputs,
       step4Output: aggregatedStep4Output,
-      step4IndividualOutputs,
+      step4IndividualOutputs: appendedOutputs.step4IndividualOutputs,
       step5Output: aggregatedStep5Output,
-      step5IndividualOutputs,
+      step5IndividualOutputs: appendedOutputs.step5IndividualOutputs,
     });
 
     // Create combined report for display (Step 2-1 + Step 2-2 individual reports)
@@ -2403,17 +2440,17 @@ export async function executeGMethodPipeline(
         if (!deepResearchResult.validationResult.isValid) {
           const warningMessage = `品質検証警告: ${deepResearchResult.validationResult.errors.slice(0, 3).join("; ")}`;
           console.warn(`[Run ${runId}] ${warningMessage}`);
+          // Note: step2_2IndividualOutputs already saved with appending in executeStep2FullPipeline
           await storage.updateRun(runId, { 
             step2Output: context.step2Output, 
-            step2_2IndividualOutputs: deepResearchResult.step2_2IndividualOutputs,
             currentStep: 5,
             validationMetadata,
             errorMessage: warningMessage,
           });
         } else {
+          // Note: step2_2IndividualOutputs already saved with appending in executeStep2FullPipeline
           await storage.updateRun(runId, { 
             step2Output: context.step2Output, 
-            step2_2IndividualOutputs: deepResearchResult.step2_2IndividualOutputs,
             currentStep: 5,
             validationMetadata,
           });
