@@ -32,6 +32,7 @@ A web application for automating the "G-Method" business hypothesis generation p
   - Job naming: `jobName` (default YYYYMMDDHHMM format), `loopIndex` for multi-loop batches
   - Loop tracking: `loopCount`, `currentLoop`, `totalLoops` for multi-loop execution
   - Individual reports: `step2_2IndividualOutputs` (jsonb array) stores each STEP2-2 hypothesis report separately for individual download
+  - Execution timing: `executionTiming` (jsonb) tracks per-hypothesis and overall timing data
 
 ## G-Method Pipeline
 The pipeline uses a fully parallel architecture: Step 2-2 runs in parallel for all hypotheses, then Steps 3→4→5 also run in parallel for all hypotheses.
