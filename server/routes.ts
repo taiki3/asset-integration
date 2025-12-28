@@ -1018,7 +1018,15 @@ export async function registerRoutes(
         });
       }
       
-      const docBuffer = await convertMarkdownToWord(report, `仮説${hypothesisIndex + 1} 個別レポート - Run #${id}`);
+      // Get the proper title for this hypothesis
+      const individualTitles = run.step2_2IndividualTitles as string[] | null;
+      const title = (individualTitles && individualTitles[hypothesisIndex]) 
+        ? individualTitles[hypothesisIndex]
+        : `仮説${hypothesisIndex + 1}`;
+      
+      console.log(`Generating individual Word report: run=${id}, index=${hypothesisIndex}, title="${title.slice(0, 50)}..."`);
+      
+      const docBuffer = await convertMarkdownToWord(report, title);
       
       res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
       res.setHeader("Content-Disposition", `attachment; filename="hypothesis-${hypothesisIndex + 1}-report-run${id}.docx"`);
@@ -1162,19 +1170,21 @@ export async function registerRoutes(
       let reportCount = 0;
       
       // Generate Word documents for each hypothesis
+      // Use a sequential loop with proper index matching
       for (const hypothesis of hypotheses) {
         if (!hypothesis.runId) continue;
         
         const runData = runReports.get(hypothesis.runId);
         if (!runData) continue;
         
-        // Calculate the index of this hypothesis within its run
-        const sameRunHypotheses = hypotheses
-          .filter(h => h.runId === hypothesis.runId)
-          .sort((a, b) => a.hypothesisNumber - b.hypothesisNumber);
-        const indexInRun = sameRunHypotheses.findIndex(h => h.id === hypothesis.id);
+        // Use hypothesisNumber directly as the index (1-based to 0-based conversion)
+        // This is the correct mapping since hypothesisNumber corresponds to the array position
+        const indexInRun = hypothesis.hypothesisNumber - 1;
         
-        if (indexInRun < 0 || indexInRun >= runData.outputs.length) continue;
+        if (indexInRun < 0 || indexInRun >= runData.outputs.length) {
+          console.warn(`Hypothesis ${hypothesis.id} has invalid index ${indexInRun} for run ${hypothesis.runId} with ${runData.outputs.length} outputs`);
+          continue;
+        }
         
         const report = runData.outputs[indexInRun];
         
@@ -1184,10 +1194,15 @@ export async function registerRoutes(
           continue;
         }
         
+        // Use hypothesis's displayTitle as the primary source, with fallback to stored title
         const title = hypothesis.displayTitle || runData.titles[indexInRun] || `仮説${hypothesis.hypothesisNumber}`;
         const filename = `${String(hypothesis.hypothesisNumber).padStart(3, "0")}_${sanitizeFilename(title)}.docx`;
         
+        // Log for debugging
+        console.log(`Generating Word for hypothesis ${hypothesis.id}: number=${hypothesis.hypothesisNumber}, index=${indexInRun}, title="${title.slice(0, 50)}..."`);
+        
         try {
+          // Await the buffer generation BEFORE appending to archive to ensure correct content
           const docBuffer = await convertMarkdownToWord(report, title);
           archive.append(docBuffer, { name: filename });
           reportCount++;
