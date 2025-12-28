@@ -1125,6 +1125,7 @@ export async function registerRoutes(
       }
       
       // Group hypotheses by runId to fetch reports efficiently
+      // Sort each group by hypothesisNumber to determine index within run
       const hypothesesByRun = new Map<number, typeof hypotheses>();
       for (const h of hypotheses) {
         if (h.runId) {
@@ -1132,6 +1133,15 @@ export async function registerRoutes(
             hypothesesByRun.set(h.runId, []);
           }
           hypothesesByRun.get(h.runId)!.push(h);
+        }
+      }
+      
+      // Sort hypotheses within each run by hypothesisNumber and calculate min for each run
+      const runMinHypothesisNumber = new Map<number, number>();
+      for (const [runId, runHypotheses] of hypothesesByRun.entries()) {
+        runHypotheses.sort((a, b) => a.hypothesisNumber - b.hypothesisNumber);
+        if (runHypotheses.length > 0) {
+          runMinHypothesisNumber.set(runId, runHypotheses[0].hypothesisNumber);
         }
       }
       
@@ -1189,12 +1199,14 @@ export async function registerRoutes(
             continue;
           }
           
-          // Use hypothesisNumber directly as the index (1-based to 0-based conversion)
-          // This is the correct mapping since hypothesisNumber corresponds to the array position
-          const indexInRun = (hypothesis.hypothesisNumber || 1) - 1;
+          // Calculate index within run by subtracting the minimum hypothesisNumber for this run
+          // This correctly maps hypothesisNumber to the 0-based array index in step2_2IndividualOutputs
+          // e.g., Run 2 with hypotheses 6,7,8,9,10 → indices 0,1,2,3,4
+          const minHypothesisNumber = runMinHypothesisNumber.get(hypothesis.runId) || hypothesis.hypothesisNumber;
+          const indexInRun = hypothesis.hypothesisNumber - minHypothesisNumber;
           
           if (indexInRun < 0 || indexInRun >= runData.outputs.length) {
-            console.warn(`Hypothesis ${hypothesis.id} has invalid index ${indexInRun} for run ${hypothesis.runId} with ${runData.outputs.length} outputs`);
+            console.warn(`Hypothesis ${hypothesis.id} has invalid index ${indexInRun} for run ${hypothesis.runId} with ${runData.outputs.length} outputs (min=${minHypothesisNumber})`);
             continue;
           }
           
