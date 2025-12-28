@@ -409,7 +409,7 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, 
                   実行履歴がありません
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  G-Methodを実行して仮説を生成してください
+                  ASIPを実行して仮説を生成してください
                 </p>
               </div>
             ) : (

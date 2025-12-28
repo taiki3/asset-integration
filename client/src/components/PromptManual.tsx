@@ -253,7 +253,7 @@ const STEP_INFO: Record<string, StepInfo> = {
 
 function generateMarkdown(): string {
   const lines: string[] = [];
-  lines.push("# G-Method プロンプトマニュアル");
+  lines.push("# ASIP プロンプトマニュアル");
   lines.push("");
   lines.push("各ステップで使用可能なプレースホルダー、入力データ、データフローの説明");
   lines.push("");

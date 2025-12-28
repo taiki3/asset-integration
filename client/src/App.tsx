@@ -32,7 +32,7 @@ function LoginPage() {
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl font-medium">G-Method Platform</CardTitle>
+          <CardTitle className="text-2xl font-medium">ASIP</CardTitle>
           <CardDescription>
             ビジネス仮説生成のための自動化プラットフォーム
           </CardDescription>

@@ -74,7 +74,7 @@ export function CreateProjectDialog({ onCreateProject, isPending }: CreateProjec
             <DialogHeader>
               <DialogTitle>新規プロジェクトを作成</DialogTitle>
               <DialogDescription>
-                G-Method仮説生成を管理するための新しいプロジェクトを作成します。
+                ASIP仮説生成を管理するための新しいプロジェクトを作成します。
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">

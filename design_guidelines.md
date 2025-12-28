@@ -1,4 +1,4 @@
-# G-Method Platform Design Guidelines
+# ASIP (AGC Strategic Innovation Playbook) Design Guidelines
 
 ## Design Approach
 **Selected System:** Carbon Design System (IBM)  
@@ -109,7 +109,7 @@ Primary units: `2, 4, 6, 8, 12, 16, 20, 24`
 - Consistent sizing: px-3 py-1 text-sm
 
 ### Buttons
-**Primary:** Filled background for main actions ("Create Project", "Run G-Method")  
+**Primary:** Filled background for main actions ("Create Project", "Run ASIP")  
 **Secondary:** Outlined for secondary actions ("Cancel", "View Details")  
 **Ghost:** Text-only for tertiary actions (table row actions)  
 **Icon buttons:** For compact actions (download, delete, preview)

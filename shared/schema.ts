@@ -28,7 +28,7 @@ export const resources = pgTable("resources", {
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 
-// Hypothesis Runs - G-Method execution history
+// Hypothesis Runs - ASIP execution history
 export const hypothesisRuns = pgTable("hypothesis_runs", {
   id: serial("id").primaryKey(),
   projectId: integer("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
@@ -43,7 +43,7 @@ export const hypothesisRuns = pgTable("hypothesis_runs", {
   reprocessCustomPrompt: text("reprocess_custom_prompt"), // Custom prompt for document splitting
   reprocessModelChoice: text("reprocess_model_choice"), // 'pro' or 'flash' for reprocessing
   status: text("status").notNull().default("pending"), // 'pending', 'running', 'completed', 'error'
-  currentStep: integer("current_step").default(0), // 0-5 (0=not started, 2-5 = G-Method steps)
+  currentStep: integer("current_step").default(0), // 0-5 (0=not started, 2-5 = ASIP steps)
   currentLoop: integer("current_loop").default(0), // Current loop iteration (1-based)
   totalLoops: integer("total_loops").default(1), // Total loops to run
   step2_1Output: text("step2_1_output"), // Step 2-1: Divergent selection phase

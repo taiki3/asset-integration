@@ -19,7 +19,7 @@ export function Header({ project }: HeaderProps) {
         <nav className="flex items-center gap-2 text-sm">
           <Link href="/" className="flex items-center gap-2 font-medium text-foreground hover-elevate active-elevate-2 px-2 py-1 rounded-md" data-testid="link-dashboard">
             <FolderOpen className="h-4 w-4" />
-            <span>G-Methodプラットフォーム</span>
+            <span>ASIP</span>
           </Link>
           {project && (
             <>

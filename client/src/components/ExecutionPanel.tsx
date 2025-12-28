@@ -485,7 +485,7 @@ export function ExecutionPanel({
           <div className="flex items-center justify-between gap-4">
             <CardTitle className="text-lg font-medium flex items-center gap-2">
               <Play className="h-5 w-5" />
-              {reprocessMode ? "再処理モード" : "G-Methodを実行"}
+              {reprocessMode ? "再処理モード" : "ASIPを実行"}
             </CardTitle>
             <div className="flex items-center gap-2">
               <Label htmlFor="reprocess-toggle" className="text-xs text-muted-foreground cursor-pointer">
@@ -909,7 +909,7 @@ export function ExecutionPanel({
               ) : (
                 <>
                   <Play className="h-5 w-5" />
-                  G-Methodを実行
+                  ASIPを実行
                 </>
               )}
             </Button>

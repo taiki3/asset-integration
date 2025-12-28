@@ -514,7 +514,7 @@ export function HypothesesPanel({ hypotheses, resources, projectId, onDelete, on
                   まだ仮説が生成されていません
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  G-Methodを実行すると、生成された仮説がここに表示されます
+                  ASIPを実行すると、生成された仮説がここに表示されます
                 </p>
                 <Button
                   variant="outline"

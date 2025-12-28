@@ -49,7 +49,7 @@ export default function Dashboard() {
               プロジェクト
             </h1>
             <p className="text-muted-foreground mt-1">
-              G-Method仮説生成プロジェクトを管理
+              ASIP仮説生成プロジェクトを管理
             </p>
           </div>
           <CreateProjectDialog
@@ -78,7 +78,7 @@ export default function Dashboard() {
             </div>
             <h2 className="text-xl font-medium mb-2">プロジェクトがありません</h2>
             <p className="text-muted-foreground mb-6 max-w-sm">
-              最初のプロジェクトを作成して、G-Methodでビジネス仮説の生成を始めましょう
+              最初のプロジェクトを作成して、ASIPでビジネス仮説の生成を始めましょう
             </p>
             <CreateProjectDialog
               onCreateProject={handleCreateProject}

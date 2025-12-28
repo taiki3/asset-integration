@@ -1,4 +1,4 @@
-// G-Method prompts for each step
+// ASIP prompts for each step
 
 export const STEP2_PROMPT = `【マスタープロンプト】新規素材ビジネス戦略仮説の構築
 

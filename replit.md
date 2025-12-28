@@ -1,7 +1,7 @@
-# G-Method Platform
+# ASIP (AGC Strategic Innovation Playbook)
 
 ## Overview
-A web application for automating the "G-Method" business hypothesis generation process. Users can create projects, register input resources (target specifications and technical assets), and run a multi-step AI pipeline to generate and evaluate business hypotheses.
+A web application for automating the "ASIP" business hypothesis generation process. Users can create projects, register input resources (target specifications and technical assets), and run a multi-step AI pipeline to generate and evaluate business hypotheses.
 
 ## Project Architecture
 
@@ -27,14 +27,14 @@ A web application for automating the "G-Method" business hypothesis generation p
 - **hypotheses**: Generated hypothesis storage
   - Soft delete: Uses `deletedAt` timestamp for logical deletion
   - Deleted hypotheses are excluded from display and dedup checks during new generation
-- **hypothesis_runs**: G-Method execution history
+- **hypothesis_runs**: ASIP execution history
   - Core fields: id, projectId, targetSpecId, technicalAssetsId, status, step outputs, integratedList
   - Job naming: `jobName` (default YYYYMMDDHHMM format), `loopIndex` for multi-loop batches
   - Loop tracking: `loopCount`, `currentLoop`, `totalLoops` for multi-loop execution
   - Individual reports: `step2_2IndividualOutputs` (jsonb array) stores each STEP2-2 hypothesis report separately for individual download
   - Execution timing: `executionTiming` (jsonb) tracks per-hypothesis and overall timing data
 
-## G-Method Pipeline
+## ASIP Pipeline
 The pipeline uses a fully parallel architecture: Step 2-2 runs in parallel for all hypotheses, then Steps 3→4→5 also run in parallel for all hypotheses.
 
 ### Pipeline Architecture (Fully Parallel Processing)
@@ -123,7 +123,7 @@ npm run db:push    # Push database schema changes
 - `shared/schema.ts` - Database schema and TypeScript types
 - `server/routes.ts` - API route definitions
 - `server/storage.ts` - Database operations
-- `server/gmethod-pipeline.ts` - G-Method AI pipeline execution
+- `server/gmethod-pipeline.ts` - ASIP AI pipeline execution
 - `server/prompts.ts` - Gemini prompts for each step
 - `client/src/pages/Dashboard.tsx` - Main dashboard
 - `client/src/pages/ProjectWorkspace.tsx` - Project workspace

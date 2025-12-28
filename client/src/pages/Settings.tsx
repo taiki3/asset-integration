@@ -204,7 +204,7 @@ export default function Settings() {
       const prompts: ExportedPrompt[] = await res.json();
       
       const lines: string[] = [];
-      lines.push("# G-Method カスタムプロンプト一覧");
+      lines.push("# ASIP カスタムプロンプト一覧");
       lines.push("");
       lines.push(`エクスポート日時: ${format(new Date(), "yyyy/MM/dd HH:mm:ss")}`);
       lines.push("");
@@ -233,7 +233,7 @@ export default function Settings() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `gmethod-prompts-${format(new Date(), "yyyyMMdd-HHmmss")}.md`;
+      a.download = `asip-prompts-${format(new Date(), "yyyyMMdd-HHmmss")}.md`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -271,7 +271,7 @@ export default function Settings() {
                 設定
               </h1>
               <p className="text-muted-foreground mt-1">
-                G-Methodパイプラインのプロンプトを管理
+                ASIPパイプラインのプロンプトを管理
               </p>
             </div>
           </div>

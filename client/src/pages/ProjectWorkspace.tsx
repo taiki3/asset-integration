@@ -183,7 +183,7 @@ export default function ProjectWorkspace({ projectId }: ProjectWorkspaceProps) {
       queryClient.invalidateQueries({ queryKey: ["/api/projects", id, "hypotheses"] });
       toast({
         title: "実行を開始しました",
-        description: "G-Methodパイプラインの処理を開始しました。",
+        description: "ASIPパイプラインの処理を開始しました。",
       });
     },
     onError: () => {
