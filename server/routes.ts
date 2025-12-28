@@ -1172,42 +1172,63 @@ export async function registerRoutes(
       // Generate Word documents for each hypothesis
       // Use a sequential loop with proper index matching
       for (const hypothesis of hypotheses) {
-        if (!hypothesis.runId) continue;
-        
-        const runData = runReports.get(hypothesis.runId);
-        if (!runData) continue;
-        
-        // Use hypothesisNumber directly as the index (1-based to 0-based conversion)
-        // This is the correct mapping since hypothesisNumber corresponds to the array position
-        const indexInRun = hypothesis.hypothesisNumber - 1;
-        
-        if (indexInRun < 0 || indexInRun >= runData.outputs.length) {
-          console.warn(`Hypothesis ${hypothesis.id} has invalid index ${indexInRun} for run ${hypothesis.runId} with ${runData.outputs.length} outputs`);
-          continue;
-        }
-        
-        const report = runData.outputs[indexInRun];
-        
-        // Skip error reports
-        if (report.includes("Deep Researchの実行に失敗しました") || 
-            report.includes("APIの起動に失敗しました")) {
-          continue;
-        }
-        
-        // Use hypothesis's displayTitle as the primary source, with fallback to stored title
-        const title = hypothesis.displayTitle || runData.titles[indexInRun] || `仮説${hypothesis.hypothesisNumber}`;
-        const filename = `${String(hypothesis.hypothesisNumber).padStart(3, "0")}_${sanitizeFilename(title)}.docx`;
-        
-        // Log for debugging
-        console.log(`Generating Word for hypothesis ${hypothesis.id}: number=${hypothesis.hypothesisNumber}, index=${indexInRun}, title="${title.slice(0, 50)}..."`);
-        
         try {
+          if (!hypothesis.runId) {
+            console.log(`Skipping hypothesis ${hypothesis.id}: no runId`);
+            continue;
+          }
+          
+          const runData = runReports.get(hypothesis.runId);
+          if (!runData) {
+            console.log(`Skipping hypothesis ${hypothesis.id}: no runData for run ${hypothesis.runId}`);
+            continue;
+          }
+          
+          if (!runData.outputs || !Array.isArray(runData.outputs) || runData.outputs.length === 0) {
+            console.log(`Skipping hypothesis ${hypothesis.id}: empty outputs for run ${hypothesis.runId}`);
+            continue;
+          }
+          
+          // Use hypothesisNumber directly as the index (1-based to 0-based conversion)
+          // This is the correct mapping since hypothesisNumber corresponds to the array position
+          const indexInRun = (hypothesis.hypothesisNumber || 1) - 1;
+          
+          if (indexInRun < 0 || indexInRun >= runData.outputs.length) {
+            console.warn(`Hypothesis ${hypothesis.id} has invalid index ${indexInRun} for run ${hypothesis.runId} with ${runData.outputs.length} outputs`);
+            continue;
+          }
+          
+          const report = runData.outputs[indexInRun];
+          
+          // Skip error reports or null/undefined reports
+          if (!report || typeof report !== 'string') {
+            console.log(`Skipping hypothesis ${hypothesis.id}: invalid report content`);
+            continue;
+          }
+          
+          if (report.includes("Deep Researchの実行に失敗しました") || 
+              report.includes("APIの起動に失敗しました")) {
+            continue;
+          }
+          
+          // Use hypothesis's displayTitle as the primary source, with fallback to stored title
+          // Ensure title is never null/undefined
+          const rawTitle = hypothesis.displayTitle || 
+                          (runData.titles && runData.titles[indexInRun]) || 
+                          `仮説${hypothesis.hypothesisNumber || 1}`;
+          const safeTitle = String(rawTitle || `仮説${hypothesis.hypothesisNumber || 1}`).slice(0, 100);
+          const filename = `${String(hypothesis.hypothesisNumber || 1).padStart(3, "0")}_${sanitizeFilename(safeTitle)}.docx`;
+          
+          // Log for debugging
+          console.log(`Generating Word for hypothesis ${hypothesis.id}: number=${hypothesis.hypothesisNumber}, index=${indexInRun}, title="${safeTitle.slice(0, 50)}..."`);
+          
           // Await the buffer generation BEFORE appending to archive to ensure correct content
-          const docBuffer = await convertMarkdownToWord(report, title);
+          const docBuffer = await convertMarkdownToWord(report, safeTitle);
           archive.append(docBuffer, { name: filename });
           reportCount++;
         } catch (docError) {
-          console.error(`Error generating Word for hypothesis ${hypothesis.hypothesisNumber}:`, docError);
+          console.error(`Error generating Word for hypothesis ${hypothesis.id}:`, docError);
+          // Continue to next hypothesis instead of failing entirely
         }
       }
       
@@ -1219,7 +1240,10 @@ export async function registerRoutes(
       await archive.finalize();
     } catch (error) {
       console.error("Error downloading all reports:", error);
-      res.status(500).json({ error: "Failed to download reports" });
+      // Don't send JSON if headers already sent (archive started streaming)
+      if (!res.headersSent) {
+        res.status(500).json({ error: "Failed to download reports" });
+      }
     }
   });
 
