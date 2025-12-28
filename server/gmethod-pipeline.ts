@@ -2244,6 +2244,7 @@ function extractHypothesesFromTSV(
       targetSpecId: targetSpecId ?? null,
       technicalAssetsId: technicalAssetsId ?? null,
       hypothesisNumber,
+      indexInRun: index, // 0-based index within this run's outputs
       displayTitle,
       contentHash,
       fullData: row,
@@ -2798,6 +2799,7 @@ export async function executeReprocessPipeline(runId: number): Promise<void> {
           targetSpecId: run.targetSpecId,  // Use the same as technicalAssetsId (placeholder for reprocess)
           technicalAssetsId: run.technicalAssetsId,
           hypothesisNumber: nextHypothesisNumber + i,
+          indexInRun: i, // 0-based index within this run's outputs
           displayTitle,
           contentHash,
           fullData,

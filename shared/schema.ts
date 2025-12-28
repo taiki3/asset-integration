@@ -95,6 +95,7 @@ export const hypotheses = pgTable("hypotheses", {
   targetSpecId: integer("target_spec_id").references(() => resources.id, { onDelete: "set null" }),
   technicalAssetsId: integer("technical_assets_id").references(() => resources.id, { onDelete: "set null" }),
   hypothesisNumber: integer("hypothesis_number").notNull(),
+  indexInRun: integer("index_in_run"), // 0-based index within run's step2_2IndividualOutputs array
   displayTitle: text("display_title"), // First text column from TSV for display/dedup (auto-extracted)
   contentHash: text("content_hash"), // Hash of fullData for efficient deduplication
   fullData: jsonb("full_data").notNull(), // Complete row data from Step5 - all columns stored here

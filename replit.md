@@ -27,6 +27,7 @@ A web application for automating the "ASIP" business hypothesis generation proce
 - **hypotheses**: Generated hypothesis storage
   - Soft delete: Uses `deletedAt` timestamp for logical deletion
   - Deleted hypotheses are excluded from display and dedup checks during new generation
+  - `indexInRun`: 0-based index within the run's `step2_2IndividualOutputs` array (enables correct Word download for hypotheses from any run)
 - **hypothesis_runs**: ASIP execution history
   - Core fields: id, projectId, targetSpecId, technicalAssetsId, status, step outputs, integratedList
   - Job naming: `jobName` (default YYYYMMDDHHMM format), `loopIndex` for multi-loop batches
