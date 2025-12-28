@@ -1138,8 +1138,8 @@ export async function registerRoutes(
       
       // Sort hypotheses within each run by hypothesisNumber and calculate min for each run
       const runMinHypothesisNumber = new Map<number, number>();
-      for (const [runId, runHypotheses] of hypothesesByRun.entries()) {
-        runHypotheses.sort((a, b) => a.hypothesisNumber - b.hypothesisNumber);
+      for (const [runId, runHypotheses] of Array.from(hypothesesByRun.entries())) {
+        runHypotheses.sort((a: typeof hypotheses[0], b: typeof hypotheses[0]) => a.hypothesisNumber - b.hypothesisNumber);
         if (runHypotheses.length > 0) {
           runMinHypothesisNumber.set(runId, runHypotheses[0].hypothesisNumber);
         }
@@ -1213,13 +1213,24 @@ export async function registerRoutes(
           const report = runData.outputs[indexInRun];
           
           // Skip error reports or null/undefined reports
-          if (!report || typeof report !== 'string') {
-            console.log(`Skipping hypothesis ${hypothesis.id}: invalid report content`);
+          if (!report || typeof report !== 'string' || report.trim().length === 0) {
+            console.log(`Skipping hypothesis ${hypothesis.id}: invalid or empty report content`);
             continue;
           }
           
-          if (report.includes("Deep Researchの実行に失敗しました") || 
-              report.includes("APIの起動に失敗しました")) {
+          // Skip reports that contain error messages (various patterns)
+          const errorPatterns = [
+            "Deep Researchの実行に失敗しました",
+            "APIの起動に失敗しました",
+            "エラーが発生しました",
+            "レポート生成に失敗",
+            "429 Resource has been exhausted",
+            "RATE_LIMIT_EXCEEDED",
+            "レート制限"
+          ];
+          
+          if (errorPatterns.some(pattern => report.includes(pattern))) {
+            console.log(`Skipping hypothesis ${hypothesis.id}: report contains error message`);
             continue;
           }
           
