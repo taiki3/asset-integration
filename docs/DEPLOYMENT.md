@@ -110,8 +110,25 @@ main push → production環境 → Prod Supabase にマイグレーション
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | 公開キー |
 | `SUPABASE_SERVICE_ROLE_KEY` | サービスキー（秘密） |
-| `DATABASE_URL` | PostgreSQL接続文字列 |
+| `DATABASE_URL` | PostgreSQL接続文字列（下記参照） |
 | `GOOGLE_GENAI_API_KEY` | Gemini API キー |
+
+### 4.3 DATABASE_URL の設定
+
+Supabase Dashboard > Project Settings > Database > Connection string
+
+**Vercel (サーバーレス) では Transaction Pooler を使用:**
+```
+postgresql://postgres.[project-ref]:[password]@aws-0-ap-northeast-1.pooler.supabase.com:6543/postgres?pgbouncer=true
+```
+
+| 接続タイプ | ポート | 用途 |
+|-----------|--------|------|
+| Transaction Pooler | 6543 | Vercel等サーバーレス（推奨） |
+| Session Pooler | 5432 | 長時間接続が必要な場合 |
+| Direct | 5432 | ローカル開発、マイグレーション |
+
+※ Pooler URL は `pooler.supabase.com` を含む
 
 ---
 
