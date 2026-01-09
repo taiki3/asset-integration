@@ -25,13 +25,16 @@ export default async function DashboardPage() {
   // Otherwise use real database even with mock auth
   const useMockDb = process.env.USE_MOCK_DB === 'true';
 
-  const userProjects = useMockDb
-    ? mockProjects.filter(p => p.userId === user.id)
-    : await db
-        .select()
-        .from(projects)
-        .where(and(eq(projects.userId, user.id), isNull(projects.deletedAt)))
-        .orderBy(desc(projects.createdAt));
+  let userProjects;
+  if (useMockDb) {
+    userProjects = mockProjects.filter(p => p.userId === user.id);
+  } else {
+    userProjects = await db
+      .select()
+      .from(projects)
+      .where(and(eq(projects.userId, user.id), isNull(projects.deletedAt)))
+      .orderBy(desc(projects.createdAt));
+  }
 
   return (
     <div className="space-y-8">
