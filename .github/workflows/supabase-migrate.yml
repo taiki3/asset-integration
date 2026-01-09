@@ -8,6 +8,8 @@ on:
     paths:
       - 'supabase/migrations/**'
       - 'supabase/config.toml'
+      - '.github/workflows/supabase-migrate.yml'
+  workflow_dispatch:
   pull_request:
     branches:
       - main
