@@ -1,12 +1,16 @@
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
+import './proxy-setup';
 
-let client: GoogleGenAI | null = null;
+let client: GoogleGenerativeAI | null = null;
 
-export function getGeminiClient(): GoogleGenAI {
+export function getGeminiClient(): GoogleGenerativeAI {
   if (!client) {
-    client = new GoogleGenAI({
-      apiKey: process.env.GEMINI_API_KEY,
-    });
+    const apiKey = process.env.GOOGLE_GENAI_API_KEY;
+    if (!apiKey) {
+      throw new Error('GOOGLE_GENAI_API_KEY is not set');
+    }
+    
+    client = new GoogleGenerativeAI(apiKey);
   }
   return client;
 }

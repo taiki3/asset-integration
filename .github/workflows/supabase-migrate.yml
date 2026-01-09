@@ -1,0 +1,78 @@
+name: Supabase Migrations
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+    paths:
+      - 'supabase/migrations/**'
+      - 'supabase/config.toml'
+  pull_request:
+    branches:
+      - main
+      - dev
+    paths:
+      - 'supabase/migrations/**'
+      - 'supabase/config.toml'
+
+jobs:
+  # PRでマイグレーションを検証
+  validate:
+    name: Validate Migrations
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Verify migration files
+        run: |
+          echo "=== Migration Files ==="
+          ls -la supabase/migrations/
+
+          echo ""
+          echo "=== Checking for destructive operations ==="
+          for file in supabase/migrations/*.sql; do
+            if grep -qE "(DROP TABLE|DROP DATABASE|TRUNCATE)" "$file"; then
+              echo "::warning file=$file::Destructive operation detected"
+            fi
+          done
+
+  # ブランチに応じた環境にマイグレーション
+  migrate:
+    name: Migrate Database
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    environment: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Link to Supabase project
+        run: supabase link --project-ref ${{ secrets.SUPABASE_PROJECT_ID }}
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+      - name: Push migrations
+        run: supabase db push
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+      - name: Summary
+        run: |
+          echo "### Migration Complete" >> $GITHUB_STEP_SUMMARY
+          echo "- **Environment**: ${{ github.ref_name == 'main' && 'production' || 'staging' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Branch**: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY

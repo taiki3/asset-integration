@@ -1,9 +1,13 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "crons": [
-    {
-      "path": "/api/cron/poll-jobs",
-      "schedule": "* * * * *"
+  "framework": "nextjs",
+  "buildCommand": "npm run build",
+  "devCommand": "npm run dev",
+  "installCommand": "npm install",
+  "regions": ["iad1"],
+  "functions": {
+    "app/api/projects/[id]/runs/route.ts": {
+      "maxDuration": 30
     }
-  ]
+  }
 }

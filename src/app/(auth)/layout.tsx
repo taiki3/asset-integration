@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { getUser } from '@/lib/auth';
 import { Header } from '@/components/header';
+import { Providers } from '@/components/providers';
 
 export default async function AuthLayout({
   children,
@@ -14,9 +15,11 @@ export default async function AuthLayout({
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <Header user={user} />
-      <main className="container mx-auto max-w-7xl px-4 py-8">{children}</main>
-    </div>
+    <Providers>
+      <div className="min-h-screen bg-background">
+        <Header user={user} />
+        <main className="container mx-auto max-w-7xl px-4 py-8">{children}</main>
+      </div>
+    </Providers>
   );
 }

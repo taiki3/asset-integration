@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/card';
 import { formatDate } from '@/lib/utils';
 import { CreateProjectDialog } from '@/components/create-project-dialog';
+import { mockProjects } from '@/lib/db/mock';
 
 export default async function DashboardPage() {
   const user = await getUser();
@@ -20,11 +21,17 @@ export default async function DashboardPage() {
     return null;
   }
 
-  const userProjects = await db
-    .select()
-    .from(projects)
-    .where(and(eq(projects.userId, user.id), isNull(projects.deletedAt)))
-    .orderBy(desc(projects.createdAt));
+  // Use mock data only if USE_MOCK_DB is true
+  // Otherwise use real database even with mock auth
+  const useMockDb = process.env.USE_MOCK_DB === 'true';
+
+  const userProjects = useMockDb
+    ? mockProjects.filter(p => p.userId === user.id)
+    : await db
+        .select()
+        .from(projects)
+        .where(and(eq(projects.userId, user.id), isNull(projects.deletedAt)))
+        .orderBy(desc(projects.createdAt));
 
   return (
     <div className="space-y-8">

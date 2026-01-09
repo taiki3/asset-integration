@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    ports:
+      - "3000:3000"
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/.next
+    environment:
+      - NODE_ENV=development
+      - NEXT_PUBLIC_MOCK_AUTH=${NEXT_PUBLIC_MOCK_AUTH:-false}
+      - NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
+      - NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
+      - DATABASE_URL=${DATABASE_URL}
+      - GOOGLE_GENAI_API_KEY=${GOOGLE_GENAI_API_KEY}
+      - GOOGLE_GENAI_MODEL=${GOOGLE_GENAI_MODEL:-gemini-pro-experimental-1219}
+    stdin_open: true
+    tty: true
+    command: npm run dev
+
+  # Production build service
+  app-prod:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3000"
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/.next
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_MOCK_AUTH=${NEXT_PUBLIC_MOCK_AUTH:-false}
+      - NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
+      - NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
+      - DATABASE_URL=${DATABASE_URL}
+      - GOOGLE_GENAI_API_KEY=${GOOGLE_GENAI_API_KEY}
+      - GOOGLE_GENAI_MODEL=${GOOGLE_GENAI_MODEL:-gemini-pro-experimental-1219}
+    command: sh -c "npm run build && npm run start"
+    profiles:
+      - production

@@ -50,7 +50,7 @@ export default {
         sm: 'calc(var(--radius) - 4px)',
       },
       fontFamily: {
-        sans: ['IBM Plex Sans', 'sans-serif'],
+        sans: ['IBM Plex Sans', 'Noto Sans JP', 'sans-serif'],
         mono: ['IBM Plex Mono', 'monospace'],
       },
     },

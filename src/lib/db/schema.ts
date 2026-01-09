@@ -144,6 +144,7 @@ export const runsRelations = relations(runs, ({ one, many }) => ({
 // ============================================
 export const hypotheses = pgTable('hypotheses', {
   id: serial('id').primaryKey(),
+  uuid: varchar('uuid', { length: 36 }).notNull().unique(), // UUID for tracking through pipeline
   projectId: integer('project_id')
     .references(() => projects.id)
     .notNull(),
@@ -152,6 +153,21 @@ export const hypotheses = pgTable('hypotheses', {
   indexInRun: integer('index_in_run').notNull().default(0),
   displayTitle: text('display_title'),
   contentHash: text('content_hash'),
+
+  // Step outputs per hypothesis (UUID-tracked)
+  step2_1Summary: text('step2_1_summary'), // Initial summary from Step 2-1
+  step2_2Output: text('step2_2_output'),   // Deep Research detail
+  step3Output: text('step3_output'),       // Technical evaluation
+  step4Output: text('step4_output'),       // Competitive analysis
+  step5Output: text('step5_output'),       // Integration evaluation
+
+  // Processing status per hypothesis
+  processingStatus: text('processing_status', {
+    enum: ['pending', 'step2_2', 'step3', 'step4', 'step5', 'completed', 'error'],
+  }).default('pending'),
+  currentInteractionId: text('current_interaction_id'), // Active Gemini interaction
+  errorMessage: text('error_message'),
+
   fullData: jsonb('full_data'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   deletedAt: timestamp('deleted_at'),

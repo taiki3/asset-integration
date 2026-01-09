@@ -1,0 +1,25 @@
+FROM node:20-alpine
+
+# Set working directory
+WORKDIR /app
+
+# Install dependencies for native modules and dev tools
+RUN apk add --no-cache python3 make g++ curl
+
+# Copy package files
+COPY package*.json ./
+
+# Install dependencies
+RUN npm ci
+
+# Expose port
+EXPOSE 3000
+
+# Set environment to development
+ENV NODE_ENV=development
+
+# Use host network to avoid proxy issues
+ENV HOSTNAME=0.0.0.0
+
+# Development command with hot reload
+CMD ["npm", "run", "dev"]
