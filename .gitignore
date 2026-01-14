@@ -49,3 +49,6 @@ playwright/.cache/
 *.pem
 *.log
 *.tar.gz
+
+# Temporary files
+*.zip
