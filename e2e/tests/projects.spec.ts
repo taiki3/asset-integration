@@ -5,8 +5,23 @@ test.describe('Projects', () => {
     // Test API directly for projects
     const response = await request.get('/api/projects');
 
-    // Should return some status (might be 401 if auth required)
-    expect([200, 401, 404]).toContain(response.status());
+    // With mock auth, should return 200 with projects
+    expect(response.status()).toBe(200);
+
+    const data = await response.json();
+    expect(Array.isArray(data)).toBe(true);
+  });
+
+  test('dashboard shows seeded projects', async ({ page }) => {
+    await page.goto('/dashboard');
+    await page.waitForLoadState('domcontentloaded');
+
+    // Wait for React hydration and data loading
+    await page.waitForTimeout(2000);
+
+    // Should show the seeded project titles
+    const content = await page.content();
+    expect(content).toContain('E2E Test Project');
   });
 
   test('dashboard loads without errors', async ({ page }) => {
@@ -16,7 +31,7 @@ test.describe('Projects', () => {
       errors.push(error.message);
     });
 
-    await page.goto('/');
+    await page.goto('/dashboard');
     await page.waitForLoadState('domcontentloaded');
 
     // Give a moment for React to hydrate

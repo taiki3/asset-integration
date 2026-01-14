@@ -6,10 +6,11 @@
 -- This matches the mock auth user ID used in NEXT_PUBLIC_MOCK_AUTH=true mode
 
 -- Insert test project
+-- user_id must match mock-user-001 from src/lib/auth/mock.ts
 INSERT INTO projects (id, name, description, user_id, created_at)
 VALUES
-  (1, 'E2E Test Project', 'A project for E2E testing', 'e2e-test-user', NOW()),
-  (2, 'Sample Innovation Project', 'Sample project with completed data', 'e2e-test-user', NOW());
+  (1, 'E2E Test Project', 'A project for E2E testing', 'mock-user-001', NOW()),
+  (2, 'Sample Innovation Project', 'Sample project with completed data', 'mock-user-001', NOW());
 
 -- Reset sequence
 SELECT setval('projects_id_seq', 10);
