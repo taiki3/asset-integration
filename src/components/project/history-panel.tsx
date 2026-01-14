@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { History, ChevronRight, Download, Loader2, CheckCircle, XCircle, Clock, FileSpreadsheet, AlertTriangle } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { History, ChevronRight, Download, Loader2, CheckCircle, XCircle, Clock, FileSpreadsheet, AlertTriangle, FileText, Archive } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -41,16 +41,57 @@ const statusConfig: Record<string, { label: string; icon: typeof Clock; variant:
 
 const defaultStatus = { label: '不明', icon: Clock, variant: 'pending' as const, animate: false };
 
+interface IndividualReport {
+  hypothesisNumber: number;
+  title: string;
+  status: string;
+  hasContent: boolean;
+}
+
 export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, onDownloadStep2Word, onDownloadIndividualReport }: HistoryPanelProps) {
   const [selectedRun, setSelectedRun] = useState<Run | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('summary');
+  const [individualReports, setIndividualReports] = useState<IndividualReport[]>([]);
+  const [loadingReports, setLoadingReports] = useState(false);
 
   const handleRunClick = (run: Run) => {
     setSelectedRun(run);
     setDetailsOpen(true);
     setActiveTab('summary');
+    setIndividualReports([]);
   };
+
+  // Fetch individual reports when a completed run is selected
+  useEffect(() => {
+    if (!selectedRun || selectedRun.status !== 'completed') {
+      setIndividualReports([]);
+      return;
+    }
+
+    const fetchReports = async () => {
+      setLoadingReports(true);
+      try {
+        const res = await fetch(`/api/runs/${selectedRun.id}/hypotheses`);
+        if (res.ok) {
+          const hypotheses = await res.json();
+          const reports = hypotheses.map((h: { hypothesisNumber: number; displayTitle?: string; processingStatus?: string; step2_2Output?: string; step3Output?: string; step4Output?: string; step5Output?: string }) => ({
+            hypothesisNumber: h.hypothesisNumber,
+            title: h.displayTitle || `仮説 ${h.hypothesisNumber}`,
+            status: h.processingStatus || 'pending',
+            hasContent: !!(h.step2_2Output || h.step3Output || h.step4Output || h.step5Output),
+          }));
+          setIndividualReports(reports);
+        }
+      } catch (error) {
+        console.error('Failed to fetch reports:', error);
+      } finally {
+        setLoadingReports(false);
+      }
+    };
+
+    fetchReports();
+  }, [selectedRun]);
 
   const getResourceName = (resourceId: number | null) => {
     if (!resourceId) return '不明';
@@ -140,6 +181,9 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, 
                 <TabsTrigger value="summary">概要</TabsTrigger>
                 <TabsTrigger value="parameters">パラメータ</TabsTrigger>
                 <TabsTrigger value="outputs">出力</TabsTrigger>
+                <TabsTrigger value="reports" disabled={selectedRun.status !== 'completed'}>
+                  個別レポート
+                </TabsTrigger>
               </TabsList>
 
               <TabsContent value="summary" className="space-y-4">
@@ -275,6 +319,66 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, 
                   ) : (
                     <div className="text-center py-8 text-muted-foreground font-light">
                       出力がありません
+                    </div>
+                  )}
+                </ScrollArea>
+              </TabsContent>
+
+              <TabsContent value="reports" className="space-y-4">
+                <div className="flex items-center justify-between mb-4">
+                  <p className="text-sm font-medium">個別レポート一覧</p>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      // Download all as ZIP
+                      window.open(`/api/runs/${selectedRun.id}/reports/zip`, '_blank');
+                    }}
+                    disabled={individualReports.length === 0}
+                    data-testid="button-download-all-reports"
+                  >
+                    <Archive className="h-4 w-4 mr-2" />
+                    一括ダウンロード
+                  </Button>
+                </div>
+                <ScrollArea className="h-[300px]">
+                  {loadingReports ? (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                    </div>
+                  ) : individualReports.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground font-light">
+                      個別レポートがありません
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {individualReports.map((report, index) => (
+                        <div
+                          key={report.hypothesisNumber}
+                          className="flex items-center justify-between p-3 rounded-lg border border-border/50"
+                        >
+                          <div className="flex items-center gap-3">
+                            <FileText className="h-4 w-4 text-muted-foreground" />
+                            <div>
+                              <p className="font-medium text-sm">
+                                仮説 {report.hypothesisNumber}: {report.title}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                ステータス: {report.status === 'completed' ? '完了' : '処理中'}
+                              </p>
+                            </div>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => onDownloadIndividualReport(selectedRun.id, index)}
+                            disabled={!report.hasContent}
+                            data-testid={`button-download-report-${report.hypothesisNumber}`}
+                          >
+                            <Download className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
                     </div>
                   )}
                 </ScrollArea>
