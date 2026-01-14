@@ -199,8 +199,20 @@ export async function POST(request: NextRequest, context: RouteContext) {
       .returning();
 
     // Start the simplified ASIP pipeline asynchronously
-    startSimplePipeline(run.id).catch((error) => {
+    startSimplePipeline(run.id).catch(async (error) => {
       console.error(`Failed to start pipeline for run ${run.id}:`, error);
+      // Update run status to error if pipeline fails to start
+      try {
+        await db
+          .update(runs)
+          .set({
+            status: 'error',
+            errorMessage: `パイプライン起動失敗: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          })
+          .where(eq(runs.id, run.id));
+      } catch (dbError) {
+        console.error(`Failed to update run status:`, dbError);
+      }
     });
 
     return NextResponse.json(run, { status: 201 });
