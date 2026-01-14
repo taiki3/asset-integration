@@ -353,6 +353,32 @@ export function ProjectWorkspace({ project, initialResources, initialRuns }: Pro
     },
   });
 
+  const importHypothesesMutation = useMutation({
+    mutationFn: async (hypotheses: { hypothesisNumber?: number; displayTitle?: string; step2_1Summary?: string }[]) => {
+      const res = await fetch(`/api/projects/${project.id}/hypotheses/import`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ hypotheses }),
+      });
+      if (!res.ok) throw new Error('Failed to import hypotheses');
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['projects', project.id, 'hypotheses'] });
+      toast({
+        title: 'インポート完了',
+        description: `${data.imported}件の仮説をインポートしました。`,
+      });
+    },
+    onError: () => {
+      toast({
+        title: 'エラー',
+        description: '仮説のインポートに失敗しました。',
+        variant: 'destructive',
+      });
+    },
+  });
+
   // Handler functions
   const handleAddResource = async (type: 'target_spec' | 'technical_assets', name: string, content: string) => {
     await addResourceMutation.mutateAsync({ type, name, content });
@@ -381,6 +407,30 @@ export function ProjectWorkspace({ project, initialResources, initialRuns }: Pro
 
   const handleDeleteHypothesis = (id: number) => {
     deleteHypothesisMutation.mutate(id);
+  };
+
+  const handleImportHypotheses = async (
+    rows: Record<string, string>[],
+    columnMapping: Record<string, string>
+  ) => {
+    // Transform CSV rows to hypotheses data using column mapping
+    const hypotheses = rows.map((row) => {
+      const hypothesis: { hypothesisNumber?: number; displayTitle?: string; step2_1Summary?: string } = {};
+
+      if (columnMapping.hypothesisNumber && row[columnMapping.hypothesisNumber]) {
+        hypothesis.hypothesisNumber = parseInt(row[columnMapping.hypothesisNumber], 10);
+      }
+      if (columnMapping.displayTitle && row[columnMapping.displayTitle]) {
+        hypothesis.displayTitle = row[columnMapping.displayTitle];
+      }
+      if (columnMapping.step2_1Summary && row[columnMapping.step2_1Summary]) {
+        hypothesis.step2_1Summary = row[columnMapping.step2_1Summary];
+      }
+
+      return hypothesis;
+    });
+
+    await importHypothesesMutation.mutateAsync(hypotheses);
   };
 
   const handleDownloadTSV = async (runId: number) => {
@@ -604,6 +654,7 @@ export function ProjectWorkspace({ project, initialResources, initialRuns }: Pro
             projectId={project.id}
             onDelete={handleDeleteHypothesis}
             onDownloadWord={handleDownloadIndividualReport}
+            onImport={handleImportHypotheses}
           />
         </div>
       </main>
