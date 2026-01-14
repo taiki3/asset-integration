@@ -16,6 +16,7 @@ import {
 import { formatDate } from '@/lib/utils';
 import { CreateProjectDialog } from '@/components/create-project-dialog';
 import { mockProjects } from '@/lib/db/mock';
+import { FolderOpen } from 'lucide-react';
 
 export default async function DashboardPage() {
   const user = await getUser();
@@ -41,10 +42,13 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-8">
-      <div className="flex items-center justify-between">
+      {/* Page Header */}
+      <div className="flex items-center justify-between fade-in stagger-1">
         <div>
-          <h1 className="text-3xl font-light tracking-tight">プロジェクト</h1>
-          <p className="mt-2 text-muted-foreground">
+          <h1 className="font-display text-4xl font-black tracking-tighter">
+            プロジェクト
+          </h1>
+          <p className="mt-2 font-light text-muted-foreground">
             仮説生成プロジェクトの管理
           </p>
         </div>
@@ -52,9 +56,12 @@ export default async function DashboardPage() {
       </div>
 
       {userProjects.length === 0 ? (
-        <Card className="flex flex-col items-center justify-center py-16">
-          <CardContent className="text-center">
-            <p className="text-muted-foreground mb-4">
+        <Card className="flex flex-col items-center justify-center py-20 fade-in stagger-2">
+          <CardContent className="text-center space-y-4">
+            <div className="mx-auto w-16 h-16 rounded-full bg-muted/50 flex items-center justify-center">
+              <FolderOpen className="w-8 h-8 text-muted-foreground" />
+            </div>
+            <p className="text-muted-foreground font-light">
               プロジェクトがありません
             </p>
             <CreateProjectDialog />
@@ -62,11 +69,15 @@ export default async function DashboardPage() {
         </Card>
       ) : (
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {userProjects.map((project) => (
-            <Link key={project.id} href={`/projects/${project.id}`}>
-              <Card className="h-full transition-shadow hover:shadow-md">
+          {userProjects.map((project, index) => (
+            <Link
+              key={project.id}
+              href={`/projects/${project.id}`}
+              className={`fade-in stagger-${Math.min(index + 2, 8)}`}
+            >
+              <Card className="h-full card-hover glow-border cursor-pointer">
                 <CardHeader>
-                  <CardTitle className="text-lg font-medium">
+                  <CardTitle className="text-lg">
                     {project.name}
                   </CardTitle>
                   <CardDescription>
@@ -75,7 +86,7 @@ export default async function DashboardPage() {
                 </CardHeader>
                 {project.description && (
                   <CardContent>
-                    <p className="text-sm text-muted-foreground line-clamp-2">
+                    <p className="text-sm font-light text-muted-foreground line-clamp-2">
                       {project.description}
                     </p>
                   </CardContent>

@@ -4,48 +4,106 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 221.2 83.2% 53.3%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 221.2 83.2% 53.3%;
-    --radius: 0.5rem;
+    /* ===== Nordic Minimalism Theme - Light Mode ===== */
+
+    /* Typography */
+    --font-display: 'Space Grotesk', sans-serif;
+    --font-body: 'Inter', sans-serif;
+    --font-jp: 'Noto Sans JP', sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+
+    /* Font Weights - Extreme Contrast */
+    --weight-thin: 100;
+    --weight-light: 200;
+    --weight-normal: 400;
+    --weight-bold: 700;
+    --weight-black: 900;
+
+    /* Nordic Light Mode Colors (Snow Storm) */
+    --background: 219 28% 94%; /* #eceff4 */
+    --foreground: 220 16% 22%; /* #2e3440 */
+
+    --card: 219 28% 94%;
+    --card-foreground: 220 16% 22%;
+
+    --popover: 220 16% 90%; /* #e5e9f0 */
+    --popover-foreground: 220 16% 22%;
+
+    --primary: 213 32% 52%; /* #5e81ac - Frost Blue */
+    --primary-foreground: 219 28% 94%;
+
+    --secondary: 220 16% 85%; /* #d8dee9 */
+    --secondary-foreground: 220 16% 22%;
+
+    --muted: 220 16% 85%;
+    --muted-foreground: 220 12% 40%; /* #4c566a */
+
+    --accent: 213 32% 52%;
+    --accent-foreground: 219 28% 94%;
+
+    --destructive: 354 42% 56%; /* #bf616a - Aurora Red */
+    --destructive-foreground: 219 28% 94%;
+
+    --border: 220 16% 80%;
+    --input: 220 16% 85%;
+    --ring: 213 32% 52%;
+
+    /* Aurora Colors for Status */
+    --aurora-red: 354 42% 56%; /* #bf616a */
+    --aurora-orange: 14 51% 63%; /* #d08770 */
+    --aurora-yellow: 40 71% 73%; /* #ebcb8b */
+    --aurora-green: 92 28% 65%; /* #a3be8c */
+    --aurora-purple: 311 29% 63%; /* #b48ead */
+    --frost: 193 43% 67%; /* #88c0d0 */
+
+    --radius: 0.625rem;
+
+    /* Motion */
+    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+    --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+    --duration-fast: 0.2s;
+    --duration-base: 0.4s;
+    --duration-slow: 0.8s;
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 217.2 91.2% 59.8%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 224.3 76.3% 48%;
+    /* ===== Nordic Minimalism Theme - Dark Mode (Polar Night) ===== */
+
+    --background: 220 16% 22%; /* #2e3440 */
+    --foreground: 219 28% 94%; /* #eceff4 */
+
+    --card: 220 16% 26%; /* #3b4252 */
+    --card-foreground: 219 28% 94%;
+
+    --popover: 220 16% 30%; /* #434c5e */
+    --popover-foreground: 219 28% 94%;
+
+    --primary: 193 43% 67%; /* #88c0d0 - Frost Blue */
+    --primary-foreground: 220 16% 22%;
+
+    --secondary: 220 16% 30%; /* #434c5e */
+    --secondary-foreground: 219 28% 88%; /* #d8dee9 */
+
+    --muted: 220 16% 30%;
+    --muted-foreground: 219 28% 88%;
+
+    --accent: 193 43% 67%;
+    --accent-foreground: 220 16% 22%;
+
+    --destructive: 354 42% 50%; /* darker aurora red */
+    --destructive-foreground: 219 28% 94%;
+
+    --border: 220 16% 35%;
+    --input: 220 16% 30%;
+    --ring: 193 43% 67%;
+
+    /* Aurora Colors (same in dark mode) */
+    --aurora-red: 354 42% 56%;
+    --aurora-orange: 14 51% 63%;
+    --aurora-yellow: 40 71% 73%;
+    --aurora-green: 92 28% 65%;
+    --aurora-purple: 311 29% 63%;
+    --frost: 193 43% 67%;
   }
 }
 
@@ -53,7 +111,204 @@
   * {
     @apply border-border;
   }
+
   body {
     @apply bg-background text-foreground;
+    font-family: var(--font-body), var(--font-jp), sans-serif;
+    font-weight: var(--weight-light);
+    letter-spacing: 0.01em;
   }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-display), var(--font-jp), sans-serif;
+    font-weight: var(--weight-black);
+    letter-spacing: -0.03em;
+  }
+
+  code, pre, .font-mono {
+    font-family: var(--font-mono), monospace;
+  }
+}
+
+/* ===== Animations ===== */
+@layer utilities {
+  /* Fade In Up Animation */
+  @keyframes fadeInUp {
+    from {
+      opacity: 0;
+      transform: translateY(24px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Slide In Right Animation */
+  @keyframes slideInRight {
+    from {
+      opacity: 0;
+      transform: translateX(-24px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  /* Scale In Animation */
+  @keyframes scaleIn {
+    from {
+      opacity: 0;
+      transform: scale(0.95);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  /* Glow Pulse Animation */
+  @keyframes glowPulse {
+    0%, 100% {
+      box-shadow: 0 0 20px hsl(var(--frost) / 0.3);
+    }
+    50% {
+      box-shadow: 0 0 40px hsl(var(--frost) / 0.5);
+    }
+  }
+
+  /* Fade In Classes */
+  .fade-in {
+    opacity: 0;
+    animation: fadeInUp var(--duration-slow) var(--ease-out) forwards;
+  }
+
+  .fade-in-fast {
+    opacity: 0;
+    animation: fadeInUp var(--duration-base) var(--ease-out) forwards;
+  }
+
+  .slide-in {
+    opacity: 0;
+    animation: slideInRight var(--duration-slow) var(--ease-out) forwards;
+  }
+
+  .scale-in {
+    opacity: 0;
+    animation: scaleIn var(--duration-base) var(--ease-out) forwards;
+  }
+
+  /* Stagger Delays */
+  .stagger-1 { animation-delay: 0.1s; }
+  .stagger-2 { animation-delay: 0.2s; }
+  .stagger-3 { animation-delay: 0.3s; }
+  .stagger-4 { animation-delay: 0.4s; }
+  .stagger-5 { animation-delay: 0.5s; }
+  .stagger-6 { animation-delay: 0.6s; }
+  .stagger-7 { animation-delay: 0.7s; }
+  .stagger-8 { animation-delay: 0.8s; }
+
+  /* Reduced Motion */
+  @media (prefers-reduced-motion: reduce) {
+    .fade-in,
+    .fade-in-fast,
+    .slide-in,
+    .scale-in {
+      animation: none;
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  /* Glass Card Effect */
+  .glass-card {
+    @apply backdrop-blur-md bg-card/80 border border-border/50;
+  }
+
+  /* Gradient Background */
+  .gradient-bg {
+    background:
+      radial-gradient(ellipse at 20% 0%, hsl(var(--frost) / 0.15) 0%, transparent 50%),
+      radial-gradient(ellipse at 80% 100%, hsl(var(--aurora-purple) / 0.1) 0%, transparent 50%),
+      hsl(var(--background));
+  }
+
+  /* Grid Pattern Background */
+  .grid-pattern {
+    background-image:
+      linear-gradient(hsl(var(--border) / 0.3) 1px, transparent 1px),
+      linear-gradient(90deg, hsl(var(--border) / 0.3) 1px, transparent 1px);
+    background-size: 50px 50px;
+  }
+
+  /* Noise Texture Overlay */
+  .noise-overlay::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+    opacity: 0.03;
+    mix-blend-mode: overlay;
+    pointer-events: none;
+  }
+
+  /* Card Hover Lift Effect */
+  .card-hover {
+    @apply transition-all duration-300;
+  }
+
+  .card-hover:hover {
+    transform: translateY(-4px);
+    box-shadow:
+      0 10px 40px -10px hsl(var(--frost) / 0.3),
+      0 4px 6px -2px hsl(var(--foreground) / 0.05);
+  }
+
+  /* Glow Border Effect */
+  .glow-border {
+    @apply relative;
+  }
+
+  .glow-border::after {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    background: linear-gradient(135deg, hsl(var(--frost)), hsl(var(--aurora-purple)));
+    opacity: 0;
+    z-index: -1;
+    transition: opacity 0.3s ease;
+  }
+
+  .glow-border:hover::after {
+    opacity: 0.5;
+    filter: blur(8px);
+  }
+
+  /* Text Gradient */
+  .text-gradient {
+    background: linear-gradient(135deg, hsl(var(--frost)), hsl(var(--aurora-purple)));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* Progress Bar Gradient */
+  .progress-gradient {
+    background: linear-gradient(90deg, hsl(var(--frost)), hsl(var(--aurora-green)));
+  }
+
+  /* Status Colors */
+  .status-pending { color: hsl(var(--muted-foreground)); }
+  .status-running { color: hsl(var(--frost)); }
+  .status-completed { color: hsl(var(--aurora-green)); }
+  .status-error { color: hsl(var(--aurora-red)); }
+  .status-paused { color: hsl(var(--aurora-yellow)); }
+
+  .bg-status-pending { background-color: hsl(var(--muted)); }
+  .bg-status-running { background-color: hsl(var(--frost) / 0.2); }
+  .bg-status-completed { background-color: hsl(var(--aurora-green) / 0.2); }
+  .bg-status-error { background-color: hsl(var(--aurora-red) / 0.2); }
+  .bg-status-paused { background-color: hsl(var(--aurora-yellow) / 0.2); }
 }

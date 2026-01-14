@@ -29,17 +29,17 @@ interface HistoryPanelProps {
   onDownloadIndividualReport: (runId: number, hypothesisIndex: number) => void;
 }
 
-const statusConfig: Record<string, { label: string; icon: typeof Clock; variant: 'default' | 'secondary' | 'destructive'; animate: boolean }> = {
-  pending: { label: '待機中', icon: Clock, variant: 'secondary', animate: false },
-  running: { label: '処理中', icon: Loader2, variant: 'default', animate: true },
-  paused: { label: '一時停止', icon: Clock, variant: 'secondary', animate: false },
-  completed: { label: '完了', icon: CheckCircle, variant: 'default', animate: false },
-  error: { label: 'エラー', icon: XCircle, variant: 'destructive', animate: false },
-  failed: { label: '失敗', icon: XCircle, variant: 'destructive', animate: false },
-  interrupted: { label: '中断', icon: AlertTriangle, variant: 'secondary', animate: false },
+const statusConfig: Record<string, { label: string; icon: typeof Clock; variant: 'pending' | 'running' | 'completed' | 'error' | 'paused' | 'warning'; animate: boolean }> = {
+  pending: { label: '待機中', icon: Clock, variant: 'pending', animate: false },
+  running: { label: '処理中', icon: Loader2, variant: 'running', animate: true },
+  paused: { label: '一時停止', icon: Clock, variant: 'paused', animate: false },
+  completed: { label: '完了', icon: CheckCircle, variant: 'completed', animate: false },
+  error: { label: 'エラー', icon: XCircle, variant: 'error', animate: false },
+  failed: { label: '失敗', icon: XCircle, variant: 'error', animate: false },
+  interrupted: { label: '中断', icon: AlertTriangle, variant: 'warning', animate: false },
 };
 
-const defaultStatus = { label: '不明', icon: Clock, variant: 'secondary' as const, animate: false };
+const defaultStatus = { label: '不明', icon: Clock, variant: 'pending' as const, animate: false };
 
 export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, onDownloadStep2Word, onDownloadIndividualReport }: HistoryPanelProps) {
   const [selectedRun, setSelectedRun] = useState<Run | null>(null);
@@ -76,15 +76,15 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, 
   return (
     <Card className="h-full flex flex-col">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <History className="h-5 w-5" />
+        <CardTitle className="flex items-center gap-2 font-display">
+          <History className="h-5 w-5 text-frost" />
           実行履歴
         </CardTitle>
       </CardHeader>
       <CardContent className="flex-1 overflow-hidden">
         <ScrollArea className="h-full">
           {runs.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
+            <div className="text-center py-8 text-muted-foreground font-light">
               実行履歴がありません
             </div>
           ) : (
@@ -92,11 +92,11 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, 
               {runs.map((run) => {
                 const config = statusConfig[run.status] || defaultStatus;
                 const StatusIcon = config.icon;
-                
+
                 return (
                   <div
                     key={run.id}
-                    className="p-3 rounded-lg border cursor-pointer hover:bg-accent/50 transition-colors"
+                    className="p-3 rounded-lg border border-border/50 cursor-pointer hover:bg-accent/10 hover:border-frost/30 transition-all"
                     onClick={() => handleRunClick(run)}
                   >
                     <div className="flex items-center justify-between">
@@ -107,7 +107,7 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, 
                         </Badge>
                         <div>
                           <p className="font-medium">{run.jobName}</p>
-                          <p className="text-xs text-muted-foreground">
+                          <p className="text-xs font-light text-muted-foreground">
                             {formatDate(run.createdAt)}
                           </p>
                         </div>
@@ -124,22 +124,24 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, 
 
       {/* Run Details Dialog */}
       <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
-        <DialogContent className="max-w-3xl max-h-[80vh] overflow-hidden flex flex-col">
+        <DialogContent className="max-w-3xl max-h-[80vh] overflow-hidden flex flex-col glass-card">
           <DialogHeader>
-            <DialogTitle>{selectedRun?.jobName || 'ジョブ詳細'}</DialogTitle>
-            <DialogDescription>
+            <DialogTitle className="font-display text-xl">
+              {selectedRun?.jobName || 'ジョブ詳細'}
+            </DialogTitle>
+            <DialogDescription className="font-light">
               {selectedRun && formatDate(selectedRun.createdAt)}
             </DialogDescription>
           </DialogHeader>
-          
+
           {selectedRun && (
             <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 overflow-hidden">
-              <TabsList>
+              <TabsList className="bg-muted/50">
                 <TabsTrigger value="summary">概要</TabsTrigger>
                 <TabsTrigger value="parameters">パラメータ</TabsTrigger>
                 <TabsTrigger value="outputs">出力</TabsTrigger>
               </TabsList>
-              
+
               <TabsContent value="summary" className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -159,21 +161,21 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, 
                   </div>
                   <div>
                     <p className="text-sm font-medium">処理時間</p>
-                    <p className="mt-1 text-sm">{getElapsedTime(selectedRun)}</p>
+                    <p className="mt-1 text-sm font-light">{getElapsedTime(selectedRun)}</p>
                   </div>
                   <div>
                     <p className="text-sm font-medium">開始時刻</p>
-                    <p className="mt-1 text-sm">{formatDate(selectedRun.createdAt)}</p>
+                    <p className="mt-1 text-sm font-light">{formatDate(selectedRun.createdAt)}</p>
                   </div>
                   <div>
                     <p className="text-sm font-medium">終了時刻</p>
-                    <p className="mt-1 text-sm">
+                    <p className="mt-1 text-sm font-light">
                       {selectedRun.completedAt ? formatDate(selectedRun.completedAt) : '未完了'}
                     </p>
                   </div>
                 </div>
 
-                <Separator />
+                <Separator className="bg-border/50" />
 
                 <div>
                   <p className="text-sm font-medium mb-2">ダウンロード</p>
@@ -208,71 +210,70 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, 
                   </div>
                 </div>
               </TabsContent>
-              
+
               <TabsContent value="parameters" className="space-y-4">
                 <div className="space-y-3">
                   <div>
                     <p className="text-sm font-medium">市場・顧客ニーズ</p>
-                    <p className="mt-1 text-sm">{getResourceName(selectedRun.targetSpecId)}</p>
+                    <p className="mt-1 text-sm font-light">{getResourceName(selectedRun.targetSpecId)}</p>
                   </div>
                   <div>
                     <p className="text-sm font-medium">技術シーズ</p>
-                    <p className="mt-1 text-sm">{getResourceName(selectedRun.technicalAssetsId)}</p>
+                    <p className="mt-1 text-sm font-light">{getResourceName(selectedRun.technicalAssetsId)}</p>
                   </div>
                   <div>
                     <p className="text-sm font-medium">仮説数</p>
-                    <p className="mt-1 text-sm">{selectedRun.hypothesisCount || 0}</p>
+                    <p className="mt-1 text-sm font-light">{selectedRun.hypothesisCount || 0}</p>
                   </div>
                   <div>
                     <p className="text-sm font-medium">ループ数</p>
-                    <p className="mt-1 text-sm">{selectedRun.loopCount || 1}</p>
+                    <p className="mt-1 text-sm font-light">{selectedRun.loopCount || 1}</p>
                   </div>
                   {selectedRun.modelChoice && (
                     <div>
                       <p className="text-sm font-medium">モデル</p>
-                      <p className="mt-1 text-sm">{selectedRun.modelChoice}</p>
+                      <p className="mt-1 text-sm font-light">{selectedRun.modelChoice}</p>
                     </div>
                   )}
                 </div>
               </TabsContent>
-              
+
               <TabsContent value="outputs" className="space-y-4">
                 <ScrollArea className="h-[300px]">
                   {selectedRun.status === 'completed' ? (
                     <div className="space-y-4">
                       <div>
                         <p className="text-sm font-medium">Step 2-1 出力</p>
-                        <pre className="mt-2 p-3 bg-muted rounded text-xs overflow-x-auto">
+                        <pre className="mt-2 p-3 bg-muted/50 rounded-lg text-xs overflow-x-auto font-mono">
                           {selectedRun.step2_1Output || '出力なし'}
                         </pre>
                       </div>
                       {selectedRun.step2_1Output && (
                         <div>
                           <p className="text-sm font-medium">Step 5 出力</p>
-                          <pre className="mt-2 p-3 bg-muted rounded text-xs overflow-x-auto">
-                            {/* TODO: Add step5Output field to schema */}
+                          <pre className="mt-2 p-3 bg-muted/50 rounded-lg text-xs overflow-x-auto font-mono">
                             Step 5 output will be displayed here
                           </pre>
                         </div>
                       )}
                     </div>
                   ) : selectedRun.status === 'running' ? (
-                    <div className="text-center py-8 text-muted-foreground">
+                    <div className="text-center py-8 text-muted-foreground font-light">
                       処理中です...
                     </div>
                   ) : selectedRun.status === 'error' ? (
                     <div className="space-y-4">
                       {selectedRun.errorMessage && (
                         <div>
-                          <p className="text-sm font-medium text-destructive">エラー</p>
-                          <pre className="mt-2 p-3 bg-destructive/10 rounded text-xs overflow-x-auto text-destructive">
+                          <p className="text-sm font-medium text-aurora-red">エラー</p>
+                          <pre className="mt-2 p-3 bg-aurora-red/10 rounded-lg text-xs overflow-x-auto text-aurora-red font-mono">
                             {selectedRun.errorMessage}
                           </pre>
                         </div>
                       )}
                     </div>
                   ) : (
-                    <div className="text-center py-8 text-muted-foreground">
+                    <div className="text-center py-8 text-muted-foreground font-light">
                       出力がありません
                     </div>
                   )}
@@ -280,7 +281,7 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, 
               </TabsContent>
             </Tabs>
           )}
-          
+
           <DialogFooter>
             <Button variant="outline" onClick={() => setDetailsOpen(false)}>
               閉じる
