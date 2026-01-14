@@ -1,3 +1,6 @@
+// Force dynamic rendering to prevent database connection at build time
+export const dynamic = 'force-dynamic';
+
 import { getUser } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { projects } from '@/lib/db/schema';

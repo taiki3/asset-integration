@@ -1,0 +1,60 @@
+# E2E Test Environment
+# All ports are offset to avoid conflicts with other local development
+# Base port: 55000 (instead of default ports)
+
+services:
+  # PostgreSQL Database for E2E
+  db:
+    image: postgres:17-alpine
+    container_name: asip-e2e-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    ports:
+      - "55432:5432"
+    volumes:
+      - ./e2e/init-db:/docker-entrypoint-initdb.d:z
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - asip-e2e-network
+
+  # Next.js Application
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.e2e
+      args:
+        - HTTP_PROXY=${HTTP_PROXY:-}
+        - HTTPS_PROXY=${HTTPS_PROXY:-}
+        - NO_PROXY=${NO_PROXY:-localhost,127.0.0.1}
+    container_name: asip-e2e-app
+    environment:
+      - NODE_ENV=test
+      - NEXT_PUBLIC_MOCK_AUTH=true
+      - NEXT_PUBLIC_SUPABASE_URL=http://localhost:55000
+      - NEXT_PUBLIC_SUPABASE_ANON_KEY=e2e-test-anon-key
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/postgres
+      - GOOGLE_GENAI_API_KEY=${GOOGLE_GENAI_API_KEY:-mock-api-key}
+      - GOOGLE_GENAI_MODEL=gemini-pro
+    ports:
+      - "55000:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:3000/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - asip-e2e-network
+
+networks:
+  asip-e2e-network:
+    driver: bridge
