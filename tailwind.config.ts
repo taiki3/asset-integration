@@ -43,6 +43,15 @@ export default {
         border: 'hsl(var(--border))',
         input: 'hsl(var(--input))',
         ring: 'hsl(var(--ring))',
+        // Aurora Colors
+        aurora: {
+          red: 'hsl(var(--aurora-red))',
+          orange: 'hsl(var(--aurora-orange))',
+          yellow: 'hsl(var(--aurora-yellow))',
+          green: 'hsl(var(--aurora-green))',
+          purple: 'hsl(var(--aurora-purple))',
+        },
+        frost: 'hsl(var(--frost))',
       },
       borderRadius: {
         lg: 'var(--radius)',
@@ -50,8 +59,60 @@ export default {
         sm: 'calc(var(--radius) - 4px)',
       },
       fontFamily: {
-        sans: ['IBM Plex Sans', 'Noto Sans JP', 'sans-serif'],
-        mono: ['IBM Plex Mono', 'monospace'],
+        display: ['Space Grotesk', 'Noto Sans JP', 'sans-serif'],
+        sans: ['Inter', 'Noto Sans JP', 'sans-serif'],
+        mono: ['JetBrains Mono', 'monospace'],
+      },
+      fontWeight: {
+        thin: '100',
+        light: '200',
+        normal: '400',
+        bold: '700',
+        black: '900',
+      },
+      letterSpacing: {
+        tighter: '-0.03em',
+        tight: '-0.02em',
+        normal: '0',
+        wide: '0.01em',
+        wider: '0.05em',
+        widest: '0.1em',
+      },
+      transitionTimingFunction: {
+        'ease-out-expo': 'cubic-bezier(0.16, 1, 0.3, 1)',
+      },
+      animation: {
+        'fade-in': 'fadeInUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+        'slide-in': 'slideInRight 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+        'scale-in': 'scaleIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+        'glow-pulse': 'glowPulse 2s ease-in-out infinite',
+      },
+      keyframes: {
+        fadeInUp: {
+          from: { opacity: '0', transform: 'translateY(24px)' },
+          to: { opacity: '1', transform: 'translateY(0)' },
+        },
+        slideInRight: {
+          from: { opacity: '0', transform: 'translateX(-24px)' },
+          to: { opacity: '1', transform: 'translateX(0)' },
+        },
+        scaleIn: {
+          from: { opacity: '0', transform: 'scale(0.95)' },
+          to: { opacity: '1', transform: 'scale(1)' },
+        },
+        glowPulse: {
+          '0%, 100%': { boxShadow: '0 0 20px hsl(var(--frost) / 0.3)' },
+          '50%': { boxShadow: '0 0 40px hsl(var(--frost) / 0.5)' },
+        },
+      },
+      boxShadow: {
+        'glow': '0 0 20px hsl(var(--frost) / 0.3)',
+        'glow-lg': '0 0 40px hsl(var(--frost) / 0.5)',
+        'card': '0 4px 20px -4px hsl(var(--foreground) / 0.1)',
+        'card-hover': '0 10px 40px -10px hsl(var(--frost) / 0.3)',
+      },
+      backdropBlur: {
+        xs: '2px',
       },
     },
   },

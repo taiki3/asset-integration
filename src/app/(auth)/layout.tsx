@@ -16,7 +16,12 @@ export default async function AuthLayout({
 
   return (
     <Providers>
-      <div className="min-h-screen bg-background">
+      <div className="relative min-h-screen">
+        {/* Background layers */}
+        <div className="fixed inset-0 gradient-bg -z-10" />
+        <div className="fixed inset-0 grid-pattern opacity-20 -z-10" />
+
+        {/* Content */}
         <Header user={user} />
         <main className="container mx-auto max-w-7xl px-4 py-8">{children}</main>
       </div>
