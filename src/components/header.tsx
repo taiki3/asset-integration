@@ -72,6 +72,7 @@ export function Header({ user }: HeaderProps) {
               size="icon"
               asChild
               className="h-9 w-9 rounded-md hover:bg-accent/10 transition-colors"
+              data-testid="button-settings"
             >
               <Link href="/settings">
                 <Settings className="h-4 w-4" />
