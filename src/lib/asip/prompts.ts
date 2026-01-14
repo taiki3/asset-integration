@@ -149,10 +149,30 @@ export const STEP5_PROMPT = `# システム指令：新規素材ビジネス・�
 /**
  * Build instruction document for Deep Research
  */
+export interface ExistingHypothesis {
+  title: string;
+  summary: string;
+}
+
 export function buildInstructionDocument(
   hypothesisCount: number,
-  hasPreviousHypotheses: boolean
+  hasPreviousHypotheses: boolean,
+  existingHypotheses?: ExistingHypothesis[]
 ): string {
+  const hasExistingHypotheses = existingHypotheses && existingHypotheses.length > 0;
+
+  let exclusionSection = '';
+  if (hasExistingHypotheses) {
+    const exclusionList = existingHypotheses
+      .map((h, i) => `${i + 1}. ${h.title}: ${h.summary.slice(0, 100)}...`)
+      .join('\n');
+    exclusionSection = `
+
+【除外すべき既存仮説】
+以下の仮説は既に生成済みです。これらと類似または重複する仮説は生成しないでください：
+${exclusionList}`;
+  }
+
   return `【タスク】
 添付された「technical_assets」の技術資産を分析し、「target_specification」で指定された市場において、現在のトレンドと照らし合わせて、${hypothesisCount}件の新しい事業仮説を生成してください。
 
@@ -169,11 +189,12 @@ export function buildInstructionDocument(
 2. 成長市場であること
 3. 競合他社がまだ参入していないニッチ領域であること
 ${hasPreviousHypotheses ? '4. 過去に生成した仮説と重複しないこと（previous_hypotheses参照）' : ''}
+${hasExistingHypotheses ? '5. 【重要】除外すべき既存仮説と類似または重複しないこと' : ''}
 
 【重要】
 - 調査した情報源と根拠を明記してください
 - 具体的な市場規模や成長率などの数値データがあれば含めてください
-- 各仮説について、なぜその技術資産が競争優位性を持つのか説明してください`;
+- 各仮説について、なぜその技術資産が競争優位性を持つのか説明してください${exclusionSection}`;
 }
 
 /**

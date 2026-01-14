@@ -125,7 +125,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     }
 
     const body = await request.json();
-    const { jobName, targetSpecId, technicalAssetsId, hypothesisCount, loopCount, modelChoice } = body;
+    const { jobName, targetSpecId, technicalAssetsId, hypothesisCount, loopCount, modelChoice, existingFilter } = body;
 
     if (!jobName?.trim()) {
       return NextResponse.json(
@@ -175,6 +175,11 @@ export async function POST(request: NextRequest, context: RouteContext) {
       }
     }
 
+    // Store existingFilter in progressInfo for use during pipeline execution
+    const initialProgressInfo = existingFilter?.enabled
+      ? { existingFilter }
+      : undefined;
+
     const [run] = await db
       .insert(runs)
       .values({
@@ -189,6 +194,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
         currentStep: 0,
         currentLoop: 1,
         loopIndex: 0,
+        progressInfo: initialProgressInfo,
       })
       .returning();
 

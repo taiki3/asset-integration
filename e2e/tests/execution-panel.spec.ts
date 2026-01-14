@@ -265,3 +265,46 @@ test.describe('Execution Panel API', () => {
     expect(response.status()).toBeLessThan(500);
   });
 });
+
+test.describe('Reprocess API', () => {
+  test('POST /api/projects/:id/reprocess creates a reprocess run', async ({ request }) => {
+    const response = await request.post('/api/projects/1/reprocess', {
+      data: {
+        uploadedContent: 'Sample content for reprocessing with hypothesis data',
+        technicalAssetsId: 2,
+        hypothesisCount: 3,
+        modelChoice: 'pro',
+        customPrompt: 'Focus on market opportunities',
+        jobName: 'Reprocess Test',
+      },
+    });
+
+    expect(response.status()).toBeLessThan(500);
+  });
+
+  test('POST /api/projects/:id/reprocess requires uploadedContent', async ({ request }) => {
+    const response = await request.post('/api/projects/1/reprocess', {
+      data: {
+        technicalAssetsId: 2,
+        hypothesisCount: 3,
+        jobName: 'Reprocess Test',
+      },
+    });
+
+    // Should return 400 for missing uploadedContent
+    expect(response.status()).toBe(400);
+  });
+
+  test('POST /api/projects/:id/reprocess requires jobName', async ({ request }) => {
+    const response = await request.post('/api/projects/1/reprocess', {
+      data: {
+        uploadedContent: 'Sample content',
+        technicalAssetsId: 2,
+        hypothesisCount: 3,
+      },
+    });
+
+    // Should return 400 for missing jobName
+    expect(response.status()).toBe(400);
+  });
+});

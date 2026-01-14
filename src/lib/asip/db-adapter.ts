@@ -6,7 +6,7 @@
 
 import { db } from '@/lib/db';
 import { runs, resources, hypotheses } from '@/lib/db/schema';
-import { eq } from 'drizzle-orm';
+import { eq, and, inArray, isNull } from 'drizzle-orm';
 import {
   DatabaseOperations,
   RunData,
@@ -33,6 +33,7 @@ export function createDatabaseAdapter(): DatabaseOperations {
         jobName: run.jobName,
         targetSpecId: run.targetSpecId,
         technicalAssetsId: run.technicalAssetsId,
+        progressInfo: run.progressInfo as RunData['progressInfo'],
       };
     },
 
@@ -114,6 +115,62 @@ export function createDatabaseAdapter(): DatabaseOperations {
       }>
     ): Promise<void> {
       await db.update(hypotheses).set(updates).where(eq(hypotheses.uuid, uuid));
+    },
+
+    async getExistingHypotheses(
+      projectId: number,
+      filter: { targetSpecIds?: number[]; technicalAssetsIds?: number[] }
+    ): Promise<Array<{ title: string; summary: string }>> {
+      // Get runs that match the filter criteria
+      const filterConditions = [];
+
+      if (filter.targetSpecIds && filter.targetSpecIds.length > 0) {
+        filterConditions.push(inArray(runs.targetSpecId, filter.targetSpecIds));
+      }
+      if (filter.technicalAssetsIds && filter.technicalAssetsIds.length > 0) {
+        filterConditions.push(inArray(runs.technicalAssetsId, filter.technicalAssetsIds));
+      }
+
+      if (filterConditions.length === 0) {
+        return [];
+      }
+
+      // Get completed runs matching the filter
+      const matchingRuns = await db
+        .select({ id: runs.id })
+        .from(runs)
+        .where(
+          and(
+            eq(runs.projectId, projectId),
+            eq(runs.status, 'completed'),
+            ...filterConditions
+          )
+        );
+
+      if (matchingRuns.length === 0) {
+        return [];
+      }
+
+      const runIds = matchingRuns.map(r => r.id);
+
+      // Get hypotheses from those runs
+      const existingHypotheses = await db
+        .select({
+          displayTitle: hypotheses.displayTitle,
+          step2_1Summary: hypotheses.step2_1Summary,
+        })
+        .from(hypotheses)
+        .where(
+          and(
+            inArray(hypotheses.runId, runIds),
+            isNull(hypotheses.deletedAt)
+          )
+        );
+
+      return existingHypotheses.map(h => ({
+        title: h.displayTitle || '',
+        summary: h.step2_1Summary || '',
+      }));
     },
   };
 }

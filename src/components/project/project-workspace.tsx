@@ -256,7 +256,7 @@ export function ProjectWorkspace({ project, initialResources, initialRuns }: Pro
   
   const reprocessRunMutation = useMutation({
     mutationFn: async (params: any) => {
-      const res = await fetch(`/api/projects/${project.id}/runs/reprocess`, {
+      const res = await fetch(`/api/projects/${project.id}/reprocess`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(params),
