@@ -27,11 +27,11 @@ export function RunProgressDisplay({ run, onPause, onResume, onStop }: RunProgre
   const progress = ((run.currentStep - 1) / (steps.length - 1)) * 100;
 
   return (
-    <Card className="border-frost/30 bg-frost/5 fade-in">
+    <Card className="border-agc-gold/30 bg-agc-gold/5 fade-in">
       <CardContent className="pt-6">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h3 className="font-display text-lg font-bold text-frost">
+            <h3 className="font-display text-lg font-bold text-agc-gold">
               実行中のジョブ: {run.jobName}
             </h3>
             <p className="text-sm font-light text-muted-foreground">
@@ -54,7 +54,7 @@ export function RunProgressDisplay({ run, onPause, onResume, onStop }: RunProgre
               variant="outline"
               size="sm"
               onClick={() => onStop(run.id)}
-              className="hover:border-aurora-red/50 hover:text-aurora-red"
+              className="hover:border-status-error/50 hover:text-status-error"
             >
               <Square className="h-4 w-4 mr-2" />
               停止

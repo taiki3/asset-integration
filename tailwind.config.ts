@@ -43,15 +43,21 @@ export default {
         border: 'hsl(var(--border))',
         input: 'hsl(var(--input))',
         ring: 'hsl(var(--ring))',
-        // Aurora Colors
-        aurora: {
-          red: 'hsl(var(--aurora-red))',
-          orange: 'hsl(var(--aurora-orange))',
-          yellow: 'hsl(var(--aurora-yellow))',
-          green: 'hsl(var(--aurora-green))',
-          purple: 'hsl(var(--aurora-purple))',
+        // AGC Brand Colors
+        agc: {
+          navy: 'hsl(var(--agc-navy))',
+          gold: 'hsl(var(--agc-gold))',
+          orange: 'hsl(var(--agc-orange))',
+          amber: 'hsl(var(--agc-amber))',
+          light: 'hsl(var(--agc-light))',
         },
-        frost: 'hsl(var(--frost))',
+        // Status Colors
+        status: {
+          success: 'hsl(var(--status-success))',
+          warning: 'hsl(var(--status-warning))',
+          error: 'hsl(var(--status-error))',
+          info: 'hsl(var(--status-info))',
+        },
       },
       borderRadius: {
         lg: 'var(--radius)',
@@ -101,15 +107,15 @@ export default {
           to: { opacity: '1', transform: 'scale(1)' },
         },
         glowPulse: {
-          '0%, 100%': { boxShadow: '0 0 20px hsl(var(--frost) / 0.3)' },
-          '50%': { boxShadow: '0 0 40px hsl(var(--frost) / 0.5)' },
+          '0%, 100%': { boxShadow: '0 0 20px hsl(var(--agc-gold) / 0.3)' },
+          '50%': { boxShadow: '0 0 40px hsl(var(--agc-gold) / 0.5)' },
         },
       },
       boxShadow: {
-        'glow': '0 0 20px hsl(var(--frost) / 0.3)',
-        'glow-lg': '0 0 40px hsl(var(--frost) / 0.5)',
+        'glow': '0 0 20px hsl(var(--agc-gold) / 0.3)',
+        'glow-lg': '0 0 40px hsl(var(--agc-gold) / 0.5)',
         'card': '0 4px 20px -4px hsl(var(--foreground) / 0.1)',
-        'card-hover': '0 10px 40px -10px hsl(var(--frost) / 0.3)',
+        'card-hover': '0 10px 40px -10px hsl(var(--agc-gold) / 0.3)',
       },
       backdropBlur: {
         xs: '2px',

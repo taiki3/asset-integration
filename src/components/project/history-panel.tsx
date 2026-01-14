@@ -77,7 +77,7 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, 
     <Card className="h-full flex flex-col">
       <CardHeader>
         <CardTitle className="flex items-center gap-2 font-display">
-          <History className="h-5 w-5 text-frost" />
+          <History className="h-5 w-5 text-agc-gold" />
           実行履歴
         </CardTitle>
       </CardHeader>
@@ -96,7 +96,7 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, 
                 return (
                   <div
                     key={run.id}
-                    className="p-3 rounded-lg border border-border/50 cursor-pointer hover:bg-accent/10 hover:border-frost/30 transition-all"
+                    className="p-3 rounded-lg border border-border/50 cursor-pointer hover:bg-accent/10 hover:border-agc-gold/30 transition-all"
                     onClick={() => handleRunClick(run)}
                   >
                     <div className="flex items-center justify-between">
@@ -265,8 +265,8 @@ export function HistoryPanel({ runs, resources, onDownloadTSV, onDownloadExcel, 
                     <div className="space-y-4">
                       {selectedRun.errorMessage && (
                         <div>
-                          <p className="text-sm font-medium text-aurora-red">エラー</p>
-                          <pre className="mt-2 p-3 bg-aurora-red/10 rounded-lg text-xs overflow-x-auto text-aurora-red font-mono">
+                          <p className="text-sm font-medium text-status-error">エラー</p>
+                          <pre className="mt-2 p-3 bg-status-error/10 rounded-lg text-xs overflow-x-auto text-status-error font-mono">
                             {selectedRun.errorMessage}
                           </pre>
                         </div>

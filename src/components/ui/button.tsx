@@ -11,9 +11,9 @@ const buttonVariants = cva(
         default:
           'bg-primary text-primary-foreground hover:bg-primary/90 hover:shadow-glow',
         destructive:
-          'bg-aurora-red text-white hover:bg-aurora-red/90',
+          'bg-status-error text-white hover:bg-status-error/90',
         outline:
-          'border border-border/50 bg-background/50 backdrop-blur-sm hover:bg-accent/10 hover:border-frost/50',
+          'border border-border/50 bg-background/50 backdrop-blur-sm hover:bg-accent/10 hover:border-agc-gold/50',
         secondary:
           'bg-secondary text-secondary-foreground hover:bg-secondary/80',
         ghost:
@@ -21,9 +21,9 @@ const buttonVariants = cva(
         link:
           'text-primary underline-offset-4 hover:underline',
         frost:
-          'bg-frost text-frost-foreground hover:bg-frost/90 hover:shadow-glow',
+          'bg-agc-gold text-agc-navy hover:bg-agc-gold/90 hover:shadow-glow',
         success:
-          'bg-aurora-green text-white hover:bg-aurora-green/90',
+          'bg-status-success text-white hover:bg-status-success/90',
       },
       size: {
         default: 'h-10 px-4 py-2',

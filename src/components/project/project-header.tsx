@@ -36,7 +36,7 @@ export function ProjectHeader({ project }: ProjectHeaderProps) {
         <Button
           variant="ghost"
           size="icon"
-          className="rounded-lg hover:bg-aurora-red/10 hover:text-aurora-red"
+          className="rounded-lg hover:bg-status-error/10 hover:text-status-error"
         >
           <Trash2 className="h-4 w-4" />
         </Button>

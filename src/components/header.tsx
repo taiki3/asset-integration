@@ -62,8 +62,8 @@ export function Header({ user }: HeaderProps) {
               onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
               className="relative h-9 w-9 rounded-md hover:bg-accent/10 transition-colors"
             >
-              <Sun className="h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0 text-aurora-yellow" />
-              <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100 text-frost" />
+              <Sun className="h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0 text-agc-gold" />
+              <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100 text-agc-gold" />
               <span className="sr-only">テーマを切り替え</span>
             </Button>
 
@@ -83,7 +83,7 @@ export function Header({ user }: HeaderProps) {
               variant="ghost"
               size="icon"
               onClick={handleLogout}
-              className="h-9 w-9 rounded-md hover:bg-aurora-red/10 hover:text-aurora-red transition-colors"
+              className="h-9 w-9 rounded-md hover:bg-status-error/10 hover:text-status-error transition-colors"
             >
               <LogOut className="h-4 w-4" />
               <span className="sr-only">ログアウト</span>
