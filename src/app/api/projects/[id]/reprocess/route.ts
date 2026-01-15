@@ -4,7 +4,7 @@ import { getUser } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { projects, resources, runs } from '@/lib/db/schema';
 import { eq, and, isNull } from 'drizzle-orm';
-import { getBaseUrl } from '@/lib/utils/get-base-url';
+import { getBaseUrl, getInternalApiHeaders } from '@/lib/utils/get-base-url';
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -122,10 +122,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
           console.log(`[Reprocess] Triggering pipeline for run ${run.id}`);
           const response = await fetch(`${baseUrl}/api/runs/${run.id}/process`, {
             method: 'POST',
-            headers: {
-              'x-cron-secret': cronSecret,
-              'Content-Type': 'application/json',
-            },
+            headers: getInternalApiHeaders(cronSecret),
           });
 
           if (!response.ok) {

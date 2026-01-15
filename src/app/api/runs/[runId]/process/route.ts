@@ -14,7 +14,7 @@ import { after } from 'next/server';
 import { executeNextStep } from '@/lib/asip/step-executor';
 import { createDatabaseAdapter } from '@/lib/asip/db-adapter';
 import { createAIAdapter } from '@/lib/asip/ai-adapter';
-import { getBaseUrl } from '@/lib/utils/get-base-url';
+import { getBaseUrl, getInternalApiHeaders } from '@/lib/utils/get-base-url';
 
 interface RouteContext {
   params: Promise<{ runId: string }>;
@@ -82,10 +82,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
           console.log(`[Process] Scheduling next step for run ${runId}`);
           await fetch(`${baseUrl}/api/runs/${runId}/process`, {
             method: 'POST',
-            headers: {
-              'x-cron-secret': expectedSecret,
-              'Content-Type': 'application/json',
-            },
+            headers: getInternalApiHeaders(expectedSecret),
           });
         } catch (error) {
           console.error(`[Process] Failed to schedule next step for run ${runId}:`, error);

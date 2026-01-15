@@ -6,7 +6,7 @@ import { projects, resources, runs } from '@/lib/db/schema';
 import { eq, and, isNull, desc } from 'drizzle-orm';
 import { createMockRun, getMockRuns } from '@/lib/api-mock';
 import { mockProjects } from '@/lib/db/mock';
-import { getBaseUrl } from '@/lib/utils/get-base-url';
+import { getBaseUrl, getInternalApiHeaders } from '@/lib/utils/get-base-url';
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -212,10 +212,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
           console.log(`[Runs] Calling: ${targetUrl}`);
           const response = await fetch(`${baseUrl}/api/runs/${run.id}/process`, {
             method: 'POST',
-            headers: {
-              'x-cron-secret': cronSecret,
-              'Content-Type': 'application/json',
-            },
+            headers: getInternalApiHeaders(cronSecret),
           });
 
           if (!response.ok) {
