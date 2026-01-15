@@ -203,10 +203,13 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const baseUrl = getBaseUrl();
     const cronSecret = process.env.CRON_SECRET;
 
+    console.log(`[Runs] About to trigger pipeline - baseUrl: ${baseUrl}, CRON_SECRET set: ${!!cronSecret}, length: ${cronSecret?.length || 0}`);
+
     if (cronSecret) {
       after(async () => {
         try {
-          console.log(`[Runs] Triggering pipeline for run ${run.id}, baseUrl: ${baseUrl}, secret length: ${cronSecret.length}`);
+          const targetUrl = `${baseUrl}/api/runs/${run.id}/process`;
+          console.log(`[Runs] Calling: ${targetUrl}`);
           const response = await fetch(`${baseUrl}/api/runs/${run.id}/process`, {
             method: 'POST',
             headers: {
