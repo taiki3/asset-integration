@@ -62,6 +62,15 @@ VALUES
 -- Reset sequence
 SELECT setval('hypotheses_id_seq', 10);
 
+-- Insert test prompt versions
+INSERT INTO prompt_versions (id, step_number, version, content, is_active, created_at)
+VALUES
+  (1, 21, 1, 'Test prompt for Step 2-1 version 1', false, NOW() - INTERVAL '2 days'),
+  (2, 21, 2, 'Test prompt for Step 2-1 version 2 - active', true, NOW() - INTERVAL '1 day');
+
+-- Reset sequence
+SELECT setval('prompt_versions_id_seq', 10);
+
 -- Grant all privileges to postgres user for E2E testing
 GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO postgres;
 GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO postgres;

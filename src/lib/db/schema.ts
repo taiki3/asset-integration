@@ -120,6 +120,7 @@ export const runs = pgTable('runs', {
   errorMessage: text('error_message'),
 
   createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
   completedAt: timestamp('completed_at'),
 });
 

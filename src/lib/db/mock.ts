@@ -37,6 +37,7 @@ export const mockRuns = [
     geminiInteractions: [],
     completedAt: new Date('2025-12-20T10:05:00'),
     createdAt: new Date('2025-12-20T10:00:00'),
+    updatedAt: new Date('2025-12-20T10:05:00'),
     errorMessage: null,
     // Legacy step outputs (for backward compatibility)
     step1Output: '市場分析完了',

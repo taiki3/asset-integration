@@ -14,7 +14,7 @@ import {
   buildHypothesisContext,
   ParsedHypothesis,
 } from './utils';
-import { formatPrompt, STEP3_PROMPT, STEP4_PROMPT, STEP5_PROMPT, buildInstructionDocument } from './prompts';
+import { formatPrompt, STEP3_PROMPT, STEP4_PROMPT, STEP5_PROMPT, buildInstructionDocument, ExistingHypothesis } from './prompts';
 
 /**
  * Run status type
@@ -38,6 +38,15 @@ export interface ProgressInfo {
 }
 
 /**
+ * Existing hypothesis filter configuration
+ */
+export interface ExistingHypothesisFilter {
+  enabled: boolean;
+  targetSpecIds?: number[];
+  technicalAssetsIds?: number[];
+}
+
+/**
  * Run data structure
  */
 export interface RunData {
@@ -47,6 +56,10 @@ export interface RunData {
   jobName?: string | null;
   targetSpecId?: number | null;
   technicalAssetsId?: number | null;
+  progressInfo?: {
+    existingFilter?: ExistingHypothesisFilter;
+    [key: string]: unknown;
+  } | null;
 }
 
 /**
@@ -86,6 +99,7 @@ export interface DatabaseOperations {
     step2_1Output: string;
     completedAt: Date;
     progressInfo: ProgressInfo;
+    updatedAt: Date;
   }>): Promise<void>;
   createHypothesis(data: {
     uuid: string;
@@ -107,6 +121,10 @@ export interface DatabaseOperations {
     step5Output: string;
     errorMessage: string;
   }>): Promise<void>;
+  getExistingHypotheses?(
+    projectId: number,
+    filter: { targetSpecIds?: number[]; technicalAssetsIds?: number[] }
+  ): Promise<Array<{ title: string; summary: string }>>;
 }
 
 /**
@@ -360,10 +378,23 @@ export async function runPipeline(
       progressInfo: { message: 'Step 2-1: Deep Research で仮説生成を開始しています...', phase: 'step2_1' },
     });
 
+    // ===== Check for existing hypothesis filter =====
+    let existingHypotheses: ExistingHypothesis[] = [];
+    const existingFilter = run.progressInfo?.existingFilter;
+
+    if (existingFilter?.enabled && db.getExistingHypotheses) {
+      logger.log(`Querying existing hypotheses with filter: ${JSON.stringify(existingFilter)}`);
+      existingHypotheses = await db.getExistingHypotheses(run.projectId, {
+        targetSpecIds: existingFilter.targetSpecIds,
+        technicalAssetsIds: existingFilter.technicalAssetsIds,
+      });
+      logger.log(`Found ${existingHypotheses.length} existing hypotheses to exclude`);
+    }
+
     // ===== STEP 2-1: Generate Hypotheses using Deep Research =====
     logger.log(`Step 2-1: Starting Deep Research for hypothesis generation`);
 
-    const instructions = buildInstructionDocument(run.hypothesisCount, false);
+    const instructions = buildInstructionDocument(run.hypothesisCount, false, existingHypotheses);
 
     let step2_1Output: string;
     try {

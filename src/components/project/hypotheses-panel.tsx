@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Lightbulb, ChevronDown, ChevronRight, FileText, Trash2, Download, AlertCircle, CheckCircle2, Clock, Loader2 } from 'lucide-react';
+import { Lightbulb, ChevronDown, ChevronRight, FileText, Trash2, Download, AlertCircle, CheckCircle2, Clock, Loader2, Upload } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -17,6 +17,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { CsvImportModal } from './csv-import-modal';
 import type { Hypothesis, Resource } from '@/lib/db/schema';
 
 interface HypothesesPanelProps {
@@ -25,6 +26,7 @@ interface HypothesesPanelProps {
   projectId: number;
   onDelete: (hypothesisId: number) => void;
   onDownloadWord: (runId: number, hypothesisIndex: number) => void;
+  onImport: (rows: Record<string, string>[], columnMapping: Record<string, string>) => Promise<void>;
 }
 
 const statusConfig: Record<string, { label: string; icon: typeof Clock; color: string }> = {
@@ -37,10 +39,11 @@ const statusConfig: Record<string, { label: string; icon: typeof Clock; color: s
   error: { label: 'エラー', icon: AlertCircle, color: 'text-red-600' },
 };
 
-export function HypothesesPanel({ hypotheses, resources, projectId, onDelete, onDownloadWord }: HypothesesPanelProps) {
+export function HypothesesPanel({ hypotheses, resources, projectId, onDelete, onDownloadWord, onImport }: HypothesesPanelProps) {
   const [expandedGroups, setExpandedGroups] = useState<Set<number>>(new Set());
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [hypothesisToDelete, setHypothesisToDelete] = useState<Hypothesis | null>(null);
+  const [importModalOpen, setImportModalOpen] = useState(false);
 
   // Group hypotheses by runId
   const hypothesesByRun = hypotheses.reduce((acc, hypothesis) => {
@@ -90,10 +93,21 @@ export function HypothesesPanel({ hypotheses, resources, projectId, onDelete, on
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Lightbulb className="h-5 w-5" />
-          生成された仮説
-        </CardTitle>
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2">
+            <Lightbulb className="h-5 w-5" />
+            生成された仮説
+          </CardTitle>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setImportModalOpen(true)}
+            data-testid="button-open-csv-import"
+          >
+            <Upload className="h-4 w-4 mr-2" />
+            インポート
+          </Button>
+        </div>
       </CardHeader>
       <CardContent>
         <ScrollArea className="h-[400px]">
@@ -215,6 +229,13 @@ export function HypothesesPanel({ hypotheses, resources, projectId, onDelete, on
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* CSV Import Modal */}
+      <CsvImportModal
+        open={importModalOpen}
+        onClose={() => setImportModalOpen(false)}
+        onImport={onImport}
+      />
     </Card>
   );
 }

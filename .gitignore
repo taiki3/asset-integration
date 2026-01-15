@@ -13,6 +13,7 @@ build/
 # Environment
 .env
 .env.local
+.env.remote
 .env.development.local
 .env.test.local
 .env.production.local
@@ -49,3 +50,6 @@ playwright/.cache/
 *.pem
 *.log
 *.tar.gz
+
+# Temporary files
+*.zip

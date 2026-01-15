@@ -77,7 +77,7 @@ export default function LoginPage() {
           <div className="space-y-6">
             <Button
               variant="outline"
-              className="w-full h-12 font-medium transition-all hover:shadow-glow hover:border-frost"
+              className="w-full h-12 font-medium transition-all hover:shadow-glow hover:border-agc-gold"
               onClick={handleGoogleLogin}
             >
               <svg className="mr-3 h-5 w-5" viewBox="0 0 24 24">
@@ -124,7 +124,7 @@ export default function LoginPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
-                  className="h-12 bg-background/50 backdrop-blur-sm border-border/50 focus:border-frost transition-colors"
+                  className="h-12 bg-background/50 backdrop-blur-sm border-border/50 focus:border-agc-gold transition-colors"
                 />
               </div>
 

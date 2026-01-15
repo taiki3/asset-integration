@@ -13,27 +13,27 @@ const badgeVariants = cva(
         secondary:
           "border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80",
         destructive:
-          "border-transparent bg-aurora-red/20 text-aurora-red hover:bg-aurora-red/30",
+          "border-transparent bg-status-error/20 text-status-error hover:bg-status-error/30",
         outline: "text-foreground border-border/50",
-        // Aurora color variants for status
+        // AGC color variants for status
         frost:
-          "border-transparent bg-frost/20 text-frost hover:bg-frost/30",
+          "border-transparent bg-agc-gold/20 text-agc-gold hover:bg-agc-gold/30",
         success:
-          "border-transparent bg-aurora-green/20 text-aurora-green hover:bg-aurora-green/30",
+          "border-transparent bg-status-success/20 text-status-success hover:bg-status-success/30",
         warning:
-          "border-transparent bg-aurora-yellow/20 text-aurora-yellow hover:bg-aurora-yellow/30",
+          "border-transparent bg-status-warning/20 text-status-warning hover:bg-status-warning/30",
         info:
-          "border-transparent bg-aurora-purple/20 text-aurora-purple hover:bg-aurora-purple/30",
+          "border-transparent bg-status-info/20 text-status-info hover:bg-status-info/30",
         pending:
           "border-transparent bg-muted text-muted-foreground",
         running:
-          "border-transparent bg-frost/20 text-frost animate-pulse",
+          "border-transparent bg-agc-gold/20 text-agc-gold animate-pulse",
         completed:
-          "border-transparent bg-aurora-green/20 text-aurora-green",
+          "border-transparent bg-status-success/20 text-status-success",
         error:
-          "border-transparent bg-aurora-red/20 text-aurora-red",
+          "border-transparent bg-status-error/20 text-status-error",
         paused:
-          "border-transparent bg-aurora-yellow/20 text-aurora-yellow",
+          "border-transparent bg-status-warning/20 text-status-warning",
       },
     },
     defaultVariants: {
