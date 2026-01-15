@@ -14,6 +14,7 @@ import { after } from 'next/server';
 import { executeNextStep } from '@/lib/asip/step-executor';
 import { createDatabaseAdapter } from '@/lib/asip/db-adapter';
 import { createAIAdapter } from '@/lib/asip/ai-adapter';
+import { getBaseUrl } from '@/lib/utils/get-base-url';
 
 interface RouteContext {
   params: Promise<{ runId: string }>;
@@ -58,7 +59,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     // If there are more steps, schedule the next one
     if (result.hasMore) {
-      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+      const baseUrl = getBaseUrl();
 
       after(async () => {
         try {

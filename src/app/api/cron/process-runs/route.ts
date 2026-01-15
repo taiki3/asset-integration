@@ -14,6 +14,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { runs } from '@/lib/db/schema';
 import { and, eq, lt, or } from 'drizzle-orm';
+import { getBaseUrl } from '@/lib/utils/get-base-url';
 
 // GET /api/cron/process-runs - Find and resume stuck runs
 export async function GET(request: NextRequest) {
@@ -25,7 +26,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+  const baseUrl = getBaseUrl();
   const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
 
   try {
