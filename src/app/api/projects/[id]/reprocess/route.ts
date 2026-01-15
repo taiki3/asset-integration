@@ -4,6 +4,7 @@ import { getUser } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { projects, resources, runs } from '@/lib/db/schema';
 import { eq, and, isNull } from 'drizzle-orm';
+import { getBaseUrl } from '@/lib/utils/get-base-url';
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -112,7 +113,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     // Start the reprocess pipeline via process endpoint
     // Note: Reprocess mode is detected via progressInfo.mode === 'reprocess'
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+    const baseUrl = getBaseUrl();
     const cronSecret = process.env.CRON_SECRET;
 
     if (cronSecret) {

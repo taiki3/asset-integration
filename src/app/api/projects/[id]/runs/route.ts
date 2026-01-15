@@ -6,6 +6,7 @@ import { projects, resources, runs } from '@/lib/db/schema';
 import { eq, and, isNull, desc } from 'drizzle-orm';
 import { createMockRun, getMockRuns } from '@/lib/api-mock';
 import { mockProjects } from '@/lib/db/mock';
+import { getBaseUrl } from '@/lib/utils/get-base-url';
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -199,7 +200,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       .returning();
 
     // Start the pipeline via process endpoint (self-chaining)
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+    const baseUrl = getBaseUrl();
     const cronSecret = process.env.CRON_SECRET;
 
     if (cronSecret) {
