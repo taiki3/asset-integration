@@ -99,6 +99,7 @@ export interface DatabaseOperations {
     step2_1Output: string;
     completedAt: Date;
     progressInfo: ProgressInfo;
+    updatedAt: Date;
   }>): Promise<void>;
   createHypothesis(data: {
     uuid: string;

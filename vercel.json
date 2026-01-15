@@ -8,6 +8,18 @@
   "functions": {
     "app/api/projects/[id]/runs/route.ts": {
       "maxDuration": 30
+    },
+    "app/api/runs/[runId]/process/route.ts": {
+      "maxDuration": 60
+    },
+    "app/api/cron/process-runs/route.ts": {
+      "maxDuration": 30
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/cron/process-runs",
+      "schedule": "*/5 * * * *"
+    }
+  ]
 }

@@ -1,0 +1,571 @@
+/**
+ * Step Executor - Executes pipeline steps one at a time
+ *
+ * This module enables serverless-friendly pipeline execution by:
+ * 1. Executing one step at a time
+ * 2. Allowing self-chaining via after() for continuous execution
+ * 3. Supporting cron-based recovery for stuck runs
+ */
+
+import {
+  DatabaseOperations,
+  AIOperations,
+  RunData,
+  HypothesisData,
+  HypothesisProcessingStatus,
+} from './pipeline-core';
+import {
+  generateUUID,
+  parseHypothesesFromOutput,
+  extractJsonFromResponse,
+  isHypothesesResponse,
+  validateAndCleanHypotheses,
+  buildHypothesisContext,
+} from './utils';
+import { formatPrompt, STEP3_PROMPT, STEP4_PROMPT, STEP5_PROMPT, buildInstructionDocument, ExistingHypothesis } from './prompts';
+
+/**
+ * Pipeline execution phases
+ */
+export type PipelinePhase =
+  | 'pending'
+  | 'step2_1'
+  | 'step2_1_5'
+  | 'step2_2'
+  | 'evaluation'
+  | 'completed'
+  | 'error';
+
+/**
+ * Extended DatabaseOperations with getHypothesesForRun
+ */
+export interface ExtendedDatabaseOperations extends DatabaseOperations {
+  getHypothesesForRun(runId: number): Promise<HypothesisData[]>;
+}
+
+/**
+ * Step executor dependencies
+ */
+export interface StepExecutorDependencies {
+  db: ExtendedDatabaseOperations;
+  ai: AIOperations;
+  logger?: {
+    log: (message: string) => void;
+    error: (message: string, error?: unknown) => void;
+    warn: (message: string) => void;
+  };
+}
+
+/**
+ * Extended run data with status fields
+ */
+interface ExtendedRunData extends RunData {
+  status: string;
+  currentStep?: number;
+  step2_1Output?: string | null;
+  updatedAt?: Date;
+}
+
+/**
+ * Step execution result
+ */
+export interface StepExecutionResult {
+  phase: PipelinePhase;
+  hasMore: boolean;
+  error?: string;
+}
+
+const defaultLogger = {
+  log: (message: string) => console.log(`[StepExecutor] ${message}`),
+  error: (message: string, error?: unknown) => console.error(`[StepExecutor] ${message}`, error),
+  warn: (message: string) => console.warn(`[StepExecutor] ${message}`),
+};
+
+/**
+ * Determine the next phase to execute based on current state
+ */
+export function getNextPhase(
+  status: string,
+  currentStep: number,
+  hypotheses: HypothesisData[]
+): PipelinePhase | null {
+  // Terminal states
+  if (status === 'completed') return null;
+  if (status === 'error') return null;
+  if (status === 'cancelled') return null;
+
+  // Pending -> Start step 2-1
+  if (status === 'pending') {
+    return 'step2_1';
+  }
+
+  // Running states
+  if (status === 'running') {
+    // Step 2-1 complete, need to structure hypotheses
+    if (currentStep === 1 && hypotheses.length === 0) {
+      return 'step2_1_5';
+    }
+
+    // Check if any hypotheses need step 2-2
+    const needsStep2_2 = hypotheses.some(
+      (h) => h.processingStatus === 'pending'
+    );
+    if (needsStep2_2) {
+      return 'step2_2';
+    }
+
+    // Check if any hypotheses need evaluation (steps 3-5)
+    const needsEvaluation = hypotheses.some(
+      (h) => h.processingStatus === 'step2_2' && h.step2_2Output
+    );
+    if (needsEvaluation) {
+      return 'evaluation';
+    }
+
+    // Check if all hypotheses are completed
+    const allCompleted = hypotheses.length > 0 && hypotheses.every(
+      (h) => h.processingStatus === 'completed' || h.processingStatus === 'error'
+    );
+    if (allCompleted) {
+      return 'completed';
+    }
+
+    // If currentStep suggests we should be in step2_2 or later
+    if (currentStep >= 2 && hypotheses.length > 0) {
+      // Find next hypothesis to process
+      const pendingHypothesis = hypotheses.find(h => h.processingStatus === 'pending');
+      if (pendingHypothesis) return 'step2_2';
+
+      const step2_2Done = hypotheses.find(h => h.processingStatus === 'step2_2' && h.step2_2Output);
+      if (step2_2Done) return 'evaluation';
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Execute step 2-1: Generate hypotheses using Deep Research
+ */
+async function executeStep2_1(
+  deps: StepExecutorDependencies,
+  run: ExtendedRunData,
+  targetSpecContent: string,
+  technicalAssetsContent: string
+): Promise<void> {
+  const { db, ai, logger = defaultLogger } = deps;
+
+  logger.log(`Step 2-1: Starting Deep Research for run ${run.id}`);
+
+  // Update status to running
+  await db.updateRunStatus(run.id, {
+    status: 'running',
+    currentStep: 1,
+    progressInfo: { message: 'Step 2-1: Deep Research で仮説生成中...', phase: 'step2_1' },
+    updatedAt: new Date(),
+  });
+
+  // Check for existing hypothesis filter
+  let existingHypotheses: ExistingHypothesis[] = [];
+  const existingFilter = run.progressInfo?.existingFilter;
+
+  if (existingFilter?.enabled && db.getExistingHypotheses) {
+    logger.log(`Querying existing hypotheses with filter`);
+    existingHypotheses = await db.getExistingHypotheses(run.projectId, {
+      targetSpecIds: existingFilter.targetSpecIds,
+      technicalAssetsIds: existingFilter.technicalAssetsIds,
+    });
+    logger.log(`Found ${existingHypotheses.length} existing hypotheses to exclude`);
+  }
+
+  const instructions = buildInstructionDocument(run.hypothesisCount, false, existingHypotheses);
+
+  const step2_1Output = await ai.executeDeepResearch({
+    prompt: 'task_instructionsの指示に従い、事業仮説を生成してください。',
+    files: [
+      { name: 'target_specification', content: targetSpecContent },
+      { name: 'technical_assets', content: technicalAssetsContent },
+      { name: 'task_instructions', content: instructions },
+    ],
+    storeName: `asip-run-${run.id}-step2_1`,
+    onProgress: async (phase, detail) => {
+      logger.log(`Step 2-1 progress: ${phase} - ${detail}`);
+      await db.updateRunStatus(run.id, {
+        progressInfo: { message: `Step 2-1: ${detail}`, phase: 'step2_1', detail: phase },
+        updatedAt: new Date(),
+      });
+    },
+  });
+
+  logger.log(`Step 2-1 completed. Output length: ${step2_1Output.length}`);
+
+  await db.updateRunStatus(run.id, {
+    currentStep: 1,
+    step2_1Output: step2_1Output,
+    progressInfo: { message: 'Step 2-1 完了', phase: 'step2_1' },
+    updatedAt: new Date(),
+  });
+}
+
+/**
+ * Execute step 2-1.5: Structure hypotheses using AI
+ */
+async function executeStep2_1_5(
+  deps: StepExecutorDependencies,
+  run: ExtendedRunData
+): Promise<void> {
+  const { db, ai, logger = defaultLogger } = deps;
+
+  logger.log(`Step 2-1.5: Structuring hypotheses for run ${run.id}`);
+
+  await db.updateRunStatus(run.id, {
+    progressInfo: { message: 'Step 2-1.5: AIで仮説を構造化しています...', phase: 'step2_1_5' },
+    updatedAt: new Date(),
+  });
+
+  const step2_1Output = run.step2_1Output || '';
+
+  // Structure hypotheses using AI
+  const structuringPrompt = `以下のDeep Researchレポートから、最も有望な事業仮説を${run.hypothesisCount}件抽出し、JSON形式で出力してください。
+
+=== Deep Research レポート ===
+${step2_1Output.slice(0, 50000)}
+
+=== 出力形式 ===
+以下のJSON形式で出力してください。JSONのみを出力し、他のテキストは含めないでください。
+
+{
+  "hypotheses": [
+    {
+      "title": "仮説のタイトル（50文字以内）",
+      "summary": "仮説の概要説明（500文字程度）"
+    }
+  ]
+}
+
+=== 重要な条件 ===
+1. 必ず${run.hypothesisCount}件の仮説を抽出すること
+2. タイトルは具体的で分かりやすいものにすること
+3. 概要には市場機会、技術の活用方法を含めること
+4. 重複や類似した仮説は統合すること`;
+
+  let parsedHypotheses: Array<{ title: string; summary: string }> = [];
+
+  try {
+    const response = await ai.generateContent({ prompt: structuringPrompt });
+    const parsed = extractJsonFromResponse(response, isHypothesesResponse);
+
+    if (parsed) {
+      parsedHypotheses = validateAndCleanHypotheses(parsed.hypotheses);
+    }
+  } catch (error) {
+    logger.warn(`AI structuring failed: ${error}`);
+  }
+
+  // Fallback to legacy parsing
+  if (parsedHypotheses.length === 0) {
+    parsedHypotheses = parseHypothesesFromOutput(step2_1Output);
+  }
+
+  // Last resort: create one from entire output
+  if (parsedHypotheses.length === 0) {
+    parsedHypotheses = [{
+      title: run.jobName || '生成された仮説',
+      summary: step2_1Output.slice(0, 2000),
+    }];
+  }
+
+  logger.log(`Structured ${parsedHypotheses.length} hypotheses`);
+
+  // Create hypothesis records
+  for (let i = 0; i < parsedHypotheses.length; i++) {
+    const h = parsedHypotheses[i];
+    const uuid = generateUUID();
+
+    await db.createHypothesis({
+      uuid,
+      projectId: run.projectId,
+      runId: run.id,
+      hypothesisNumber: i + 1,
+      indexInRun: i,
+      displayTitle: h.title,
+      step2_1Summary: h.summary,
+      processingStatus: 'pending',
+      fullData: { raw: h },
+    });
+
+    logger.log(`Created hypothesis ${i + 1}: ${h.title}`);
+  }
+
+  await db.updateRunStatus(run.id, {
+    currentStep: 2,
+    progressInfo: {
+      message: `Step 2-1.5 完了: ${parsedHypotheses.length}件の仮説を作成`,
+      phase: 'step2_1_5',
+      totalHypotheses: parsedHypotheses.length,
+    },
+    updatedAt: new Date(),
+  });
+}
+
+/**
+ * Execute step 2-2: Deep Research for a single hypothesis
+ */
+async function executeStep2_2ForOne(
+  deps: StepExecutorDependencies,
+  run: ExtendedRunData,
+  hypothesis: HypothesisData,
+  targetSpecContent: string,
+  technicalAssetsContent: string
+): Promise<void> {
+  const { db, ai, logger = defaultLogger } = deps;
+
+  logger.log(`Step 2-2 for hypothesis ${hypothesis.uuid}`);
+
+  await db.updateHypothesis(hypothesis.uuid, { processingStatus: 'step2_2' });
+
+  const hypothesisContext = `
+=== 仮説情報 ===
+タイトル: ${hypothesis.displayTitle || ''}
+UUID: ${hypothesis.uuid}
+仮説番号: ${hypothesis.hypothesisNumber}
+
+=== 仮説概要 (Step 2-1より) ===
+${hypothesis.step2_1Summary || ''}
+`;
+
+  const taskInstructions = `この仮説について詳細な調査を行い、以下の観点から深掘りしたレポートを作成してください：
+
+1. 市場機会の詳細分析
+2. 技術的実現可能性
+3. ビジネスモデル詳細
+4. 競合優位性の深掘り
+
+調査結果は具体的なデータや事例を含めて記述してください。`;
+
+  const step2_2Output = await ai.executeDeepResearch({
+    prompt: `hypothesis_contextの仮説について、task_instructionsの指示に従って詳細な調査レポートを作成してください。`,
+    files: [
+      { name: 'target_specification', content: targetSpecContent },
+      { name: 'technical_assets', content: technicalAssetsContent },
+      { name: 'hypothesis_context', content: hypothesisContext },
+      { name: 'task_instructions', content: taskInstructions },
+    ],
+    storeName: `asip-${run.id}-${hypothesis.uuid.slice(0, 8)}`,
+    onProgress: (phase, detail) => {
+      logger.log(`Step 2-2 [${hypothesis.hypothesisNumber}] ${phase}: ${detail}`);
+    },
+  });
+
+  await db.updateHypothesis(hypothesis.uuid, { step2_2Output });
+
+  await db.updateRunStatus(run.id, {
+    progressInfo: {
+      message: `Step 2-2: 仮説 ${hypothesis.hypothesisNumber} の調査完了`,
+      phase: 'step2_2',
+    },
+    updatedAt: new Date(),
+  });
+
+  logger.log(`Step 2-2 completed for hypothesis ${hypothesis.uuid}`);
+}
+
+/**
+ * Execute steps 3-5: Evaluation for a single hypothesis
+ */
+async function executeEvaluationForOne(
+  deps: StepExecutorDependencies,
+  run: ExtendedRunData,
+  hypothesis: HypothesisData,
+  targetSpecContent: string,
+  technicalAssetsContent: string
+): Promise<void> {
+  const { db, ai, logger = defaultLogger } = deps;
+
+  logger.log(`Steps 3-5 for hypothesis ${hypothesis.uuid}`);
+
+  const context = buildHypothesisContext({
+    displayTitle: hypothesis.displayTitle,
+    uuid: hypothesis.uuid,
+    step2_1Summary: hypothesis.step2_1Summary,
+    step2_2Output: hypothesis.step2_2Output,
+    targetSpecContent,
+    technicalAssetsContent,
+  });
+
+  // Step 3: Technical Evaluation
+  logger.log(`Step 3 for hypothesis ${hypothesis.uuid}`);
+  await db.updateHypothesis(hypothesis.uuid, { processingStatus: 'step3' });
+
+  const step3Prompt = formatPrompt(STEP3_PROMPT, { HYPOTHESIS_COUNT: 1 }) + '\n\n' + context;
+  const step3Output = await ai.generateContent({ prompt: step3Prompt });
+  await db.updateHypothesis(hypothesis.uuid, { step3Output });
+
+  // Step 4: Competitive Analysis
+  logger.log(`Step 4 for hypothesis ${hypothesis.uuid}`);
+  await db.updateHypothesis(hypothesis.uuid, { processingStatus: 'step4' });
+
+  const step4Prompt = formatPrompt(STEP4_PROMPT, { HYPOTHESIS_COUNT: 1 }) + '\n\n' + context +
+    `\n\n=== Step 3 技術評価結果 ===\n${step3Output}`;
+  const step4Output = await ai.generateContent({ prompt: step4Prompt });
+  await db.updateHypothesis(hypothesis.uuid, { step4Output });
+
+  // Step 5: Integration
+  logger.log(`Step 5 for hypothesis ${hypothesis.uuid}`);
+  await db.updateHypothesis(hypothesis.uuid, { processingStatus: 'step5' });
+
+  const step5Prompt = formatPrompt(STEP5_PROMPT, { HYPOTHESIS_COUNT: 1 }) + '\n\n' + context +
+    `\n\n=== Step 3 技術評価 ===\n${step3Output}` +
+    `\n\n=== Step 4 競合分析 ===\n${step4Output}`;
+  const step5Output = await ai.generateContent({ prompt: step5Prompt });
+
+  await db.updateHypothesis(hypothesis.uuid, {
+    step5Output,
+    processingStatus: 'completed',
+  });
+
+  await db.updateRunStatus(run.id, {
+    progressInfo: {
+      message: `Step 3-5: 仮説 ${hypothesis.hypothesisNumber} の評価完了`,
+      phase: 'evaluation',
+    },
+    updatedAt: new Date(),
+  });
+
+  logger.log(`Evaluation completed for hypothesis ${hypothesis.uuid}`);
+}
+
+/**
+ * Execute the next step in the pipeline
+ *
+ * This is the main entry point for step-by-step execution.
+ * Returns whether there are more steps to execute.
+ */
+export async function executeNextStep(
+  deps: StepExecutorDependencies,
+  runId: number
+): Promise<StepExecutionResult> {
+  const { db, logger = defaultLogger } = deps;
+
+  try {
+    // Get run and validate
+    const run = await db.getRun(runId) as ExtendedRunData | null;
+    if (!run) {
+      return { phase: 'error', hasMore: false, error: `Run ${runId} not found` };
+    }
+
+    // Check terminal states
+    if (run.status === 'completed') {
+      return { phase: 'completed', hasMore: false };
+    }
+    if (run.status === 'error') {
+      return { phase: 'error', hasMore: false };
+    }
+    if (run.status === 'cancelled') {
+      return { phase: 'error', hasMore: false };
+    }
+
+    // Get resources
+    const targetSpec = run.targetSpecId
+      ? await db.getResource(run.targetSpecId)
+      : null;
+    const technicalAssets = run.technicalAssetsId
+      ? await db.getResource(run.technicalAssetsId)
+      : null;
+
+    if (!targetSpec || !technicalAssets) {
+      await db.updateRunStatus(runId, {
+        status: 'error',
+        errorMessage: 'リソースが見つかりません',
+        updatedAt: new Date(),
+      });
+      return { phase: 'error', hasMore: false, error: 'リソースが見つかりません' };
+    }
+
+    // Get hypotheses
+    const hypotheses = await db.getHypothesesForRun(runId);
+
+    // Determine next phase
+    const phase = getNextPhase(run.status, run.currentStep || 0, hypotheses);
+
+    if (!phase) {
+      return { phase: 'completed', hasMore: false };
+    }
+
+    logger.log(`Executing phase: ${phase} for run ${runId}`);
+
+    // Execute the appropriate phase
+    switch (phase) {
+      case 'step2_1':
+        await executeStep2_1(deps, run, targetSpec.content, technicalAssets.content);
+        return { phase, hasMore: true };
+
+      case 'step2_1_5':
+        await executeStep2_1_5(deps, run);
+        return { phase, hasMore: true };
+
+      case 'step2_2': {
+        // Find next hypothesis to process
+        const pendingHypothesis = hypotheses.find(h => h.processingStatus === 'pending');
+        if (pendingHypothesis) {
+          await executeStep2_2ForOne(deps, run, pendingHypothesis, targetSpec.content, technicalAssets.content);
+          // After processing, this hypothesis will need evaluation
+          // Check if there are more pending hypotheses to process
+          const remainingPending = hypotheses.filter(h => h.processingStatus === 'pending').length - 1;
+          // hasMore is true because there's either more pending or the just-processed one needs evaluation
+          return { phase, hasMore: true };
+        }
+        return { phase, hasMore: true };
+      }
+
+      case 'evaluation': {
+        // Find next hypothesis ready for evaluation
+        const readyHypothesis = hypotheses.find(
+          h => h.processingStatus === 'step2_2' && h.step2_2Output
+        );
+        if (readyHypothesis) {
+          await executeEvaluationForOne(deps, run, readyHypothesis, targetSpec.content, technicalAssets.content);
+          // Check if there are more
+          const remainingToEvaluate = hypotheses.filter(
+            h => (h.processingStatus === 'step2_2' && h.step2_2Output) ||
+                 h.processingStatus === 'step3' ||
+                 h.processingStatus === 'step4' ||
+                 h.processingStatus === 'step5'
+          ).length - 1;
+          return { phase, hasMore: remainingToEvaluate > 0 };
+        }
+        return { phase, hasMore: false };
+      }
+
+      case 'completed': {
+        await db.updateRunStatus(runId, {
+          status: 'completed',
+          currentStep: 5,
+          completedAt: new Date(),
+          progressInfo: { message: '完了しました', phase: 'completed' },
+          updatedAt: new Date(),
+        });
+        logger.log(`Run ${runId} completed successfully`);
+        return { phase, hasMore: false };
+      }
+
+      default:
+        return { phase: 'error', hasMore: false, error: `Unknown phase: ${phase}` };
+    }
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    logger.error(`Error executing step for run ${runId}:`, error);
+
+    try {
+      await db.updateRunStatus(runId, {
+        status: 'error',
+        errorMessage: errorMessage,
+        updatedAt: new Date(),
+      });
+    } catch (dbError) {
+      logger.error(`Failed to update run status:`, dbError);
+    }
+
+    return { phase: 'error', hasMore: false, error: errorMessage };
+  }
+}

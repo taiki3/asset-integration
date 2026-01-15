@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { after } from 'next/server';
 import { getUser } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { projects, resources, runs } from '@/lib/db/schema';
 import { eq, and, isNull, desc } from 'drizzle-orm';
-import { startSimplePipeline } from '@/lib/asip/simple-pipeline';
 import { createMockRun, getMockRuns } from '@/lib/api-mock';
 import { mockProjects } from '@/lib/db/mock';
 
@@ -198,22 +198,44 @@ export async function POST(request: NextRequest, context: RouteContext) {
       })
       .returning();
 
-    // Start the simplified ASIP pipeline asynchronously
-    startSimplePipeline(run.id).catch(async (error) => {
-      console.error(`Failed to start pipeline for run ${run.id}:`, error);
-      // Update run status to error if pipeline fails to start
-      try {
-        await db
-          .update(runs)
-          .set({
-            status: 'error',
-            errorMessage: `パイプライン起動失敗: ${error instanceof Error ? error.message : 'Unknown error'}`,
-          })
-          .where(eq(runs.id, run.id));
-      } catch (dbError) {
-        console.error(`Failed to update run status:`, dbError);
-      }
-    });
+    // Start the pipeline via process endpoint (self-chaining)
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+    const cronSecret = process.env.CRON_SECRET;
+
+    if (cronSecret) {
+      after(async () => {
+        try {
+          console.log(`[Runs] Triggering pipeline for run ${run.id}`);
+          const response = await fetch(`${baseUrl}/api/runs/${run.id}/process`, {
+            method: 'POST',
+            headers: {
+              'x-cron-secret': cronSecret,
+              'Content-Type': 'application/json',
+            },
+          });
+
+          if (!response.ok) {
+            throw new Error(`Process API returned ${response.status}`);
+          }
+        } catch (error) {
+          console.error(`Failed to start pipeline for run ${run.id}:`, error);
+          // Update run status to error if pipeline fails to start
+          try {
+            await db
+              .update(runs)
+              .set({
+                status: 'error',
+                errorMessage: `パイプライン起動失敗: ${error instanceof Error ? error.message : 'Unknown error'}`,
+              })
+              .where(eq(runs.id, run.id));
+          } catch (dbError) {
+            console.error(`Failed to update run status:`, dbError);
+          }
+        }
+      });
+    } else {
+      console.warn(`[Runs] CRON_SECRET not set, pipeline will not start automatically`);
+    }
 
     return NextResponse.json(run, { status: 201 });
   } catch (error) {

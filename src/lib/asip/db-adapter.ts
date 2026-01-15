@@ -16,13 +16,24 @@ import {
   ProgressInfo,
   HypothesisProcessingStatus,
 } from './pipeline-core';
+import { ExtendedDatabaseOperations } from './step-executor';
+
+/**
+ * Extended run data with status and step info
+ */
+export interface ExtendedRunData extends RunData {
+  status: string;
+  currentStep: number;
+  step2_1Output: string | null;
+  updatedAt: Date;
+}
 
 /**
  * Create database adapter using Drizzle ORM
  */
-export function createDatabaseAdapter(): DatabaseOperations {
+export function createDatabaseAdapter(): ExtendedDatabaseOperations {
   return {
-    async getRun(runId: number): Promise<RunData | null> {
+    async getRun(runId: number): Promise<ExtendedRunData | null> {
       const [run] = await db.select().from(runs).where(eq(runs.id, runId));
       if (!run) return null;
 
@@ -34,6 +45,10 @@ export function createDatabaseAdapter(): DatabaseOperations {
         targetSpecId: run.targetSpecId,
         technicalAssetsId: run.technicalAssetsId,
         progressInfo: run.progressInfo as RunData['progressInfo'],
+        status: run.status,
+        currentStep: run.currentStep,
+        step2_1Output: run.step2_1Output,
+        updatedAt: run.updatedAt,
       };
     },
 
@@ -56,6 +71,7 @@ export function createDatabaseAdapter(): DatabaseOperations {
         step2_1Output: string;
         completedAt: Date;
         progressInfo: ProgressInfo;
+        updatedAt: Date;
       }>
     ): Promise<void> {
       await db.update(runs).set(updates).where(eq(runs.id, runId));
@@ -115,6 +131,26 @@ export function createDatabaseAdapter(): DatabaseOperations {
       }>
     ): Promise<void> {
       await db.update(hypotheses).set(updates).where(eq(hypotheses.uuid, uuid));
+    },
+
+    async getHypothesesForRun(runId: number): Promise<HypothesisData[]> {
+      const results = await db
+        .select()
+        .from(hypotheses)
+        .where(and(eq(hypotheses.runId, runId), isNull(hypotheses.deletedAt)));
+
+      return results.map(h => ({
+        uuid: h.uuid,
+        displayTitle: h.displayTitle,
+        hypothesisNumber: h.hypothesisNumber,
+        step2_1Summary: h.step2_1Summary,
+        step2_2Output: h.step2_2Output,
+        step3Output: h.step3Output,
+        step4Output: h.step4Output,
+        step5Output: h.step5Output,
+        processingStatus: h.processingStatus as HypothesisProcessingStatus | null,
+        errorMessage: h.errorMessage,
+      }));
     },
 
     async getExistingHypotheses(
