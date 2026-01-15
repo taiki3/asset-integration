@@ -41,7 +41,16 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
   if (!expectedSecret || cronSecret !== expectedSecret) {
     console.log(`[Process] Auth failed - expectedSecret length: ${expectedSecret?.length || 0}, cronSecret length: ${cronSecret?.length || 0}`);
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({
+      error: 'Unauthorized',
+      debug: {
+        expectedSecretSet: !!expectedSecret,
+        expectedSecretLength: expectedSecret?.length || 0,
+        receivedSecretSet: !!cronSecret,
+        receivedSecretLength: cronSecret?.length || 0,
+        match: cronSecret === expectedSecret,
+      }
+    }, { status: 401 });
   }
 
   try {

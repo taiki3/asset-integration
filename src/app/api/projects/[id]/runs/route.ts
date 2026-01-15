@@ -219,7 +219,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
           });
 
           if (!response.ok) {
-            throw new Error(`Process API returned ${response.status}`);
+            const body = await response.text();
+            throw new Error(`Process API returned ${response.status}: ${body}`);
           }
         } catch (error) {
           console.error(`Failed to start pipeline for run ${run.id}:`, error);
