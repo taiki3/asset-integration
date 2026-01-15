@@ -22,8 +22,12 @@ interface RouteContext {
 
 // POST /api/runs/[runId]/process - Execute next pipeline step
 export async function POST(request: NextRequest, context: RouteContext) {
+  console.log('[Process] === ENDPOINT HIT ===');
+
   const { runId: runIdStr } = await context.params;
   const runId = parseInt(runIdStr, 10);
+
+  console.log(`[Process] runId=${runId}, CRON_SECRET env set: ${!!process.env.CRON_SECRET}`);
 
   if (isNaN(runId)) {
     return NextResponse.json({ error: 'Invalid run ID' }, { status: 400 });
