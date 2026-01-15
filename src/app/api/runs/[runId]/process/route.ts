@@ -33,7 +33,10 @@ export async function POST(request: NextRequest, context: RouteContext) {
   const cronSecret = request.headers.get('x-cron-secret');
   const expectedSecret = process.env.CRON_SECRET;
 
+  console.log(`[Process] Auth check - expected set: ${!!expectedSecret}, received set: ${!!cronSecret}, match: ${cronSecret === expectedSecret}`);
+
   if (!expectedSecret || cronSecret !== expectedSecret) {
+    console.log(`[Process] Auth failed - expectedSecret length: ${expectedSecret?.length || 0}, cronSecret length: ${cronSecret?.length || 0}`);
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 

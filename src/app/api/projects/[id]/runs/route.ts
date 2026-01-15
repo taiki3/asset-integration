@@ -206,7 +206,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     if (cronSecret) {
       after(async () => {
         try {
-          console.log(`[Runs] Triggering pipeline for run ${run.id}`);
+          console.log(`[Runs] Triggering pipeline for run ${run.id}, baseUrl: ${baseUrl}, secret length: ${cronSecret.length}`);
           const response = await fetch(`${baseUrl}/api/runs/${run.id}/process`, {
             method: 'POST',
             headers: {
