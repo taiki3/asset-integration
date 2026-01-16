@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - dev
+      - staging
     paths:
       - 'supabase/migrations/**'
       - 'supabase/config.toml'
@@ -14,6 +15,7 @@ on:
     branches:
       - main
       - dev
+      - staging
     paths:
       - 'supabase/migrations/**'
       - 'supabase/config.toml'
@@ -52,7 +54,7 @@ jobs:
     name: Migrate Database
     runs-on: ubuntu-latest
     if: github.event_name == 'push'
-    environment: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
+    environment: ${{ github.ref_name == 'main' && 'production' || (github.ref_name == 'staging' && 'staging' || 'staging') }}
 
     steps:
       - name: Checkout repository
