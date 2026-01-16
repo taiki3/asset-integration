@@ -82,6 +82,7 @@ const sampleHypothesis: HypothesisData = {
   step4Output: null,
   step5Output: null,
   processingStatus: 'pending',
+  fullData: null,
 };
 
 describe('step-executor', () => {
@@ -108,7 +109,20 @@ describe('step-executor', () => {
       expect(getNextPhase('running', 2, hypotheses)).toBe('step2_2_start');
     });
 
-    it('returns step2_2_polling when hypothesis Deep Research handle exists', () => {
+    it('returns step2_2_polling when hypothesis has Deep Research handle in fullData', () => {
+      const hypotheses = [
+        {
+          ...sampleHypothesis,
+          processingStatus: 'step2_2' as const,
+          fullData: {
+            deepResearchHandle: { interactionId: 'test', fileSearchStoreName: 'test-store' },
+          },
+        },
+      ];
+      expect(getNextPhase('running', 2, hypotheses)).toBe('step2_2_polling');
+    });
+
+    it('returns step2_2_polling for legacy progressInfo handle (backwards compatibility)', () => {
       const hypotheses = [
         { ...sampleHypothesis, processingStatus: 'step2_2' as const },
       ];
@@ -281,7 +295,7 @@ describe('step-executor', () => {
       expect(deps.db.createHypothesis).toHaveBeenCalled();
     });
 
-    it('executes step2_2_start for next pending hypothesis (async mode)', async () => {
+    it('executes step2_2_start for pending hypotheses (async mode, parallel)', async () => {
       const runAfterStep2_1_5 = {
         ...sampleRun,
         status: 'running',
@@ -311,41 +325,51 @@ describe('step-executor', () => {
       expect(result.phase).toBe('step2_2_start');
       expect(result.hasMore).toBe(true);
       expect(deps.ai.startDeepResearchAsync).toHaveBeenCalled();
-      // Should save the hypothesis handle in progressInfo
+      // Should save the handle in hypothesis fullData and update progressInfo with parallel stats
+      expect(deps.db.updateHypothesis).toHaveBeenCalledWith(
+        'test-uuid-123',
+        expect.objectContaining({
+          processingStatus: 'step2_2',
+          fullData: expect.objectContaining({
+            deepResearchHandle: expect.objectContaining({
+              interactionId: 'hyp-interaction',
+            }),
+          }),
+        })
+      );
       expect(deps.db.updateRunStatus).toHaveBeenCalledWith(
         1,
         expect.objectContaining({
           progressInfo: expect.objectContaining({
-            hypothesisDeepResearchHandle: expect.objectContaining({
-              hypothesisUuid: 'test-uuid-123',
-            }),
+            inFlightCount: 1,
           }),
         })
       );
     });
 
-    it('executes step2_2_polling and completes when ready', async () => {
-      const runWithHypHandle = {
+    it('executes step2_2_polling and completes when ready (parallel)', async () => {
+      const runAfterStep2_2Start = {
         ...sampleRun,
         status: 'running',
         currentStep: 2,
         step2_1Output: 'Research output',
-        progressInfo: {
-          hypothesisDeepResearchHandle: {
-            hypothesisUuid: 'test-uuid-123',
-            handle: {
-              interactionId: 'hyp-interaction',
-              fileSearchStoreName: 'hyp-store',
-            },
+      };
+
+      // Hypothesis with handle in fullData (new parallel format)
+      const step2_2Hypothesis = {
+        ...sampleHypothesis,
+        processingStatus: 'step2_2' as const,
+        fullData: {
+          deepResearchHandle: {
+            interactionId: 'hyp-interaction',
+            fileSearchStoreName: 'hyp-store',
           },
         },
       };
 
-      const step2_2Hypothesis = { ...sampleHypothesis, processingStatus: 'step2_2' as const };
-
       const deps = createMockDeps(
         {
-          getRun: vi.fn().mockResolvedValue(runWithHypHandle),
+          getRun: vi.fn().mockResolvedValue(runAfterStep2_2Start),
           getResource: vi.fn().mockResolvedValue(sampleResource),
           getHypothesesForRun: vi.fn().mockResolvedValue([step2_2Hypothesis]),
         },
@@ -368,6 +392,47 @@ describe('step-executor', () => {
         'test-uuid-123',
         expect.objectContaining({ step2_2Output: 'Step 2-2 async output' })
       );
+    });
+
+    it('executes step2_2_polling for legacy progressInfo handle (backwards compatibility)', async () => {
+      const runWithLegacyHandle = {
+        ...sampleRun,
+        status: 'running',
+        currentStep: 2,
+        step2_1Output: 'Research output',
+        progressInfo: {
+          hypothesisDeepResearchHandle: {
+            hypothesisUuid: 'test-uuid-123',
+            handle: {
+              interactionId: 'hyp-interaction',
+              fileSearchStoreName: 'hyp-store',
+            },
+          },
+        },
+      };
+
+      const step2_2Hypothesis = { ...sampleHypothesis, processingStatus: 'step2_2' as const };
+
+      const deps = createMockDeps(
+        {
+          getRun: vi.fn().mockResolvedValue(runWithLegacyHandle),
+          getResource: vi.fn().mockResolvedValue(sampleResource),
+          getHypothesesForRun: vi.fn().mockResolvedValue([step2_2Hypothesis]),
+        },
+        {
+          checkDeepResearchStatus: vi.fn().mockResolvedValue({
+            status: 'completed',
+            result: 'Step 2-2 async output',
+          }),
+          cleanupDeepResearch: vi.fn().mockResolvedValue(undefined),
+        }
+      );
+
+      const result = await executeNextStep(deps, 1);
+
+      expect(result.phase).toBe('step2_2_polling');
+      expect(result.hasMore).toBe(true);
+      expect(deps.ai.checkDeepResearchStatus).toHaveBeenCalled();
     });
 
     it('executes step2_2_start for multiple hypotheses (async mode)', async () => {

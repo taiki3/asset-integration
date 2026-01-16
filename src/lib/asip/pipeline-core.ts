@@ -98,6 +98,7 @@ export interface HypothesisData {
   step5Output?: string | null;
   processingStatus: HypothesisProcessingStatus | null;
   errorMessage?: string | null;
+  fullData?: Record<string, unknown> | null;
 }
 
 /**
@@ -134,6 +135,7 @@ export interface DatabaseOperations {
     step4Output: string;
     step5Output: string;
     errorMessage: string;
+    fullData: Record<string, unknown>;
   }>): Promise<void>;
   getExistingHypotheses?(
     projectId: number,
