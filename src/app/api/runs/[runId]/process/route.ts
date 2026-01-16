@@ -80,10 +80,29 @@ export async function POST(request: NextRequest, context: RouteContext) {
       after(async () => {
         try {
           console.log(`[Process] Scheduling next step for run ${runId}`);
-          await fetch(`${baseUrl}/api/runs/${runId}/process`, {
+          const response = await fetch(`${baseUrl}/api/runs/${runId}/process`, {
             method: 'POST',
             headers: getInternalApiHeaders(expectedSecret),
+            redirect: 'manual',
           });
+
+          // Check for redirect (Vercel Protection)
+          if (response.status >= 300 && response.status < 400) {
+            console.error(`[Process] Blocked by Vercel Protection - redirected to: ${response.headers.get('location')}`);
+            return;
+          }
+
+          // Verify response is JSON
+          const contentType = response.headers.get('content-type');
+          if (!contentType?.includes('application/json')) {
+            console.error(`[Process] Expected JSON but got ${contentType}`);
+            return;
+          }
+
+          if (!response.ok) {
+            const body = await response.text();
+            console.error(`[Process] API error: ${response.status} - ${body}`);
+          }
         } catch (error) {
           console.error(`[Process] Failed to schedule next step for run ${runId}:`, error);
         }

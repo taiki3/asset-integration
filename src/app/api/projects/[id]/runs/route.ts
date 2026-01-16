@@ -209,15 +209,36 @@ export async function POST(request: NextRequest, context: RouteContext) {
       after(async () => {
         try {
           const targetUrl = `${baseUrl}/api/runs/${run.id}/process`;
+          const headers = getInternalApiHeaders(cronSecret);
           console.log(`[Runs] Calling: ${targetUrl}`);
-          const response = await fetch(`${baseUrl}/api/runs/${run.id}/process`, {
+          console.log(`[Runs] Headers: ${JSON.stringify(Object.keys(headers))}`);
+          console.log(`[Runs] Bypass secret set: ${!!headers['x-vercel-protection-bypass']}`);
+
+          const response = await fetch(targetUrl, {
             method: 'POST',
-            headers: getInternalApiHeaders(cronSecret),
+            headers,
+            redirect: 'manual', // Don't follow redirects (protection might redirect)
           });
+
+          console.log(`[Runs] Response status: ${response.status}, type: ${response.type}`);
+          console.log(`[Runs] Content-Type: ${response.headers.get('content-type')}`);
+
+          // Check for redirect (Vercel Protection redirect)
+          if (response.status >= 300 && response.status < 400) {
+            const location = response.headers.get('location');
+            throw new Error(`Redirected to ${location} - Vercel Deployment Protection may be blocking. Check VERCEL_AUTOMATION_BYPASS_SECRET.`);
+          }
 
           if (!response.ok) {
             const body = await response.text();
             throw new Error(`Process API returned ${response.status}: ${body}`);
+          }
+
+          // Verify response is JSON, not HTML protection page
+          const contentType = response.headers.get('content-type');
+          if (!contentType?.includes('application/json')) {
+            const body = await response.text();
+            throw new Error(`Expected JSON but got ${contentType}. Body: ${body.substring(0, 200)}`);
           }
         } catch (error) {
           console.error(`Failed to start pipeline for run ${run.id}:`, error);

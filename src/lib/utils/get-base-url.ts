@@ -25,13 +25,16 @@ export function getBaseUrl(): string {
  * Get headers for internal API calls that bypass Vercel Deployment Protection
  */
 export function getInternalApiHeaders(cronSecret: string): Record<string, string> {
+  const bypassSecret = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
+
+  console.log(`[getInternalApiHeaders] VERCEL_AUTOMATION_BYPASS_SECRET set: ${!!bypassSecret}, length: ${bypassSecret?.length || 0}`);
+
   const headers: Record<string, string> = {
     'x-cron-secret': cronSecret,
     'Content-Type': 'application/json',
   };
 
   // Add bypass header for Vercel Deployment Protection (Preview deployments)
-  const bypassSecret = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
   if (bypassSecret) {
     headers['x-vercel-protection-bypass'] = bypassSecret;
   }
