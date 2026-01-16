@@ -53,8 +53,8 @@ jobs:
   migrate:
     name: Migrate Database
     runs-on: ubuntu-latest
-    if: github.event_name == 'push'
-    environment: ${{ github.ref_name == 'main' && 'production' || (github.ref_name == 'staging' && 'staging' || 'staging') }}
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    environment: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
 
     steps:
       - name: Checkout repository
