@@ -342,7 +342,7 @@ export async function generateContent(params: {
   const client = getGeminiClient();
 
   try {
-    const actualModelName = process.env.GOOGLE_GENAI_MODEL || 'gemini-pro';
+    const actualModelName = params.model || process.env.GOOGLE_GENAI_MODEL || MODELS.PRO;
     const model = client.getGenerativeModel({
       model: actualModelName,
       systemInstruction: params.systemInstruction,

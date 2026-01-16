@@ -39,14 +39,12 @@ export async function POST(request: NextRequest) {
     try {
       const text = await generateContent({
         prompt,
-        model: 'gemini-pro',
       });
 
       return NextResponse.json({
         status: 'success',
         result: {
           text,
-          model: 'gemini-pro',
         },
       });
     } catch (apiError: any) {
