@@ -515,7 +515,7 @@ export function ProjectWorkspace({ project, initialResources, initialRuns }: Pro
 
   const targetSpecs = resources.filter((r) => r.type === 'target_spec');
   const technicalAssets = resources.filter((r) => r.type === 'technical_assets');
-  const isExecuting = runs.some((r) => r.status === 'running');
+  const isExecuting = runs.some((r) => r.status === 'running' || r.status === 'pending') || executeRunMutation.isPending;
   const sortedRuns = [...runs].sort((a, b) => 
     new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   );
