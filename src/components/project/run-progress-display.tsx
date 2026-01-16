@@ -38,13 +38,21 @@ interface RunProgressDisplayProps {
   isPauseRequested?: boolean;
 }
 
+// Map DB currentStep (1,2,3,4,5) to UI step (21,22,3,4,5)
+function mapDbStepToUiStep(dbStep: number): number {
+  if (dbStep === 1) return 21;
+  if (dbStep === 2) return 22;
+  return dbStep;
+}
+
 // Step Indicator Component
 function StepIndicator({ currentStep }: { currentStep: number }) {
+  const uiStep = mapDbStepToUiStep(currentStep);
   return (
     <div className="flex items-center gap-1 text-xs" data-testid="step-indicator">
       {PIPELINE_STEPS.map((step, idx) => {
-        const isCompleted = step.step < currentStep;
-        const isCurrent = step.step === currentStep;
+        const isCompleted = step.step < uiStep;
+        const isCurrent = step.step === uiStep;
 
         return (
           <div key={step.step} className="flex items-center">
@@ -287,8 +295,9 @@ export function RunProgressDisplay({
   if (!isActive) return null;
 
   const isPaused = run.status === 'paused';
-  const currentStep = run.currentStep;
-  const stepLabel = STEP_LABELS[currentStep] || `Step ${currentStep}`;
+  const dbStep = run.currentStep;
+  const uiStep = mapDbStepToUiStep(dbStep);
+  const stepLabel = STEP_LABELS[uiStep] || `Step ${uiStep}`;
 
   return (
     <Card
@@ -342,20 +351,20 @@ export function RunProgressDisplay({
         {/* Current step info */}
         <div className="flex items-center justify-between">
           <p className="text-sm font-light text-muted-foreground">{stepLabel}</p>
-          <StepIndicator currentStep={currentStep} />
+          <StepIndicator currentStep={dbStep} />
         </div>
 
         {/* Phase progress for Step 2-1 (Deep Research) */}
-        {currentStep === 21 && progressInfo && (
+        {uiStep === 21 && progressInfo && (
           <PhaseProgressDisplay progressInfo={progressInfo} />
         )}
 
         {/* Step descriptions for steps 3-5 */}
-        {currentStep >= 3 && currentStep <= 5 && (
+        {uiStep >= 3 && uiStep <= 5 && (
           <div className="text-sm text-muted-foreground">
-            {currentStep === 3 && 'テーマの魅力度を多角的に評価中...'}
-            {currentStep === 4 && 'AGCの参入可能性を検討中...'}
-            {currentStep === 5 && 'テーマ一覧表を作成中...'}
+            {uiStep === 3 && 'テーマの魅力度を多角的に評価中...'}
+            {uiStep === 4 && 'AGCの参入可能性を検討中...'}
+            {uiStep === 5 && 'テーマ一覧表を作成中...'}
           </div>
         )}
 
