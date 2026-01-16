@@ -92,16 +92,11 @@ export async function POST(request: NextRequest, context: RouteContext) {
             return;
           }
 
-          // Verify response is JSON
-          const contentType = response.headers.get('content-type');
-          if (!contentType?.includes('application/json')) {
-            console.error(`[Process] Expected JSON but got ${contentType}`);
-            return;
-          }
-
           if (!response.ok) {
             const body = await response.text();
             console.error(`[Process] API error: ${response.status} - ${body}`);
+          } else {
+            console.log(`[Process] Next step scheduled successfully`);
           }
         } catch (error) {
           console.error(`[Process] Failed to schedule next step for run ${runId}:`, error);

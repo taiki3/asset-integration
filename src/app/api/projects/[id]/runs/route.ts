@@ -234,12 +234,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
             throw new Error(`Process API returned ${response.status}: ${body}`);
           }
 
-          // Verify response is JSON, not HTML protection page
-          const contentType = response.headers.get('content-type');
-          if (!contentType?.includes('application/json')) {
-            const body = await response.text();
-            throw new Error(`Expected JSON but got ${contentType}. Body: ${body.substring(0, 200)}`);
-          }
+          console.log(`[Runs] Pipeline started successfully for run ${run.id}`);
         } catch (error) {
           console.error(`Failed to start pipeline for run ${run.id}:`, error);
           // Update run status to error if pipeline fails to start
