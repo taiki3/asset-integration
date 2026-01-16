@@ -149,8 +149,10 @@ export function getNextPhase(
     }
 
     // Check if any hypotheses need step 2-2
+    // Include hypotheses stuck in 'step2_2' status without output (lost handle)
     const needsStep2_2 = hypotheses.some(
-      (h) => h.processingStatus === 'pending'
+      (h) => h.processingStatus === 'pending' ||
+             (h.processingStatus === 'step2_2' && !h.step2_2Output && !progressInfo?.hypothesisDeepResearchHandle)
     );
     if (needsStep2_2) {
       return 'step2_2_start';
@@ -849,9 +851,14 @@ export async function executeNextStep(
 
       case 'step2_2_start': {
         // Start hypothesis Deep Research asynchronously
-        const pendingHypothesis = hypotheses.find(h => h.processingStatus === 'pending');
-        if (pendingHypothesis) {
-          await executeStep2_2Start(deps, run, pendingHypothesis, targetSpec.content, technicalAssets.content);
+        // Also handle stuck hypotheses (step2_2 status without output or handle)
+        const progressInfo = run.progressInfo as ExtendedProgressInfo;
+        const targetHypothesis = hypotheses.find(
+          h => h.processingStatus === 'pending' ||
+               (h.processingStatus === 'step2_2' && !h.step2_2Output && !progressInfo?.hypothesisDeepResearchHandle)
+        );
+        if (targetHypothesis) {
+          await executeStep2_2Start(deps, run, targetHypothesis, targetSpec.content, technicalAssets.content);
           return { phase, hasMore: true };
         }
         return { phase, hasMore: true };
