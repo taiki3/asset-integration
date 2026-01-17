@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useRef, useCallback } from 'react';
 import {
   Play,
   Pause,
@@ -38,13 +39,21 @@ interface RunProgressDisplayProps {
   isPauseRequested?: boolean;
 }
 
+// Map DB currentStep (1,2,3,4,5) to UI step (21,22,3,4,5)
+function mapDbStepToUiStep(dbStep: number): number {
+  if (dbStep === 1) return 21;
+  if (dbStep === 2) return 22;
+  return dbStep;
+}
+
 // Step Indicator Component
 function StepIndicator({ currentStep }: { currentStep: number }) {
+  const uiStep = mapDbStepToUiStep(currentStep);
   return (
     <div className="flex items-center gap-1 text-xs" data-testid="step-indicator">
       {PIPELINE_STEPS.map((step, idx) => {
-        const isCompleted = step.step < currentStep;
-        const isCurrent = step.step === currentStep;
+        const isCompleted = step.step < uiStep;
+        const isCurrent = step.step === uiStep;
 
         return (
           <div key={step.step} className="flex items-center">
@@ -283,12 +292,62 @@ export function RunProgressDisplay({
   const isActive = run.status === 'running' || run.status === 'paused';
   const elapsedSeconds = useElapsedTime(isActive, startTime);
 
+  // Fallback polling to keep the pipeline moving if after() chain breaks
+  // This acts as a client-side recovery mechanism for serverless environments
+  const pollingRef = useRef<NodeJS.Timeout | null>(null);
+  const lastPollRef = useRef<number>(0);
+
+  const pollProcess = useCallback(async () => {
+    // Debounce: don't poll more than once every 10 seconds
+    const now = Date.now();
+    if (now - lastPollRef.current < 10000) return;
+    lastPollRef.current = now;
+
+    try {
+      // Call nudge endpoint (session-authenticated) to keep pipeline moving
+      const response = await fetch(`/api/runs/${run.id}/nudge`, {
+        method: 'POST',
+      });
+      if (!response.ok && response.status !== 401) {
+        console.log(`[RunProgress] Nudge response: ${response.status}`);
+      }
+    } catch (error) {
+      // Silently ignore - this is just a fallback
+      console.log('[RunProgress] Nudge failed:', error);
+    }
+  }, [run.id]);
+
+  useEffect(() => {
+    // Only poll when running (not paused)
+    if (run.status !== 'running') {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+      return;
+    }
+
+    // Poll every 30 seconds as a fallback
+    pollingRef.current = setInterval(pollProcess, 30000);
+
+    // Also poll immediately on mount/status change
+    pollProcess();
+
+    return () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+    };
+  }, [run.status, pollProcess]);
+
   // Don't render if not active
   if (!isActive) return null;
 
   const isPaused = run.status === 'paused';
-  const currentStep = run.currentStep;
-  const stepLabel = STEP_LABELS[currentStep] || `Step ${currentStep}`;
+  const dbStep = run.currentStep;
+  const uiStep = mapDbStepToUiStep(dbStep);
+  const stepLabel = STEP_LABELS[uiStep] || `Step ${uiStep}`;
 
   return (
     <Card
@@ -342,20 +401,20 @@ export function RunProgressDisplay({
         {/* Current step info */}
         <div className="flex items-center justify-between">
           <p className="text-sm font-light text-muted-foreground">{stepLabel}</p>
-          <StepIndicator currentStep={currentStep} />
+          <StepIndicator currentStep={dbStep} />
         </div>
 
         {/* Phase progress for Step 2-1 (Deep Research) */}
-        {currentStep === 21 && progressInfo && (
+        {uiStep === 21 && progressInfo && (
           <PhaseProgressDisplay progressInfo={progressInfo} />
         )}
 
         {/* Step descriptions for steps 3-5 */}
-        {currentStep >= 3 && currentStep <= 5 && (
+        {uiStep >= 3 && uiStep <= 5 && (
           <div className="text-sm text-muted-foreground">
-            {currentStep === 3 && 'テーマの魅力度を多角的に評価中...'}
-            {currentStep === 4 && 'AGCの参入可能性を検討中...'}
-            {currentStep === 5 && 'テーマ一覧表を作成中...'}
+            {uiStep === 3 && 'テーマの魅力度を多角的に評価中...'}
+            {uiStep === 4 && 'AGCの参入可能性を検討中...'}
+            {uiStep === 5 && 'テーマ一覧表を作成中...'}
           </div>
         )}
 

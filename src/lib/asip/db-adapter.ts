@@ -116,6 +116,7 @@ export function createDatabaseAdapter(): ExtendedDatabaseOperations {
         step5Output: hypothesis.step5Output,
         processingStatus: hypothesis.processingStatus as HypothesisProcessingStatus | null,
         errorMessage: hypothesis.errorMessage,
+        fullData: hypothesis.fullData as Record<string, unknown> | null,
       };
     },
 
@@ -128,6 +129,7 @@ export function createDatabaseAdapter(): ExtendedDatabaseOperations {
         step4Output: string;
         step5Output: string;
         errorMessage: string;
+        fullData: Record<string, unknown>;
       }>
     ): Promise<void> {
       await db.update(hypotheses).set(updates).where(eq(hypotheses.uuid, uuid));
@@ -150,6 +152,7 @@ export function createDatabaseAdapter(): ExtendedDatabaseOperations {
         step5Output: h.step5Output,
         processingStatus: h.processingStatus as HypothesisProcessingStatus | null,
         errorMessage: h.errorMessage,
+        fullData: h.fullData as Record<string, unknown> | null,
       }));
     },
 

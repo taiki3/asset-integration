@@ -31,10 +31,10 @@ interface HypothesesPanelProps {
 
 const statusConfig: Record<string, { label: string; icon: typeof Clock; color: string }> = {
   pending: { label: '待機中', icon: Clock, color: 'text-muted-foreground' },
-  step2_2: { label: 'Step 2-2 処理中', icon: Loader2, color: 'text-blue-600' },
-  step3: { label: 'Step 3 処理中', icon: Loader2, color: 'text-blue-600' },
-  step4: { label: 'Step 4 処理中', icon: Loader2, color: 'text-blue-600' },
-  step5: { label: 'Step 5 処理中', icon: Loader2, color: 'text-blue-600' },
+  step2_2: { label: 'S2-2 処理中', icon: Loader2, color: 'text-blue-600' },
+  step3: { label: 'S3 処理中', icon: Loader2, color: 'text-blue-600' },
+  step4: { label: 'S4 処理中', icon: Loader2, color: 'text-blue-600' },
+  step5: { label: 'S5 処理中', icon: Loader2, color: 'text-blue-600' },
   completed: { label: '完了', icon: CheckCircle2, color: 'text-green-600' },
   error: { label: 'エラー', icon: AlertCircle, color: 'text-red-600' },
 };

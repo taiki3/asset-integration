@@ -288,8 +288,9 @@ export function ProjectWorkspace({ project, initialResources, initialRuns }: Pro
       });
       if (!res.ok) throw new Error('Failed to pause run');
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['projects', project.id, 'runs'] });
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['projects', project.id, 'runs'] });
+      await queryClient.refetchQueries({ queryKey: ['projects', project.id, 'runs'] });
       toast({
         title: '一時停止しました',
         description: 'パイプラインの処理を一時停止しました。',
@@ -304,8 +305,9 @@ export function ProjectWorkspace({ project, initialResources, initialRuns }: Pro
       });
       if (!res.ok) throw new Error('Failed to resume run');
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['projects', project.id, 'runs'] });
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['projects', project.id, 'runs'] });
+      await queryClient.refetchQueries({ queryKey: ['projects', project.id, 'runs'] });
       toast({
         title: '再開しました',
         description: 'パイプラインの処理を再開しました。',
@@ -320,8 +322,9 @@ export function ProjectWorkspace({ project, initialResources, initialRuns }: Pro
       });
       if (!res.ok) throw new Error('Failed to stop run');
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['projects', project.id, 'runs'] });
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['projects', project.id, 'runs'] });
+      await queryClient.refetchQueries({ queryKey: ['projects', project.id, 'runs'] });
       toast({
         title: '停止しました',
         description: 'パイプラインの処理を停止しました。',
@@ -515,7 +518,7 @@ export function ProjectWorkspace({ project, initialResources, initialRuns }: Pro
 
   const targetSpecs = resources.filter((r) => r.type === 'target_spec');
   const technicalAssets = resources.filter((r) => r.type === 'technical_assets');
-  const isExecuting = runs.some((r) => r.status === 'running');
+  const isExecuting = runs.some((r) => r.status === 'running' || r.status === 'pending') || executeRunMutation.isPending;
   const sortedRuns = [...runs].sort((a, b) => 
     new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   );

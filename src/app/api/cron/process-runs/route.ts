@@ -14,7 +14,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { runs } from '@/lib/db/schema';
 import { and, eq, lt, or } from 'drizzle-orm';
-import { getBaseUrl } from '@/lib/utils/get-base-url';
+import { getBaseUrl, getInternalApiHeaders } from '@/lib/utils/get-base-url';
 
 // GET /api/cron/process-runs - Find and resume stuck runs
 export async function GET(request: NextRequest) {
@@ -52,10 +52,7 @@ export async function GET(request: NextRequest) {
 
         const response = await fetch(`${baseUrl}/api/runs/${run.id}/process`, {
           method: 'POST',
-          headers: {
-            'x-cron-secret': cronSecret,
-            'Content-Type': 'application/json',
-          },
+          headers: getInternalApiHeaders(cronSecret),
         });
 
         if (response.ok) {

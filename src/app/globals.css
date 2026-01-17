@@ -69,6 +69,13 @@
     --duration-fast: 0.2s;
     --duration-base: 0.4s;
     --duration-slow: 0.8s;
+
+    /* Chart colors for shadcn */
+    --chart-1: 45 96% 48%;
+    --chart-2: 39 96% 48%;
+    --chart-3: 202 91% 13%;
+    --chart-4: 142 71% 45%;
+    --chart-5: 0 72% 51%;
   }
 
   .dark {
@@ -107,6 +114,13 @@
     --status-warning: 45 96% 48%;
     --status-error: 0 72% 51%;
     --status-info: 202 60% 60%;
+
+    /* Chart colors for shadcn */
+    --chart-1: 45 96% 58%;
+    --chart-2: 39 96% 58%;
+    --chart-3: 0 0% 95%;
+    --chart-4: 142 71% 55%;
+    --chart-5: 0 72% 61%;
   }
 }
 

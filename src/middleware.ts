@@ -13,13 +13,13 @@ export async function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     /*
-     * Match all request paths except for:
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     * - public files (public folder)
-     * - api/cron (cron endpoints - secured separately)
+     * Only match specific paths that need auth:
+     * - /dashboard
+     * - /projects
+     * - /settings
      */
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$|api/cron).*)',
+    '/dashboard/:path*',
+    '/projects/:path*',
+    '/settings/:path*',
   ],
 };

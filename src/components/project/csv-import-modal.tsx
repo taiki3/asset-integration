@@ -24,7 +24,7 @@ import {
 const HYPOTHESIS_COLUMNS = [
   { key: 'hypothesisNumber', label: '仮説番号' },
   { key: 'displayTitle', label: '仮説タイトル' },
-  { key: 'step2_1Summary', label: '概要 (Step 2-1)' },
+  { key: 'step2_1Summary', label: '概要 (S2-1)' },
 ];
 
 interface CsvImportModalProps {

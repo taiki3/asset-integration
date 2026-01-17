@@ -30,11 +30,25 @@ export type HypothesisProcessingStatus = 'pending' | 'step2_2' | 'step3' | 'step
  * Progress info structure
  */
 export interface ProgressInfo {
-  message: string;
-  phase: string;
+  message?: string;
+  phase?: string;
   detail?: string;
   totalHypotheses?: number;
   processingHypotheses?: string[];
+  // Async Deep Research handles (for serverless)
+  deepResearchHandle?: DeepResearchHandle;
+  hypothesisDeepResearchHandle?: {
+    hypothesisUuid: string;
+    handle: DeepResearchHandle;
+  };
+  // Filter configuration
+  existingFilter?: {
+    enabled: boolean;
+    targetSpecIds?: number[];
+    technicalAssetsIds?: number[];
+  };
+  // Allow additional properties
+  [key: string]: unknown;
 }
 
 /**
@@ -84,6 +98,7 @@ export interface HypothesisData {
   step5Output?: string | null;
   processingStatus: HypothesisProcessingStatus | null;
   errorMessage?: string | null;
+  fullData?: Record<string, unknown> | null;
 }
 
 /**
@@ -120,6 +135,7 @@ export interface DatabaseOperations {
     step4Output: string;
     step5Output: string;
     errorMessage: string;
+    fullData: Record<string, unknown>;
   }>): Promise<void>;
   getExistingHypotheses?(
     projectId: number,
@@ -128,15 +144,45 @@ export interface DatabaseOperations {
 }
 
 /**
+ * Deep Research async status
+ */
+export interface DeepResearchStatus {
+  status: 'pending' | 'in_progress' | 'completed' | 'failed';
+  result?: string;
+  error?: string;
+}
+
+/**
+ * Deep Research async handle
+ */
+export interface DeepResearchHandle {
+  interactionId: string;
+  fileSearchStoreName: string;
+}
+
+/**
  * AI operations interface
  */
 export interface AIOperations {
+  // Legacy blocking method (kept for compatibility)
   executeDeepResearch(params: {
     prompt: string;
     files: Array<{ name: string; content: string }>;
     storeName: string;
     onProgress?: (phase: string, detail: string) => void;
   }): Promise<string>;
+
+  // Async Deep Research methods for serverless
+  startDeepResearchAsync?(params: {
+    prompt: string;
+    files: Array<{ name: string; content: string }>;
+    storeName: string;
+  }): Promise<DeepResearchHandle>;
+
+  checkDeepResearchStatus?(handle: DeepResearchHandle): Promise<DeepResearchStatus>;
+
+  cleanupDeepResearch?(handle: DeepResearchHandle): Promise<void>;
+
   generateContent(params: {
     prompt: string;
     systemInstruction?: string;

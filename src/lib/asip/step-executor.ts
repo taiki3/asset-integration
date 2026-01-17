@@ -13,6 +13,7 @@ import {
   RunData,
   HypothesisData,
   HypothesisProcessingStatus,
+  DeepResearchHandle,
 } from './pipeline-core';
 import {
   generateUUID,
@@ -26,12 +27,22 @@ import { formatPrompt, STEP3_PROMPT, STEP4_PROMPT, STEP5_PROMPT, buildInstructio
 
 /**
  * Pipeline execution phases
+ *
+ * Async phases (for serverless):
+ * - step2_1_start: Start Deep Research, save handle
+ * - step2_1_polling: Check if Deep Research complete
+ * - step2_2_start: Start hypothesis Deep Research
+ * - step2_2_polling: Check if hypothesis research complete
  */
 export type PipelinePhase =
   | 'pending'
-  | 'step2_1'
+  | 'step2_1_start'      // Start Deep Research (async)
+  | 'step2_1_polling'    // Poll for completion
+  | 'step2_1'            // Legacy blocking (for tests)
   | 'step2_1_5'
-  | 'step2_2'
+  | 'step2_2_start'      // Start hypothesis research (async)
+  | 'step2_2_polling'    // Poll for completion
+  | 'step2_2'            // Legacy blocking (for tests)
   | 'evaluation'
   | 'completed'
   | 'error';
@@ -67,6 +78,45 @@ interface ExtendedRunData extends RunData {
 }
 
 /**
+ * Extended progress info with Deep Research handle
+ */
+interface ExtendedProgressInfo {
+  message?: string;
+  phase?: string;
+  detail?: string;
+  deepResearchHandle?: DeepResearchHandle;
+  // Legacy single handle (deprecated, kept for backwards compatibility)
+  hypothesisDeepResearchHandle?: {
+    hypothesisUuid: string;
+    handle: DeepResearchHandle;
+  };
+  existingFilter?: {
+    enabled: boolean;
+    targetSpecIds?: number[];
+    technicalAssetsIds?: number[];
+  };
+  // Parallel processing stats
+  inFlightCount?: number;
+  completedCount?: number;
+  [key: string]: unknown;
+}
+
+/**
+ * Extended hypothesis full data with Deep Research handle
+ */
+interface ExtendedHypothesisFullData {
+  raw?: unknown;
+  deepResearchHandle?: DeepResearchHandle;
+  [key: string]: unknown;
+}
+
+// Maximum concurrent Deep Research requests for hypotheses
+const MAX_CONCURRENT_HYPOTHESIS_RESEARCH = 5;
+
+// Maximum concurrent evaluation (Step 3-5) for hypotheses
+const MAX_CONCURRENT_EVALUATION = 5;
+
+/**
  * Step execution result
  */
 export interface StepExecutionResult {
@@ -82,21 +132,83 @@ const defaultLogger = {
 };
 
 /**
+ * Helper to get hypothesis Deep Research handle from fullData
+ */
+function getHypothesisHandle(h: HypothesisData): DeepResearchHandle | undefined {
+  return (h.fullData as ExtendedHypothesisFullData)?.deepResearchHandle;
+}
+
+/**
+ * Categorize hypotheses by their processing state
+ */
+function categorizeHypotheses(hypotheses: HypothesisData[]) {
+  const pending: HypothesisData[] = [];
+  const polling: HypothesisData[] = [];
+  const readyForEval: HypothesisData[] = [];
+  const inEvaluation: HypothesisData[] = [];
+  const completed: HypothesisData[] = [];
+  const stuck: HypothesisData[] = [];
+
+  for (const h of hypotheses) {
+    const handle = getHypothesisHandle(h);
+
+    if (h.processingStatus === 'pending') {
+      pending.push(h);
+    } else if (h.processingStatus === 'step2_2') {
+      if (handle && !h.step2_2Output) {
+        // Has handle, waiting for completion
+        polling.push(h);
+      } else if (h.step2_2Output) {
+        // Has output, ready for evaluation
+        readyForEval.push(h);
+      } else {
+        // No handle and no output - stuck
+        stuck.push(h);
+      }
+    } else if (h.processingStatus && ['step3', 'step4', 'step5'].includes(h.processingStatus)) {
+      inEvaluation.push(h);
+    } else if (h.processingStatus === 'completed' || h.processingStatus === 'error') {
+      completed.push(h);
+    }
+  }
+
+  return { pending, polling, readyForEval, inEvaluation, completed, stuck };
+}
+
+/**
  * Determine the next phase to execute based on current state
+ *
+ * For parallel processing:
+ * - Poll all hypotheses with handles (quick status checks)
+ * - Start new Deep Researches up to MAX_CONCURRENT limit
+ * - Evaluate any hypothesis that completed step2_2
+ *
+ * @param progressInfo - Contains Deep Research handles for async operations
  */
 export function getNextPhase(
   status: string,
   currentStep: number,
-  hypotheses: HypothesisData[]
+  hypotheses: HypothesisData[],
+  progressInfo?: ExtendedProgressInfo | null
 ): PipelinePhase | null {
   // Terminal states
   if (status === 'completed') return null;
   if (status === 'error') return null;
   if (status === 'cancelled') return null;
 
-  // Pending -> Start step 2-1
+  // Step 2-1: Check for pending async Deep Research (run-level)
+  if (progressInfo?.deepResearchHandle) {
+    return 'step2_1_polling';
+  }
+
+  // Legacy: Check for single hypothesis handle (backwards compatibility)
+  if (progressInfo?.hypothesisDeepResearchHandle) {
+    return 'step2_2_polling';
+  }
+
+  // Pending -> Start step 2-1 (async)
   if (status === 'pending') {
-    return 'step2_1';
+    return 'step2_1_start';
   }
 
   // Running states
@@ -106,38 +218,35 @@ export function getNextPhase(
       return 'step2_1_5';
     }
 
-    // Check if any hypotheses need step 2-2
-    const needsStep2_2 = hypotheses.some(
-      (h) => h.processingStatus === 'pending'
-    );
-    if (needsStep2_2) {
-      return 'step2_2';
+    // Categorize hypotheses for parallel processing
+    const { pending, polling, readyForEval, inEvaluation, completed, stuck } = categorizeHypotheses(hypotheses);
+
+    // Priority 1: Poll any hypotheses that have handles (quick API calls)
+    if (polling.length > 0) {
+      return 'step2_2_polling';
     }
 
-    // Check if any hypotheses need evaluation (steps 3-5)
-    const needsEvaluation = hypotheses.some(
-      (h) => h.processingStatus === 'step2_2' && h.step2_2Output
-    );
-    if (needsEvaluation) {
+    // Priority 2: Start new Deep Researches if under capacity
+    // Include stuck hypotheses (they need to restart)
+    const canStart = pending.length + stuck.length;
+    const inFlight = polling.length;
+    if (canStart > 0 && inFlight < MAX_CONCURRENT_HYPOTHESIS_RESEARCH) {
+      return 'step2_2_start';
+    }
+
+    // Priority 3: Evaluate any hypothesis ready for evaluation
+    if (readyForEval.length > 0) {
       return 'evaluation';
     }
 
-    // Check if all hypotheses are completed
-    const allCompleted = hypotheses.length > 0 && hypotheses.every(
-      (h) => h.processingStatus === 'completed' || h.processingStatus === 'error'
-    );
-    if (allCompleted) {
+    // Check if all hypotheses are done
+    if (hypotheses.length > 0 && completed.length === hypotheses.length) {
       return 'completed';
     }
 
-    // If currentStep suggests we should be in step2_2 or later
-    if (currentStep >= 2 && hypotheses.length > 0) {
-      // Find next hypothesis to process
-      const pendingHypothesis = hypotheses.find(h => h.processingStatus === 'pending');
-      if (pendingHypothesis) return 'step2_2';
-
-      const step2_2Done = hypotheses.find(h => h.processingStatus === 'step2_2' && h.step2_2Output);
-      if (step2_2Done) return 'evaluation';
+    // If something is still in evaluation, keep going
+    if (inEvaluation.length > 0) {
+      return 'evaluation';
     }
   }
 
@@ -145,7 +254,144 @@ export function getNextPhase(
 }
 
 /**
- * Execute step 2-1: Generate hypotheses using Deep Research
+ * Execute step 2-1 START: Begin Deep Research asynchronously
+ * This returns quickly, saving the handle for later polling
+ */
+async function executeStep2_1Start(
+  deps: StepExecutorDependencies,
+  run: ExtendedRunData,
+  targetSpecContent: string,
+  technicalAssetsContent: string
+): Promise<void> {
+  const { db, ai, logger = defaultLogger } = deps;
+
+  logger.log(`Step 2-1 START: Beginning async Deep Research for run ${run.id}`);
+
+  // Check if AI adapter supports async operations
+  if (!ai.startDeepResearchAsync) {
+    throw new Error('AI adapter does not support async Deep Research');
+  }
+
+  // Update status to running
+  await db.updateRunStatus(run.id, {
+    status: 'running',
+    currentStep: 1,
+    progressInfo: { message: 'Step 2-1: Deep Research を開始しています...', phase: 'step2_1_start' },
+    updatedAt: new Date(),
+  });
+
+  // Check for existing hypothesis filter
+  let existingHypotheses: ExistingHypothesis[] = [];
+  const existingFilter = (run.progressInfo as ExtendedProgressInfo)?.existingFilter;
+
+  if (existingFilter?.enabled && db.getExistingHypotheses) {
+    logger.log(`Querying existing hypotheses with filter`);
+    existingHypotheses = await db.getExistingHypotheses(run.projectId, {
+      targetSpecIds: existingFilter.targetSpecIds,
+      technicalAssetsIds: existingFilter.technicalAssetsIds,
+    });
+    logger.log(`Found ${existingHypotheses.length} existing hypotheses to exclude`);
+  }
+
+  const instructions = buildInstructionDocument(run.hypothesisCount, false, existingHypotheses);
+
+  // Start Deep Research asynchronously (returns immediately)
+  const handle = await ai.startDeepResearchAsync({
+    prompt: 'task_instructionsの指示に従い、事業仮説を生成してください。',
+    files: [
+      { name: 'target_specification', content: targetSpecContent },
+      { name: 'technical_assets', content: technicalAssetsContent },
+      { name: 'task_instructions', content: instructions },
+    ],
+    storeName: `asip-run-${run.id}-step2_1`,
+  });
+
+  logger.log(`Step 2-1 START complete. Interaction ID: ${handle.interactionId}`);
+
+  // Save the handle in progressInfo for polling
+  await db.updateRunStatus(run.id, {
+    progressInfo: {
+      message: 'Step 2-1: Deep Research 実行中...',
+      phase: 'step2_1_polling',
+      deepResearchHandle: handle,
+      existingFilter: existingFilter,
+    },
+    updatedAt: new Date(),
+  });
+}
+
+/**
+ * Execute step 2-1 POLLING: Check if Deep Research is complete
+ */
+async function executeStep2_1Polling(
+  deps: StepExecutorDependencies,
+  run: ExtendedRunData
+): Promise<{ completed: boolean }> {
+  const { db, ai, logger = defaultLogger } = deps;
+
+  const progressInfo = run.progressInfo as ExtendedProgressInfo;
+  const handle = progressInfo?.deepResearchHandle;
+
+  if (!handle) {
+    throw new Error('No Deep Research handle found in progressInfo');
+  }
+
+  if (!ai.checkDeepResearchStatus) {
+    throw new Error('AI adapter does not support async Deep Research');
+  }
+
+  logger.log(`Step 2-1 POLLING: Checking status for ${handle.interactionId}`);
+
+  const status = await ai.checkDeepResearchStatus(handle);
+
+  logger.log(`Step 2-1 POLLING: Status = ${status.status}`);
+
+  if (status.status === 'completed') {
+    logger.log(`Step 2-1 POLLING: Deep Research completed! Output length: ${status.result?.length || 0}`);
+
+    // Cleanup resources
+    if (ai.cleanupDeepResearch) {
+      await ai.cleanupDeepResearch(handle);
+    }
+
+    // Save result and clear handle
+    await db.updateRunStatus(run.id, {
+      currentStep: 1,
+      step2_1Output: status.result || '',
+      progressInfo: {
+        message: 'Step 2-1 完了',
+        phase: 'step2_1',
+        existingFilter: progressInfo.existingFilter,
+      },
+      updatedAt: new Date(),
+    });
+
+    return { completed: true };
+  }
+
+  if (status.status === 'failed') {
+    // Cleanup resources
+    if (ai.cleanupDeepResearch) {
+      await ai.cleanupDeepResearch(handle);
+    }
+
+    throw new Error(`Deep Research failed: ${status.error}`);
+  }
+
+  // Still running - update progress and return
+  await db.updateRunStatus(run.id, {
+    progressInfo: {
+      ...progressInfo,
+      message: `Step 2-1: Deep Research ${status.status}...`,
+    },
+    updatedAt: new Date(),
+  });
+
+  return { completed: false };
+}
+
+/**
+ * Execute step 2-1: Generate hypotheses using Deep Research (BLOCKING - for tests)
  */
 async function executeStep2_1(
   deps: StepExecutorDependencies,
@@ -167,7 +413,7 @@ async function executeStep2_1(
 
   // Check for existing hypothesis filter
   let existingHypotheses: ExistingHypothesis[] = [];
-  const existingFilter = run.progressInfo?.existingFilter;
+  const existingFilter = (run.progressInfo as ExtendedProgressInfo)?.existingFilter;
 
   if (existingFilter?.enabled && db.getExistingHypotheses) {
     logger.log(`Querying existing hypotheses with filter`);
@@ -309,7 +555,305 @@ ${step2_1Output.slice(0, 50000)}
 }
 
 /**
- * Execute step 2-2: Deep Research for a single hypothesis
+ * Execute step 2-2 START: Begin hypothesis Deep Research asynchronously
+ * Now supports starting MULTIPLE hypotheses in parallel
+ */
+async function executeStep2_2Start(
+  deps: StepExecutorDependencies,
+  run: ExtendedRunData,
+  hypotheses: HypothesisData[],
+  targetSpecContent: string,
+  technicalAssetsContent: string
+): Promise<{ started: number }> {
+  const { db, ai, logger = defaultLogger } = deps;
+
+  if (!ai.startDeepResearchAsync) {
+    throw new Error('AI adapter does not support async Deep Research');
+  }
+
+  // Categorize to find hypotheses to start
+  const { pending, polling, stuck } = categorizeHypotheses(hypotheses);
+  const inFlightCount = polling.length;
+  const availableSlots = MAX_CONCURRENT_HYPOTHESIS_RESEARCH - inFlightCount;
+
+  if (availableSlots <= 0) {
+    logger.log(`Step 2-2 START: No slots available (${inFlightCount} in flight)`);
+    return { started: 0 };
+  }
+
+  // Combine pending and stuck hypotheses, prioritize pending
+  const toStart = [...pending, ...stuck].slice(0, availableSlots);
+
+  logger.log(`Step 2-2 START: Starting ${toStart.length} hypotheses (${inFlightCount} already in flight)`);
+
+  let startedCount = 0;
+
+  for (const hypothesis of toStart) {
+    try {
+      logger.log(`Step 2-2 START for hypothesis ${hypothesis.uuid} (${hypothesis.displayTitle})`);
+
+      const hypothesisContext = `
+=== 仮説情報 ===
+タイトル: ${hypothesis.displayTitle || ''}
+UUID: ${hypothesis.uuid}
+仮説番号: ${hypothesis.hypothesisNumber}
+
+=== 仮説概要 (Step 2-1より) ===
+${hypothesis.step2_1Summary || ''}
+`;
+
+      const taskInstructions = `この仮説について詳細な調査を行い、以下の観点から深掘りしたレポートを作成してください：
+
+1. 市場機会の詳細分析
+2. 技術的実現可能性
+3. ビジネスモデル詳細
+4. 競合優位性の深掘り
+
+調査結果は具体的なデータや事例を含めて記述してください。`;
+
+      const handle = await ai.startDeepResearchAsync({
+        prompt: `hypothesis_contextの仮説について、task_instructionsの指示に従って詳細な調査レポートを作成してください。`,
+        files: [
+          { name: 'target_specification', content: targetSpecContent },
+          { name: 'technical_assets', content: technicalAssetsContent },
+          { name: 'hypothesis_context', content: hypothesisContext },
+          { name: 'task_instructions', content: taskInstructions },
+        ],
+        storeName: `asip-${run.id}-${hypothesis.uuid.slice(0, 8)}`,
+      });
+
+      logger.log(`Step 2-2 START complete for ${hypothesis.uuid}. Interaction ID: ${handle.interactionId}`);
+
+      // Store handle in hypothesis fullData (not progressInfo)
+      const existingFullData = (hypothesis.fullData || {}) as ExtendedHypothesisFullData;
+      await db.updateHypothesis(hypothesis.uuid, {
+        processingStatus: 'step2_2',
+        fullData: {
+          ...existingFullData,
+          deepResearchHandle: handle,
+        },
+      });
+
+      startedCount++;
+    } catch (error) {
+      logger.error(`Failed to start Deep Research for hypothesis ${hypothesis.uuid}:`, error);
+      // Mark this hypothesis as error but continue with others
+      await db.updateHypothesis(hypothesis.uuid, {
+        processingStatus: 'error',
+        errorMessage: error instanceof Error ? error.message : 'Failed to start Deep Research',
+      });
+    }
+  }
+
+  // Update run progress info
+  const existingProgressInfo = run.progressInfo as ExtendedProgressInfo;
+  await db.updateRunStatus(run.id, {
+    progressInfo: {
+      ...existingProgressInfo,
+      message: `Step 2-2: ${inFlightCount + startedCount}件の仮説を並列調査中...`,
+      phase: 'step2_2_polling',
+      inFlightCount: inFlightCount + startedCount,
+    },
+    updatedAt: new Date(),
+  });
+
+  return { started: startedCount };
+}
+
+/**
+ * Execute step 2-2 POLLING: Check ALL hypotheses with Deep Research handles
+ * Now polls multiple hypotheses in parallel
+ */
+async function executeStep2_2Polling(
+  deps: StepExecutorDependencies,
+  run: ExtendedRunData,
+  hypotheses: HypothesisData[]
+): Promise<{ completed: number; stillRunning: number }> {
+  const { db, ai, logger = defaultLogger } = deps;
+
+  if (!ai.checkDeepResearchStatus) {
+    throw new Error('AI adapter does not support async Deep Research');
+  }
+
+  // Find all hypotheses with handles that need polling
+  const { polling } = categorizeHypotheses(hypotheses);
+
+  logger.log(`Step 2-2 POLLING: Checking ${polling.length} hypotheses`);
+
+  let completedCount = 0;
+  let stillRunningCount = 0;
+
+  // Poll each hypothesis
+  for (const hypothesis of polling) {
+    const handle = getHypothesisHandle(hypothesis);
+    if (!handle) continue;
+
+    try {
+      logger.log(`Step 2-2 POLLING: Checking ${hypothesis.uuid} (${hypothesis.displayTitle})`);
+
+      const status = await ai.checkDeepResearchStatus(handle);
+
+      logger.log(`Step 2-2 POLLING: ${hypothesis.uuid} status = ${status.status}`);
+
+      if (status.status === 'completed') {
+        logger.log(`Step 2-2 POLLING: ${hypothesis.uuid} completed! Output length: ${status.result?.length || 0}`);
+
+        // Cleanup resources
+        if (ai.cleanupDeepResearch) {
+          await ai.cleanupDeepResearch(handle);
+        }
+
+        // Save result and clear handle
+        const existingFullData = (hypothesis.fullData || {}) as ExtendedHypothesisFullData;
+        await db.updateHypothesis(hypothesis.uuid, {
+          step2_2Output: status.result || '',
+          fullData: {
+            ...existingFullData,
+            deepResearchHandle: undefined,
+          },
+        });
+
+        completedCount++;
+      } else if (status.status === 'failed') {
+        logger.error(`Step 2-2 POLLING: ${hypothesis.uuid} failed: ${status.error}`);
+
+        // Cleanup resources
+        if (ai.cleanupDeepResearch) {
+          await ai.cleanupDeepResearch(handle);
+        }
+
+        // Mark as error and clear handle
+        const existingFullData = (hypothesis.fullData || {}) as ExtendedHypothesisFullData;
+        await db.updateHypothesis(hypothesis.uuid, {
+          processingStatus: 'error',
+          errorMessage: status.error || 'Deep Research failed',
+          fullData: {
+            ...existingFullData,
+            deepResearchHandle: undefined,
+          },
+        });
+
+        completedCount++; // Count as "done" for progress
+      } else {
+        // Still running
+        stillRunningCount++;
+      }
+    } catch (error) {
+      logger.error(`Step 2-2 POLLING: Error polling ${hypothesis.uuid}:`, error);
+      // Don't fail the whole batch, just log and continue
+      stillRunningCount++;
+    }
+  }
+
+  // Update run progress info
+  const existingProgressInfo = run.progressInfo as ExtendedProgressInfo;
+  const { pending, readyForEval, completed: doneHypotheses } = categorizeHypotheses(hypotheses);
+
+  await db.updateRunStatus(run.id, {
+    progressInfo: {
+      ...existingProgressInfo,
+      message: `Step 2-2: ${stillRunningCount}件調査中, ${readyForEval.length + completedCount}件完了`,
+      phase: stillRunningCount > 0 ? 'step2_2_polling' : 'step2_2',
+      inFlightCount: stillRunningCount,
+      completedCount: doneHypotheses.length + readyForEval.length + completedCount,
+    },
+    updatedAt: new Date(),
+  });
+
+  return { completed: completedCount, stillRunning: stillRunningCount };
+}
+
+/**
+ * Legacy: Execute step 2-2 POLLING for single hypothesis (backwards compatibility)
+ */
+async function executeStep2_2PollingSingle(
+  deps: StepExecutorDependencies,
+  run: ExtendedRunData
+): Promise<{ completed: boolean }> {
+  const { db, ai, logger = defaultLogger } = deps;
+
+  const progressInfo = run.progressInfo as ExtendedProgressInfo;
+  const handleInfo = progressInfo?.hypothesisDeepResearchHandle;
+
+  if (!handleInfo) {
+    throw new Error('No hypothesis Deep Research handle found in progressInfo');
+  }
+
+  if (!ai.checkDeepResearchStatus) {
+    throw new Error('AI adapter does not support async Deep Research');
+  }
+
+  const { hypothesisUuid, handle } = handleInfo;
+
+  logger.log(`Step 2-2 POLLING (legacy): Checking status for hypothesis ${hypothesisUuid}`);
+
+  const status = await ai.checkDeepResearchStatus(handle);
+
+  logger.log(`Step 2-2 POLLING (legacy): Status = ${status.status}`);
+
+  if (status.status === 'completed') {
+    logger.log(`Step 2-2 POLLING (legacy): Completed! Output length: ${status.result?.length || 0}`);
+
+    // Cleanup resources
+    if (ai.cleanupDeepResearch) {
+      await ai.cleanupDeepResearch(handle);
+    }
+
+    // Save result
+    await db.updateHypothesis(hypothesisUuid, { step2_2Output: status.result || '' });
+
+    // Clear handle from progressInfo
+    await db.updateRunStatus(run.id, {
+      progressInfo: {
+        ...progressInfo,
+        message: `Step 2-2: 仮説の調査完了`,
+        phase: 'step2_2',
+        hypothesisDeepResearchHandle: undefined,
+      },
+      updatedAt: new Date(),
+    });
+
+    return { completed: true };
+  }
+
+  if (status.status === 'failed') {
+    // Cleanup resources
+    if (ai.cleanupDeepResearch) {
+      await ai.cleanupDeepResearch(handle);
+    }
+
+    // Mark hypothesis as error
+    await db.updateHypothesis(hypothesisUuid, {
+      processingStatus: 'error',
+      errorMessage: status.error || 'Deep Research failed',
+    });
+
+    // Clear handle
+    await db.updateRunStatus(run.id, {
+      progressInfo: {
+        ...progressInfo,
+        hypothesisDeepResearchHandle: undefined,
+      },
+      updatedAt: new Date(),
+    });
+
+    return { completed: true }; // Move on to next hypothesis
+  }
+
+  // Still running
+  await db.updateRunStatus(run.id, {
+    progressInfo: {
+      ...progressInfo,
+      message: `Step 2-2: 仮説調査 ${status.status}...`,
+    },
+    updatedAt: new Date(),
+  });
+
+  return { completed: false };
+}
+
+/**
+ * Execute step 2-2: Deep Research for a single hypothesis (BLOCKING - for tests)
  */
 async function executeStep2_2ForOne(
   deps: StepExecutorDependencies,
@@ -436,6 +980,80 @@ async function executeEvaluationForOne(
 }
 
 /**
+ * Execute steps 3-5: Evaluation for multiple hypotheses in parallel
+ */
+async function executeEvaluationParallel(
+  deps: StepExecutorDependencies,
+  run: ExtendedRunData,
+  hypotheses: HypothesisData[],
+  targetSpecContent: string,
+  technicalAssetsContent: string
+): Promise<{ completed: number; inProgress: number }> {
+  const { db, logger = defaultLogger } = deps;
+
+  // Find hypotheses ready for evaluation (step2_2 with output, not yet started)
+  const readyForEval = hypotheses.filter(
+    h => h.processingStatus === 'step2_2' && h.step2_2Output
+  );
+
+  // Find hypotheses currently in evaluation
+  const inEvaluation = hypotheses.filter(
+    h => h.processingStatus === 'step3' ||
+         h.processingStatus === 'step4' ||
+         h.processingStatus === 'step5'
+  );
+
+  // Find completed hypotheses
+  const completed = hypotheses.filter(h => h.processingStatus === 'completed');
+
+  const currentInProgress = inEvaluation.length;
+  const canStart = Math.min(
+    readyForEval.length,
+    MAX_CONCURRENT_EVALUATION - currentInProgress
+  );
+
+  logger.log(`Evaluation parallel: ${readyForEval.length} ready, ${currentInProgress} in progress, ${completed.length} completed, starting ${canStart}`);
+
+  if (canStart > 0) {
+    const toStart = readyForEval.slice(0, canStart);
+
+    // Update progress info
+    await db.updateRunStatus(run.id, {
+      progressInfo: {
+        message: `Step 3-5: ${currentInProgress + canStart}件評価中, ${completed.length}件完了`,
+        phase: 'evaluation',
+        inFlightCount: currentInProgress + canStart,
+        completedCount: completed.length,
+      },
+      updatedAt: new Date(),
+    });
+
+    // Run evaluations in parallel
+    await Promise.all(
+      toStart.map(h =>
+        executeEvaluationForOne(deps, run, h, targetSpecContent, technicalAssetsContent)
+          .catch(error => {
+            logger.error(`Evaluation failed for hypothesis ${h.uuid}:`, error);
+            // Mark as error but don't throw
+            return db.updateHypothesis(h.uuid, {
+              processingStatus: 'error' as HypothesisProcessingStatus,
+            });
+          })
+      )
+    );
+  }
+
+  // Recount after execution
+  const newCompleted = hypotheses.filter(h => h.processingStatus === 'completed').length + canStart;
+  const stillInProgress = inEvaluation.length; // These were already in progress before
+
+  return {
+    completed: newCompleted,
+    inProgress: stillInProgress,
+  };
+}
+
+/**
  * Execute the next step in the pipeline
  *
  * This is the main entry point for step-by-step execution.
@@ -485,8 +1103,9 @@ export async function executeNextStep(
     // Get hypotheses
     const hypotheses = await db.getHypothesesForRun(runId);
 
-    // Determine next phase
-    const phase = getNextPhase(run.status, run.currentStep || 0, hypotheses);
+    // Determine next phase (pass progressInfo for async state detection)
+    const progressInfo = run.progressInfo as ExtendedProgressInfo;
+    const phase = getNextPhase(run.status, run.currentStep || 0, hypotheses, progressInfo);
 
     if (!phase) {
       return { phase: 'completed', hasMore: false };
@@ -496,6 +1115,44 @@ export async function executeNextStep(
 
     // Execute the appropriate phase
     switch (phase) {
+      // ===== ASYNC PHASES (for serverless) =====
+
+      case 'step2_1_start':
+        // Start Deep Research asynchronously
+        await executeStep2_1Start(deps, run, targetSpec.content, technicalAssets.content);
+        return { phase, hasMore: true };
+
+      case 'step2_1_polling': {
+        // Poll for Deep Research completion
+        const result = await executeStep2_1Polling(deps, run);
+        // hasMore is true whether complete or not - we continue either way
+        return { phase, hasMore: true };
+      }
+
+      case 'step2_2_start': {
+        // Start hypothesis Deep Research asynchronously (parallel)
+        const result = await executeStep2_2Start(deps, run, hypotheses, targetSpec.content, technicalAssets.content);
+        logger.log(`Step 2-2 START: Started ${result.started} hypotheses`);
+        return { phase, hasMore: true };
+      }
+
+      case 'step2_2_polling': {
+        // Check if this is legacy single-handle mode
+        const progressInfo = run.progressInfo as ExtendedProgressInfo;
+        if (progressInfo?.hypothesisDeepResearchHandle) {
+          // Legacy mode: use single-hypothesis polling
+          const result = await executeStep2_2PollingSingle(deps, run);
+          return { phase, hasMore: true };
+        }
+
+        // Parallel mode: poll all hypotheses with handles
+        const result = await executeStep2_2Polling(deps, run, hypotheses);
+        logger.log(`Step 2-2 POLLING: ${result.completed} completed, ${result.stillRunning} still running`);
+        return { phase, hasMore: true };
+      }
+
+      // ===== LEGACY BLOCKING PHASES (for tests) =====
+
       case 'step2_1':
         await executeStep2_1(deps, run, targetSpec.content, technicalAssets.content);
         return { phase, hasMore: true };
@@ -505,36 +1162,40 @@ export async function executeNextStep(
         return { phase, hasMore: true };
 
       case 'step2_2': {
-        // Find next hypothesis to process
+        // Find next hypothesis to process (blocking)
         const pendingHypothesis = hypotheses.find(h => h.processingStatus === 'pending');
         if (pendingHypothesis) {
           await executeStep2_2ForOne(deps, run, pendingHypothesis, targetSpec.content, technicalAssets.content);
-          // After processing, this hypothesis will need evaluation
-          // Check if there are more pending hypotheses to process
-          const remainingPending = hypotheses.filter(h => h.processingStatus === 'pending').length - 1;
-          // hasMore is true because there's either more pending or the just-processed one needs evaluation
           return { phase, hasMore: true };
         }
         return { phase, hasMore: true };
       }
 
+      // ===== COMMON PHASES =====
+
       case 'evaluation': {
-        // Find next hypothesis ready for evaluation
-        const readyHypothesis = hypotheses.find(
-          h => h.processingStatus === 'step2_2' && h.step2_2Output
+        // Execute evaluations in parallel (up to MAX_CONCURRENT_EVALUATION)
+        await executeEvaluationParallel(
+          deps,
+          run,
+          hypotheses,
+          targetSpec.content,
+          technicalAssets.content
         );
-        if (readyHypothesis) {
-          await executeEvaluationForOne(deps, run, readyHypothesis, targetSpec.content, technicalAssets.content);
-          // Check if there are more
-          const remainingToEvaluate = hypotheses.filter(
-            h => (h.processingStatus === 'step2_2' && h.step2_2Output) ||
-                 h.processingStatus === 'step3' ||
-                 h.processingStatus === 'step4' ||
-                 h.processingStatus === 'step5'
-          ).length - 1;
-          return { phase, hasMore: remainingToEvaluate > 0 };
-        }
-        return { phase, hasMore: false };
+
+        // Re-fetch hypotheses to check current state
+        const updatedHypotheses = await db.getHypothesesForRun(runId);
+        const allCompleted = updatedHypotheses.every(
+          h => h.processingStatus === 'completed' || h.processingStatus === 'error'
+        );
+        const anyRemaining = updatedHypotheses.some(
+          h => (h.processingStatus === 'step2_2' && h.step2_2Output) ||
+               h.processingStatus === 'step3' ||
+               h.processingStatus === 'step4' ||
+               h.processingStatus === 'step5'
+        );
+
+        return { phase, hasMore: !allCompleted && anyRemaining };
       }
 
       case 'completed': {

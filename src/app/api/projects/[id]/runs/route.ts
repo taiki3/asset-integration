@@ -6,7 +6,7 @@ import { projects, resources, runs } from '@/lib/db/schema';
 import { eq, and, isNull, desc } from 'drizzle-orm';
 import { createMockRun, getMockRuns } from '@/lib/api-mock';
 import { mockProjects } from '@/lib/db/mock';
-import { getBaseUrl } from '@/lib/utils/get-base-url';
+import { getBaseUrl, getInternalApiHeaders } from '@/lib/utils/get-base-url';
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -57,8 +57,27 @@ export async function GET(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: 'Project not found' }, { status: 404 });
     }
 
+    // Select only necessary columns for list view (exclude heavy JSONB/TEXT outputs)
     const projectRuns = await db
-      .select()
+      .select({
+        id: runs.id,
+        projectId: runs.projectId,
+        targetSpecId: runs.targetSpecId,
+        technicalAssetsId: runs.technicalAssetsId,
+        jobName: runs.jobName,
+        hypothesisCount: runs.hypothesisCount,
+        loopCount: runs.loopCount,
+        loopIndex: runs.loopIndex,
+        modelChoice: runs.modelChoice,
+        status: runs.status,
+        currentStep: runs.currentStep,
+        currentLoop: runs.currentLoop,
+        errorMessage: runs.errorMessage,
+        createdAt: runs.createdAt,
+        updatedAt: runs.updatedAt,
+        completedAt: runs.completedAt,
+        // Exclude heavy columns: step*IndividualOutputs, integratedList, debugPrompts, progressInfo, executionTiming
+      })
       .from(runs)
       .where(eq(runs.projectId, projectId))
       .orderBy(desc(runs.createdAt));
@@ -203,21 +222,38 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const baseUrl = getBaseUrl();
     const cronSecret = process.env.CRON_SECRET;
 
+    console.log(`[Runs] About to trigger pipeline - baseUrl: ${baseUrl}, CRON_SECRET set: ${!!cronSecret}, length: ${cronSecret?.length || 0}`);
+
     if (cronSecret) {
       after(async () => {
         try {
-          console.log(`[Runs] Triggering pipeline for run ${run.id}`);
-          const response = await fetch(`${baseUrl}/api/runs/${run.id}/process`, {
+          const targetUrl = `${baseUrl}/api/runs/${run.id}/process`;
+          const headers = getInternalApiHeaders(cronSecret);
+          console.log(`[Runs] Calling: ${targetUrl}`);
+          console.log(`[Runs] Headers: ${JSON.stringify(Object.keys(headers))}`);
+          console.log(`[Runs] Bypass secret set: ${!!headers['x-vercel-protection-bypass']}`);
+
+          const response = await fetch(targetUrl, {
             method: 'POST',
-            headers: {
-              'x-cron-secret': cronSecret,
-              'Content-Type': 'application/json',
-            },
+            headers,
+            redirect: 'manual', // Don't follow redirects (protection might redirect)
           });
 
-          if (!response.ok) {
-            throw new Error(`Process API returned ${response.status}`);
+          console.log(`[Runs] Response status: ${response.status}, type: ${response.type}`);
+          console.log(`[Runs] Content-Type: ${response.headers.get('content-type')}`);
+
+          // Check for redirect (Vercel Protection redirect)
+          if (response.status >= 300 && response.status < 400) {
+            const location = response.headers.get('location');
+            throw new Error(`Redirected to ${location} - Vercel Deployment Protection may be blocking. Check VERCEL_AUTOMATION_BYPASS_SECRET.`);
           }
+
+          if (!response.ok) {
+            const body = await response.text();
+            throw new Error(`Process API returned ${response.status}: ${body}`);
+          }
+
+          console.log(`[Runs] Pipeline started successfully for run ${run.id}`);
         } catch (error) {
           console.error(`Failed to start pipeline for run ${run.id}:`, error);
           // Update run status to error if pipeline fails to start

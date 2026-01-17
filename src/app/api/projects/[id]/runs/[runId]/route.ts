@@ -40,8 +40,29 @@ export async function GET(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: 'Project not found' }, { status: 404 });
     }
 
+    // Select only necessary columns for UI (exclude heavy step outputs)
     const [run] = await db
-      .select()
+      .select({
+        id: runs.id,
+        projectId: runs.projectId,
+        targetSpecId: runs.targetSpecId,
+        technicalAssetsId: runs.technicalAssetsId,
+        jobName: runs.jobName,
+        hypothesisCount: runs.hypothesisCount,
+        loopCount: runs.loopCount,
+        loopIndex: runs.loopIndex,
+        modelChoice: runs.modelChoice,
+        status: runs.status,
+        currentStep: runs.currentStep,
+        currentLoop: runs.currentLoop,
+        progressInfo: runs.progressInfo,
+        debugPrompts: runs.debugPrompts,
+        errorMessage: runs.errorMessage,
+        createdAt: runs.createdAt,
+        updatedAt: runs.updatedAt,
+        completedAt: runs.completedAt,
+        // Exclude heavy columns: step*IndividualOutputs, integratedList, executionTiming, geminiInteractions
+      })
       .from(runs)
       .where(
         and(
