@@ -7,7 +7,7 @@ test.describe('Execution Panel', () => {
       await page.waitForLoadState('domcontentloaded');
 
       // Execution panel should be visible
-      await expect(page.getByRole('heading', { name: 'G-Methodを実行' })).toBeVisible({ timeout: 10000 });
+      await expect(page.getByRole('heading', { name: 'ASIPを実行' })).toBeVisible({ timeout: 10000 });
 
       // Resource selectors should be present (use label elements)
       await expect(page.locator('label:has-text("市場・顧客ニーズ")')).toBeVisible();
@@ -103,7 +103,7 @@ test.describe('Execution Panel', () => {
       await page.waitForLoadState('domcontentloaded');
 
       // Wait for page to load fully
-      await expect(page.getByRole('heading', { name: 'G-Methodを実行' })).toBeVisible({ timeout: 10000 });
+      await expect(page.getByRole('heading', { name: 'ASIPを実行' })).toBeVisible({ timeout: 10000 });
 
       // Resource management button should be visible
       await expect(page.getByRole('button', { name: 'リソースの編集' })).toBeVisible();
@@ -127,7 +127,7 @@ test.describe('Execution Panel', () => {
       await page.goto('/projects/1');
       await page.waitForLoadState('domcontentloaded');
 
-      await expect(page.getByRole('heading', { name: 'G-Methodを実行' })).toBeVisible({ timeout: 10000 });
+      await expect(page.getByRole('heading', { name: 'ASIPを実行' })).toBeVisible({ timeout: 10000 });
 
       // Click first add button (for target spec)
       await page.locator('button:has-text("追加")').first().click();
@@ -204,7 +204,7 @@ test.describe('Execution Panel', () => {
       await page.waitForLoadState('domcontentloaded');
 
       // Execute button should be disabled
-      const executeButton = page.locator('button:has-text("G-Methodを実行")');
+      const executeButton = page.locator('button:has-text("ASIPを実行")');
       await expect(executeButton).toBeDisabled();
     });
   });
