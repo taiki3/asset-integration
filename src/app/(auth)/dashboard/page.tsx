@@ -19,26 +19,26 @@ import { mockProjects } from '@/lib/db/mock';
 import { FolderOpen } from 'lucide-react';
 
 export default async function DashboardPage() {
-  const user = await getUser();
+  const useMockDb = process.env.USE_MOCK_DB === 'true';
+
+  // Parallel fetch: auth + projects
+  const [user, allProjects] = await Promise.all([
+    getUser(),
+    useMockDb
+      ? Promise.resolve(mockProjects)
+      : db
+          .select()
+          .from(projects)
+          .where(isNull(projects.deletedAt))
+          .orderBy(desc(projects.createdAt)),
+  ]);
 
   if (!user) {
     return null;
   }
 
-  // Use mock data only if USE_MOCK_DB is true
-  // Otherwise use real database even with mock auth
-  const useMockDb = process.env.USE_MOCK_DB === 'true';
-
-  let userProjects;
-  if (useMockDb) {
-    userProjects = mockProjects.filter(p => p.userId === user.id);
-  } else {
-    userProjects = await db
-      .select()
-      .from(projects)
-      .where(and(eq(projects.userId, user.id), isNull(projects.deletedAt)))
-      .orderBy(desc(projects.createdAt));
-  }
+  // Filter by user after parallel fetch
+  const userProjects = allProjects.filter(p => p.userId === user.id);
 
   return (
     <div className="space-y-8">
