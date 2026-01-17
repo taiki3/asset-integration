@@ -171,7 +171,7 @@ export function RunDetailView({ project, run: initialRun, resources, hypotheses:
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center justify-between text-sm">
-            <span>パイプライン: ステップ {run.currentStep} / {STEP_LABELS.length - 1}</span>
+            <span>パイプライン: {STEP_LABELS[run.currentStep] || `ステップ ${run.currentStep}`}</span>
             <span>{progress}%</span>
           </div>
           <div className="h-2 bg-muted rounded-full overflow-hidden">
