@@ -113,6 +113,9 @@ interface ExtendedHypothesisFullData {
 // Maximum concurrent Deep Research requests for hypotheses
 const MAX_CONCURRENT_HYPOTHESIS_RESEARCH = 5;
 
+// Maximum concurrent evaluation (Step 3-5) for hypotheses
+const MAX_CONCURRENT_EVALUATION = 5;
+
 /**
  * Step execution result
  */
@@ -977,6 +980,80 @@ async function executeEvaluationForOne(
 }
 
 /**
+ * Execute steps 3-5: Evaluation for multiple hypotheses in parallel
+ */
+async function executeEvaluationParallel(
+  deps: StepExecutorDependencies,
+  run: ExtendedRunData,
+  hypotheses: HypothesisData[],
+  targetSpecContent: string,
+  technicalAssetsContent: string
+): Promise<{ completed: number; inProgress: number }> {
+  const { db, logger = defaultLogger } = deps;
+
+  // Find hypotheses ready for evaluation (step2_2 with output, not yet started)
+  const readyForEval = hypotheses.filter(
+    h => h.processingStatus === 'step2_2' && h.step2_2Output
+  );
+
+  // Find hypotheses currently in evaluation
+  const inEvaluation = hypotheses.filter(
+    h => h.processingStatus === 'step3' ||
+         h.processingStatus === 'step4' ||
+         h.processingStatus === 'step5'
+  );
+
+  // Find completed hypotheses
+  const completed = hypotheses.filter(h => h.processingStatus === 'completed');
+
+  const currentInProgress = inEvaluation.length;
+  const canStart = Math.min(
+    readyForEval.length,
+    MAX_CONCURRENT_EVALUATION - currentInProgress
+  );
+
+  logger.log(`Evaluation parallel: ${readyForEval.length} ready, ${currentInProgress} in progress, ${completed.length} completed, starting ${canStart}`);
+
+  if (canStart > 0) {
+    const toStart = readyForEval.slice(0, canStart);
+
+    // Update progress info
+    await db.updateRunStatus(run.id, {
+      progressInfo: {
+        message: `Step 3-5: ${currentInProgress + canStart}件評価中, ${completed.length}件完了`,
+        phase: 'evaluation',
+        inFlightCount: currentInProgress + canStart,
+        completedCount: completed.length,
+      },
+      updatedAt: new Date(),
+    });
+
+    // Run evaluations in parallel
+    await Promise.all(
+      toStart.map(h =>
+        executeEvaluationForOne(deps, run, h, targetSpecContent, technicalAssetsContent)
+          .catch(error => {
+            logger.error(`Evaluation failed for hypothesis ${h.uuid}:`, error);
+            // Mark as error but don't throw
+            return db.updateHypothesis(h.uuid, {
+              processingStatus: 'error' as HypothesisProcessingStatus,
+            });
+          })
+      )
+    );
+  }
+
+  // Recount after execution
+  const newCompleted = hypotheses.filter(h => h.processingStatus === 'completed').length + canStart;
+  const stillInProgress = inEvaluation.length; // These were already in progress before
+
+  return {
+    completed: newCompleted,
+    inProgress: stillInProgress,
+  };
+}
+
+/**
  * Execute the next step in the pipeline
  *
  * This is the main entry point for step-by-step execution.
@@ -1097,22 +1174,28 @@ export async function executeNextStep(
       // ===== COMMON PHASES =====
 
       case 'evaluation': {
-        // Find next hypothesis ready for evaluation
-        const readyHypothesis = hypotheses.find(
-          h => h.processingStatus === 'step2_2' && h.step2_2Output
+        // Execute evaluations in parallel (up to MAX_CONCURRENT_EVALUATION)
+        await executeEvaluationParallel(
+          deps,
+          run,
+          hypotheses,
+          targetSpec.content,
+          technicalAssets.content
         );
-        if (readyHypothesis) {
-          await executeEvaluationForOne(deps, run, readyHypothesis, targetSpec.content, technicalAssets.content);
-          // Check if there are more
-          const remainingToEvaluate = hypotheses.filter(
-            h => (h.processingStatus === 'step2_2' && h.step2_2Output) ||
-                 h.processingStatus === 'step3' ||
-                 h.processingStatus === 'step4' ||
-                 h.processingStatus === 'step5'
-          ).length - 1;
-          return { phase, hasMore: remainingToEvaluate > 0 };
-        }
-        return { phase, hasMore: false };
+
+        // Re-fetch hypotheses to check current state
+        const updatedHypotheses = await db.getHypothesesForRun(runId);
+        const allCompleted = updatedHypotheses.every(
+          h => h.processingStatus === 'completed' || h.processingStatus === 'error'
+        );
+        const anyRemaining = updatedHypotheses.some(
+          h => (h.processingStatus === 'step2_2' && h.step2_2Output) ||
+               h.processingStatus === 'step3' ||
+               h.processingStatus === 'step4' ||
+               h.processingStatus === 'step5'
+        );
+
+        return { phase, hasMore: !allCompleted && anyRemaining };
       }
 
       case 'completed': {

@@ -467,7 +467,7 @@ describe('step-executor', () => {
       expect(result.hasMore).toBe(true); // Still has more hypotheses
     });
 
-    it('executes evaluation for hypothesis ready for steps 3-5', async () => {
+    it('executes evaluation for hypothesis ready for steps 3-5 (parallel)', async () => {
       const runAfterStep2_2 = {
         ...sampleRun,
         status: 'running',
@@ -481,11 +481,25 @@ describe('step-executor', () => {
         step2_2Output: 'Step 2-2 done',
       };
 
+      const completedHypothesis = {
+        ...sampleHypothesis,
+        processingStatus: 'completed' as const,
+        step2_2Output: 'Step 2-2 done',
+        step3Output: 'Evaluation output',
+        step4Output: 'Evaluation output',
+        step5Output: 'Evaluation output',
+      };
+
+      // First call returns hypothesis ready for eval, second call returns completed
+      const getHypothesesMock = vi.fn()
+        .mockResolvedValueOnce([step2_2DoneHypothesis])
+        .mockResolvedValueOnce([completedHypothesis]);
+
       const deps = createMockDeps(
         {
           getRun: vi.fn().mockResolvedValue(runAfterStep2_2),
           getResource: vi.fn().mockResolvedValue(sampleResource),
-          getHypothesesForRun: vi.fn().mockResolvedValue([step2_2DoneHypothesis]),
+          getHypothesesForRun: getHypothesesMock,
           getHypothesis: vi.fn().mockResolvedValue(step2_2DoneHypothesis),
         },
         {
@@ -496,7 +510,7 @@ describe('step-executor', () => {
       const result = await executeNextStep(deps, 1);
 
       expect(result.phase).toBe('evaluation');
-      // Only 1 hypothesis, after evaluation it will be completed, no more steps
+      // After parallel evaluation completes and re-fetch, all are done
       expect(result.hasMore).toBe(false);
       // Should call generateContent for steps 3, 4, 5
       expect(deps.ai.generateContent).toHaveBeenCalledTimes(3);
