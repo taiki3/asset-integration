@@ -493,20 +493,150 @@ export function ProjectWorkspace({ project, initialResources, initialRuns }: Pro
     }
   };
 
-  const handleDownloadIndividualReport = async (runId: number, hypothesisIndex: number) => {
+  const handleDownloadIndividualReport = async (runId: number, hypothesisIndex: number, displayNumber?: number) => {
     try {
       const res = await fetch(`/api/runs/${runId}/download-individual/${hypothesisIndex}`);
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `hypothesis-${hypothesisIndex + 1}-run-${runId}.docx`;
+      const num = displayNumber ?? hypothesisIndex + 1;
+      a.download = `hypothesis-${num}-run-${runId}.docx`;
       a.click();
       URL.revokeObjectURL(url);
     } catch (error) {
       toast({
         title: 'エラー',
         description: '個別レポートのダウンロードに失敗しました。',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  // Delete all hypotheses
+  const deleteAllHypothesesMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/projects/${project.id}/hypotheses`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) throw new Error('Failed to delete all hypotheses');
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['projects', project.id, 'hypotheses'] });
+      toast({
+        title: 'すべての仮説を削除しました',
+        description: 'すべての仮説が正常に削除されました。',
+      });
+    },
+    onError: () => {
+      toast({
+        title: 'エラー',
+        description: '仮説の一括削除に失敗しました。',
+        variant: 'destructive',
+      });
+    },
+  });
+
+  const handleDeleteAllHypotheses = async () => {
+    await deleteAllHypothesesMutation.mutateAsync();
+  };
+
+  // Download all reports as ZIP
+  const handleDownloadAllReports = async () => {
+    // Get unique runIds from hypotheses
+    const runIds = [...new Set(hypotheses.map((h) => h.runId).filter(Boolean))];
+    if (runIds.length === 0) {
+      toast({
+        title: 'エラー',
+        description: 'ダウンロード可能なレポートがありません。',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      // Download ZIP for each run (or the most recent run)
+      const latestRunId = Math.max(...(runIds as number[]));
+      const res = await fetch(`/api/runs/${latestRunId}/reports/zip`);
+      if (!res.ok) throw new Error('Failed to download reports');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `reports-run-${latestRunId}.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      toast({
+        title: 'エラー',
+        description: '一括レポートのダウンロードに失敗しました。',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  // Export hypotheses to CSV
+  const handleExportCSV = () => {
+    if (hypotheses.length === 0) {
+      toast({
+        title: 'エラー',
+        description: 'エクスポートする仮説がありません。',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      // Collect all columns from fullData
+      const allColumns = new Set<string>();
+      hypotheses.forEach((h) => {
+        if (h.fullData && typeof h.fullData === 'object') {
+          Object.keys(h.fullData as Record<string, unknown>).forEach((key) => allColumns.add(key));
+        }
+      });
+
+      // Base columns
+      const baseColumns = ['hypothesisNumber', 'displayTitle', 'processingStatus'];
+      const fullDataColumns = Array.from(allColumns);
+      const allHeaders = [...baseColumns, ...fullDataColumns];
+
+      // Build CSV content
+      const rows = hypotheses.map((h) => {
+        const data = (h.fullData as Record<string, unknown>) || {};
+        return allHeaders.map((col) => {
+          let value: unknown;
+          if (col === 'hypothesisNumber') value = h.hypothesisNumber;
+          else if (col === 'displayTitle') value = h.displayTitle;
+          else if (col === 'processingStatus') value = h.processingStatus;
+          else value = data[col];
+
+          if (value == null) return '';
+          const str = String(value);
+          // Escape quotes and wrap in quotes if contains comma/newline/quote
+          if (str.includes(',') || str.includes('\n') || str.includes('"')) {
+            return `"${str.replace(/"/g, '""')}"`;
+          }
+          return str;
+        }).join(',');
+      });
+
+      const csv = [allHeaders.join(','), ...rows].join('\n');
+      const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' }); // BOM for Excel
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `hypotheses-project-${project.id}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+
+      toast({
+        title: 'エクスポート完了',
+        description: `${hypotheses.length}件の仮説をCSVにエクスポートしました。`,
+      });
+    } catch (error) {
+      toast({
+        title: 'エラー',
+        description: 'CSVエクスポートに失敗しました。',
         variant: 'destructive',
       });
     }
@@ -654,10 +784,14 @@ export function ProjectWorkspace({ project, initialResources, initialRuns }: Pro
           <HypothesesPanel
             hypotheses={hypotheses}
             resources={resources}
+            runs={runs}
             projectId={project.id}
             onDelete={handleDeleteHypothesis}
+            onDeleteAll={handleDeleteAllHypotheses}
             onDownloadWord={handleDownloadIndividualReport}
+            onDownloadAllReports={handleDownloadAllReports}
             onImport={handleImportHypotheses}
+            onExportCSV={handleExportCSV}
           />
         </div>
       </main>

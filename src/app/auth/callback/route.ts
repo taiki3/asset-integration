@@ -11,6 +11,25 @@ export async function GET(request: Request) {
     const { error } = await supabase.auth.exchangeCodeForSession(code);
 
     if (!error) {
+      // Check email domain restriction
+      const { data: { user } } = await supabase.auth.getUser();
+
+      if (user && process.env.ALLOWED_EMAIL_DOMAINS) {
+        const allowedDomains = process.env.ALLOWED_EMAIL_DOMAINS.split(',').map(d => d.trim());
+        const userDomain = user.email?.split('@')[1];
+
+        if (userDomain && !allowedDomains.includes(userDomain)) {
+          // Sign out unauthorized user
+          await supabase.auth.signOut();
+
+          const forwardedHost = request.headers.get('x-forwarded-host');
+          const isLocalEnv = process.env.NODE_ENV === 'development';
+          const baseUrl = isLocalEnv ? origin : (forwardedHost ? `https://${forwardedHost}` : origin);
+
+          return NextResponse.redirect(`${baseUrl}/unauthorized`);
+        }
+      }
+
       const forwardedHost = request.headers.get('x-forwarded-host');
       const isLocalEnv = process.env.NODE_ENV === 'development';
 

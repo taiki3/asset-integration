@@ -3,12 +3,24 @@ import { getUser } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { runs, projects, hypotheses } from '@/lib/db/schema';
 import { eq, and, isNull } from 'drizzle-orm';
+import { convertMarkdownToWord } from '@/lib/word/markdown-to-word';
+import archiver from 'archiver';
+import { Readable } from 'stream';
 
 interface RouteContext {
   params: Promise<{ runId: string }>;
 }
 
-// GET /api/runs/[runId]/reports/zip - Download all individual reports as ZIP
+// Helper to convert stream to buffer
+async function streamToBuffer(stream: Readable): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream) {
+    chunks.push(Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks);
+}
+
+// GET /api/runs/[runId]/reports/zip - Download all hypothesis reports as ZIP
 export async function GET(request: NextRequest, context: RouteContext) {
   try {
     const { runId } = await context.params;
@@ -24,10 +36,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     }
 
     // Find the run
-    const [run] = await db
-      .select()
-      .from(runs)
-      .where(eq(runs.id, rId));
+    const [run] = await db.select().from(runs).where(eq(runs.id, rId));
 
     if (!run) {
       return NextResponse.json({ error: 'Run not found' }, { status: 404 });
@@ -53,12 +62,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     const runHypotheses = await db
       .select()
       .from(hypotheses)
-      .where(
-        and(
-          eq(hypotheses.runId, rId),
-          isNull(hypotheses.deletedAt)
-        )
-      )
+      .where(and(eq(hypotheses.runId, rId), isNull(hypotheses.deletedAt)))
       .orderBy(hypotheses.hypothesisNumber);
 
     if (runHypotheses.length === 0) {
@@ -68,26 +72,86 @@ export async function GET(request: NextRequest, context: RouteContext) {
       );
     }
 
-    // For now, return a simple JSON response with report info
-    // In production, you would use a ZIP library like JSZip or archiver
-    // to create an actual ZIP file with individual Word documents
+    // Filter hypotheses that have content
+    const hypothesesWithContent = runHypotheses.filter(
+      (h) => h.step2_2Output || h.step3Output || h.step4Output || h.step5Output
+    );
 
-    const reports = runHypotheses.map((h, index) => ({
-      index: index + 1,
-      hypothesisNumber: h.hypothesisNumber,
-      title: h.displayTitle || `仮説 ${h.hypothesisNumber}`,
-      hasContent: !!(h.step2_2Output || h.step3Output || h.step4Output || h.step5Output),
-      status: h.processingStatus,
-    }));
+    if (hypothesesWithContent.length === 0) {
+      return NextResponse.json(
+        { error: 'No completed reports available for download' },
+        { status: 400 }
+      );
+    }
 
-    // Return metadata about what would be in the ZIP
-    // This endpoint should be enhanced with actual ZIP generation
-    return NextResponse.json({
-      runId: rId,
-      jobName: run.jobName,
-      reportCount: reports.length,
-      reports,
-      message: 'ZIP download functionality will be implemented',
+    // Create ZIP archive
+    const archive = archiver('zip', { zlib: { level: 9 } });
+    const chunks: Buffer[] = [];
+
+    archive.on('data', (chunk) => chunks.push(chunk));
+    archive.on('error', (err) => {
+      throw err;
+    });
+
+    // Generate Word documents for each hypothesis
+    for (const hypothesis of hypothesesWithContent) {
+      const reportParts: string[] = [];
+      const title =
+        hypothesis.displayTitle || `仮説 ${hypothesis.hypothesisNumber}`;
+
+      if (hypothesis.step2_1Summary) {
+        reportParts.push('## サマリー\n\n' + hypothesis.step2_1Summary);
+      }
+      if (hypothesis.step2_2Output) {
+        reportParts.push('## 詳細調査 (S2-2)\n\n' + hypothesis.step2_2Output);
+      }
+      if (hypothesis.step3Output) {
+        reportParts.push(
+          '## テーマ魅力度評価 (S3)\n\n' + hypothesis.step3Output
+        );
+      }
+      if (hypothesis.step4Output) {
+        reportParts.push('## AGC参入検討 (S4)\n\n' + hypothesis.step4Output);
+      }
+      if (hypothesis.step5Output) {
+        reportParts.push('## 統合評価 (S5)\n\n' + hypothesis.step5Output);
+      }
+
+      if (reportParts.length > 0) {
+        const fullContent = reportParts.join('\n\n---\n\n');
+        const docBuffer = await convertMarkdownToWord(fullContent, title);
+
+        // Create safe filename
+        const safeTitle = title
+          .replace(/[/\\?%*:|"<>]/g, '-')
+          .replace(/\s+/g, '_')
+          .substring(0, 50);
+
+        const filename = `${String(hypothesis.hypothesisNumber).padStart(2, '0')}_${safeTitle}.docx`;
+        archive.append(docBuffer, { name: filename });
+      }
+    }
+
+    // Finalize the archive
+    await archive.finalize();
+
+    // Wait for all chunks
+    await new Promise<void>((resolve) => archive.on('end', resolve));
+    const zipBuffer = Buffer.concat(chunks);
+
+    // Create safe job name for filename (ASCII fallback + UTF-8 encoded)
+    const safeJobName = (run.jobName || `run-${rId}`)
+      .replace(/[/\\?%*:|"<>]/g, '-')
+      .replace(/\s+/g, '_')
+      .substring(0, 30);
+    const asciiFilename = `run-${rId}_reports.zip`;
+    const utf8Filename = encodeURIComponent(`${safeJobName}_reports.zip`);
+
+    return new NextResponse(zipBuffer, {
+      headers: {
+        'Content-Type': 'application/zip',
+        'Content-Disposition': `attachment; filename="${asciiFilename}"; filename*=UTF-8''${utf8Filename}`,
+      },
     });
   } catch (error) {
     console.error('Failed to generate ZIP:', error);
