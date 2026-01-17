@@ -47,10 +47,28 @@ export default async function ProjectPage({ params }: Props) {
         .from(resources)
         .where(eq(resources.projectId, projectId));
 
+  // Fetch runs with light columns (exclude heavy step outputs)
   const projectRuns = useMockDb
     ? mockRuns.filter(r => r.projectId === project.id)
     : await db
-        .select()
+        .select({
+          id: runs.id,
+          projectId: runs.projectId,
+          targetSpecId: runs.targetSpecId,
+          technicalAssetsId: runs.technicalAssetsId,
+          jobName: runs.jobName,
+          hypothesisCount: runs.hypothesisCount,
+          loopCount: runs.loopCount,
+          loopIndex: runs.loopIndex,
+          modelChoice: runs.modelChoice,
+          status: runs.status,
+          currentStep: runs.currentStep,
+          currentLoop: runs.currentLoop,
+          errorMessage: runs.errorMessage,
+          createdAt: runs.createdAt,
+          updatedAt: runs.updatedAt,
+          completedAt: runs.completedAt,
+        })
         .from(runs)
         .where(eq(runs.projectId, projectId))
         .orderBy(desc(runs.createdAt))

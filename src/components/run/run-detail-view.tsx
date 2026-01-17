@@ -232,11 +232,12 @@ export function RunDetailView({
     initialData: initialRun,
     refetchInterval: (query) => {
       const status = query.state.data?.status;
-      return status === 'running' || status === 'pending' ? 3000 : false;
+      // Optimized polling: 8s for run data (was 3s)
+      return status === 'running' || status === 'pending' ? 8000 : false;
     },
   });
 
-  // React Query: Hypotheses data with conditional polling
+  // React Query: Hypotheses list data with conditional polling (light data for sidebar)
   const { data: hypotheses = initialHypotheses } = useQuery({
     queryKey: ['runs', initialRun.id, 'hypotheses'],
     queryFn: async () => {
@@ -246,7 +247,25 @@ export function RunDetailView({
     },
     initialData: initialHypotheses,
     refetchInterval: () => {
-      return run?.status === 'running' || run?.status === 'pending' ? 5000 : false;
+      // Optimized polling: 10s for hypotheses list (was 5s)
+      return run?.status === 'running' || run?.status === 'pending' ? 10000 : false;
+    },
+  });
+
+  // React Query: Selected hypothesis full data (lazy loading for detail view)
+  const { data: selectedHypothesisFull, isLoading: isLoadingHypothesis } = useQuery({
+    queryKey: ['hypotheses', selectedHypothesisId],
+    queryFn: async () => {
+      if (!selectedHypothesisId) return null;
+      const res = await fetch(`/api/hypotheses/${selectedHypothesisId}`);
+      if (!res.ok) throw new Error('Failed to fetch hypothesis details');
+      return res.json() as Promise<Hypothesis>;
+    },
+    enabled: !!selectedHypothesisId,
+    // Refetch when run is processing, as hypothesis data may be updated
+    refetchInterval: () => {
+      // Optimized polling: 8s for selected hypothesis (was 5s)
+      return run?.status === 'running' ? 8000 : false;
     },
   });
 
@@ -304,8 +323,9 @@ export function RunDetailView({
   const status = statusLabels[run.status] || statusLabels.pending;
   const progress = Math.round((run.currentStep / (STEP_LABELS.length - 1)) * 100);
 
-  // Selected hypothesis
-  const selectedHypothesis = hypotheses.find((h) => h.uuid === selectedHypothesisId);
+  // Selected hypothesis: Use full data from separate query, or fall back to list data for basic info
+  const selectedHypothesisFromList = hypotheses.find((h) => h.uuid === selectedHypothesisId);
+  const selectedHypothesis = selectedHypothesisFull || selectedHypothesisFromList;
 
   // Calculate hypothesis progress
   const completedHypotheses = hypotheses.filter(
@@ -528,7 +548,12 @@ export function RunDetailView({
 
         {/* Right: Detail Area */}
         <div className="flex-1 overflow-hidden bg-background">
-          {selectedHypothesis ? (
+          {selectedHypothesisId && isLoadingHypothesis && !selectedHypothesis ? (
+            <div className="flex flex-col items-center justify-center h-full text-center p-8">
+              <Loader2 className="h-12 w-12 text-primary animate-spin mb-4" />
+              <p className="text-sm text-muted-foreground">仮説データを読み込み中...</p>
+            </div>
+          ) : selectedHypothesis ? (
             <HypothesisDetail hypothesis={selectedHypothesis} />
           ) : (
             <div className="flex flex-col items-center justify-center h-full text-center p-8">

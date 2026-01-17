@@ -49,9 +49,25 @@ export async function GET(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 });
     }
 
-    // Get hypotheses for this run
+    // Get hypotheses for this run (light columns for list view)
+    // Exclude heavy columns: step2_2Output, step3Output, step4Output, step5Output, fullData
     const runHypotheses = await db
-      .select()
+      .select({
+        id: hypotheses.id,
+        uuid: hypotheses.uuid,
+        projectId: hypotheses.projectId,
+        runId: hypotheses.runId,
+        hypothesisNumber: hypotheses.hypothesisNumber,
+        indexInRun: hypotheses.indexInRun,
+        displayTitle: hypotheses.displayTitle,
+        contentHash: hypotheses.contentHash,
+        step2_1Summary: hypotheses.step2_1Summary, // Keep summary for sidebar display
+        processingStatus: hypotheses.processingStatus,
+        currentInteractionId: hypotheses.currentInteractionId,
+        errorMessage: hypotheses.errorMessage,
+        createdAt: hypotheses.createdAt,
+        deletedAt: hypotheses.deletedAt,
+      })
       .from(hypotheses)
       .where(
         and(
