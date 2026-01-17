@@ -78,29 +78,56 @@ export async function POST(request: NextRequest, context: RouteContext) {
       const baseUrl = getBaseUrl();
 
       after(async () => {
-        try {
-          console.log(`[Process] Scheduling next step for run ${runId}`);
-          const response = await fetch(`${baseUrl}/api/runs/${runId}/process`, {
-            method: 'POST',
-            headers: getInternalApiHeaders(expectedSecret),
-            redirect: 'manual',
-          });
+        const maxRetries = 3;
+        let lastError: unknown;
 
-          // Check for redirect (Vercel Protection)
-          if (response.status >= 300 && response.status < 400) {
-            console.error(`[Process] Blocked by Vercel Protection - redirected to: ${response.headers.get('location')}`);
-            return;
-          }
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+          try {
+            console.log(`[Process] Scheduling next step for run ${runId} (attempt ${attempt}/${maxRetries})`);
 
-          if (!response.ok) {
-            const body = await response.text();
-            console.error(`[Process] API error: ${response.status} - ${body}`);
-          } else {
-            console.log(`[Process] Next step scheduled successfully`);
+            // Use AbortController for timeout
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+            const response = await fetch(`${baseUrl}/api/runs/${runId}/process`, {
+              method: 'POST',
+              headers: getInternalApiHeaders(expectedSecret),
+              redirect: 'manual',
+              signal: controller.signal,
+            });
+
+            clearTimeout(timeoutId);
+
+            // Check for redirect (Vercel Protection)
+            if (response.status >= 300 && response.status < 400) {
+              console.error(`[Process] Blocked by Vercel Protection - redirected to: ${response.headers.get('location')}`);
+              // Don't retry for protection issues
+              return;
+            }
+
+            if (!response.ok) {
+              const body = await response.text();
+              console.error(`[Process] API error: ${response.status} - ${body}`);
+              lastError = new Error(`API error: ${response.status}`);
+              // Retry on server errors
+              if (response.status >= 500 && attempt < maxRetries) {
+                await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+                continue;
+              }
+            } else {
+              console.log(`[Process] Next step scheduled successfully`);
+              return; // Success, exit retry loop
+            }
+          } catch (error) {
+            lastError = error;
+            console.error(`[Process] Attempt ${attempt} failed for run ${runId}:`, error);
+            if (attempt < maxRetries) {
+              await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+            }
           }
-        } catch (error) {
-          console.error(`[Process] Failed to schedule next step for run ${runId}:`, error);
         }
+
+        console.error(`[Process] All ${maxRetries} attempts failed for run ${runId}:`, lastError);
       });
     }
 
