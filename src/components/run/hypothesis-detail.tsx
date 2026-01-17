@@ -1,6 +1,8 @@
 'use client';
 
-import { FileText, Lightbulb, FlaskConical, Target, Layers, Loader2, AlertTriangle } from 'lucide-react';
+import { FileText, Lightbulb, FlaskConical, Target, Layers, Loader2, AlertTriangle, FileDown } from 'lucide-react';
+import { useState } from 'react';
+import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -219,8 +221,53 @@ function parseScoresFromData(fullData: unknown): { technical?: TechnicalScores; 
 }
 
 export function HypothesisDetail({ hypothesis }: HypothesisDetailProps) {
+  const [isDownloading, setIsDownloading] = useState(false);
   const status = statusConfig[hypothesis.processingStatus || 'pending'] || statusConfig.pending;
   const currentStep = hypothesis.processingStatus || 'pending';
+
+  // Check if hypothesis has any content to download
+  const hasContent = Boolean(
+    hypothesis.step2_1Summary ||
+      hypothesis.step2_2Output ||
+      hypothesis.step3Output ||
+      hypothesis.step4Output ||
+      hypothesis.step5Output
+  );
+
+  const handleDownloadWord = async () => {
+    if (!hasContent || isDownloading) return;
+
+    setIsDownloading(true);
+    try {
+      const response = await fetch(`/api/hypotheses/${hypothesis.uuid}/word`);
+      if (!response.ok) {
+        throw new Error('Download failed');
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+
+      // Extract filename from Content-Disposition header or generate one
+      const contentDisposition = response.headers.get('Content-Disposition');
+      let filename = `仮説${hypothesis.hypothesisNumber}.docx`;
+      if (contentDisposition) {
+        const match = contentDisposition.match(/filename="(.+)"/);
+        if (match) filename = match[1];
+      }
+
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (error) {
+      console.error('Failed to download Word document:', error);
+    } finally {
+      setIsDownloading(false);
+    }
+  };
 
   // Parse scores from fullData
   const scores = parseScoresFromData(hypothesis.fullData);
@@ -248,6 +295,21 @@ export function HypothesisDetail({ hypothesis }: HypothesisDetailProps) {
                 )}
                 {status.label}
               </Badge>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleDownloadWord}
+                disabled={!hasContent || isDownloading}
+                title={hasContent ? 'Wordファイルをダウンロード' : 'コンテンツがありません'}
+                className="h-7 px-2"
+              >
+                {isDownloading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <FileDown className="h-4 w-4" />
+                )}
+                <span className="ml-1 text-xs">Word</span>
+              </Button>
             </div>
             <h2 className="text-lg font-semibold">
               {hypothesis.displayTitle || `仮説 ${hypothesis.hypothesisNumber}`}

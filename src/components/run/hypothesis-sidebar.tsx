@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { Lightbulb, ArrowUpDown, CheckCircle, AlertCircle, Loader2, LayoutGrid, Table as TableIcon } from 'lucide-react';
+import { Lightbulb, ArrowUpDown, CheckCircle, AlertCircle, Loader2, LayoutGrid, Table as TableIcon, Settings } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -21,6 +21,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { HypothesisCard } from './hypothesis-card';
+import { ColumnSettingsDialog, useColumnSettings } from './column-settings-dialog';
 import type { Hypothesis } from '@/lib/db/schema';
 
 interface HypothesisSidebarProps {
@@ -63,6 +64,41 @@ export function HypothesisSidebar({ hypotheses, selectedId, onSelect }: Hypothes
   const [sortMode, setSortMode] = useState<SortMode>('number');
   const [filterMode, setFilterMode] = useState<FilterMode>('all');
   const [viewMode, setViewMode] = useState<ViewMode>('card');
+  const [columnSettingsOpen, setColumnSettingsOpen] = useState(false);
+
+  // Extract available columns from hypotheses' fullData
+  const availableColumns = useMemo(() => {
+    const columnSet = new Set<string>();
+    hypotheses.forEach((h) => {
+      if (h.fullData && typeof h.fullData === 'object') {
+        Object.keys(h.fullData as Record<string, unknown>).forEach((key) => {
+          columnSet.add(key);
+        });
+      }
+    });
+    return Array.from(columnSet);
+  }, [hypotheses]);
+
+  // Column settings hook
+  const {
+    columnOrder,
+    visibleColumns,
+    displayColumns,
+    isInitialized,
+    setColumnOrder,
+    setVisibleColumns,
+    resetColumnSettings,
+  } = useColumnSettings(availableColumns);
+
+  // Helper to get fullData value
+  const getFullDataValue = (hypothesis: Hypothesis, column: string): string => {
+    if (!hypothesis.fullData || typeof hypothesis.fullData !== 'object') return '-';
+    const data = hypothesis.fullData as Record<string, unknown>;
+    const value = data[column];
+    if (value === null || value === undefined) return '-';
+    if (typeof value === 'string') return value;
+    return String(value);
+  };
 
   // ステータス集計
   const statusCounts = useMemo(() => {
@@ -194,23 +230,36 @@ export function HypothesisSidebar({ hypotheses, selectedId, onSelect }: Hypothes
               <SelectItem value="error">エラーのみ</SelectItem>
             </SelectContent>
           </Select>
-          <div className="flex ml-auto border rounded-md overflow-hidden">
-            <Button
-              variant={viewMode === 'card' ? 'default' : 'ghost'}
-              size="sm"
-              onClick={() => setViewMode('card')}
-              className="h-7 w-7 p-0 rounded-none"
-            >
-              <LayoutGrid className="h-3.5 w-3.5" />
-            </Button>
-            <Button
-              variant={viewMode === 'table' ? 'default' : 'ghost'}
-              size="sm"
-              onClick={() => setViewMode('table')}
-              className="h-7 w-7 p-0 rounded-none"
-            >
-              <TableIcon className="h-3.5 w-3.5" />
-            </Button>
+          <div className="flex ml-auto gap-1">
+            {viewMode === 'table' && availableColumns.length > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setColumnSettingsOpen(true)}
+                className="h-7 w-7 p-0"
+                title="列設定"
+              >
+                <Settings className="h-3.5 w-3.5" />
+              </Button>
+            )}
+            <div className="flex border rounded-md overflow-hidden">
+              <Button
+                variant={viewMode === 'card' ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => setViewMode('card')}
+                className="h-7 w-7 p-0 rounded-none"
+              >
+                <LayoutGrid className="h-3.5 w-3.5" />
+              </Button>
+              <Button
+                variant={viewMode === 'table' ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => setViewMode('table')}
+                className="h-7 w-7 p-0 rounded-none"
+              >
+                <TableIcon className="h-3.5 w-3.5" />
+              </Button>
+            </div>
           </div>
         </div>
       </div>
@@ -253,38 +302,66 @@ export function HypothesisSidebar({ hypotheses, selectedId, onSelect }: Hypothes
             ))}
           </div>
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-[40px] text-xs">#</TableHead>
-                <TableHead className="text-xs">タイトル</TableHead>
-                <TableHead className="w-[50px] text-xs">状態</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {sortedHypotheses.map((hypothesis) => (
-                <TableRow
-                  key={hypothesis.uuid}
-                  className={`cursor-pointer hover:bg-muted/50 ${
-                    selectedId === hypothesis.uuid ? 'bg-primary/5' : ''
-                  }`}
-                  onClick={() => onSelect(hypothesis)}
-                >
-                  <TableCell className="font-mono text-xs py-2">
-                    {hypothesis.hypothesisNumber}
-                  </TableCell>
-                  <TableCell className="text-xs py-2 max-w-[150px] truncate" title={hypothesis.displayTitle || undefined}>
-                    {hypothesis.displayTitle || `仮説 ${hypothesis.hypothesisNumber}`}
-                  </TableCell>
-                  <TableCell className="py-2">
-                    <StatusBadge status={hypothesis.processingStatus} />
-                  </TableCell>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[40px] text-xs sticky left-0 bg-background z-10">#</TableHead>
+                  <TableHead className="text-xs min-w-[120px]">タイトル</TableHead>
+                  <TableHead className="w-[50px] text-xs">状態</TableHead>
+                  {displayColumns.length > 0 && displayColumns.map((col) => (
+                    <TableHead key={col} className="text-xs min-w-[100px] max-w-[200px]">
+                      {col}
+                    </TableHead>
+                  ))}
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {sortedHypotheses.map((hypothesis) => (
+                  <TableRow
+                    key={hypothesis.uuid}
+                    className={`cursor-pointer hover:bg-muted/50 ${
+                      selectedId === hypothesis.uuid ? 'bg-primary/5' : ''
+                    }`}
+                    onClick={() => onSelect(hypothesis)}
+                  >
+                    <TableCell className="font-mono text-xs py-2 sticky left-0 bg-background">
+                      {hypothesis.hypothesisNumber}
+                    </TableCell>
+                    <TableCell className="text-xs py-2 max-w-[150px] truncate" title={hypothesis.displayTitle || undefined}>
+                      {hypothesis.displayTitle || `仮説 ${hypothesis.hypothesisNumber}`}
+                    </TableCell>
+                    <TableCell className="py-2">
+                      <StatusBadge status={hypothesis.processingStatus} />
+                    </TableCell>
+                    {displayColumns.length > 0 && displayColumns.map((col) => (
+                      <TableCell
+                        key={col}
+                        className="text-xs py-2 max-w-[200px] truncate"
+                        title={getFullDataValue(hypothesis, col)}
+                      >
+                        {getFullDataValue(hypothesis, col)}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
         )}
       </ScrollArea>
+
+      {/* Column Settings Dialog */}
+      <ColumnSettingsDialog
+        open={columnSettingsOpen}
+        onOpenChange={setColumnSettingsOpen}
+        availableColumns={availableColumns}
+        columnOrder={columnOrder}
+        visibleColumns={visibleColumns}
+        onColumnOrderChange={setColumnOrder}
+        onVisibilityChange={setVisibleColumns}
+        onReset={resetColumnSettings}
+      />
     </div>
   );
 }
