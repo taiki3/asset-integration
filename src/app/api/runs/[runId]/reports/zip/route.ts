@@ -139,16 +139,18 @@ export async function GET(request: NextRequest, context: RouteContext) {
     await new Promise<void>((resolve) => archive.on('end', resolve));
     const zipBuffer = Buffer.concat(chunks);
 
-    // Create safe job name for filename
+    // Create safe job name for filename (ASCII fallback + UTF-8 encoded)
     const safeJobName = (run.jobName || `run-${rId}`)
       .replace(/[/\\?%*:|"<>]/g, '-')
       .replace(/\s+/g, '_')
       .substring(0, 30);
+    const asciiFilename = `run-${rId}_reports.zip`;
+    const utf8Filename = encodeURIComponent(`${safeJobName}_reports.zip`);
 
     return new NextResponse(zipBuffer, {
       headers: {
         'Content-Type': 'application/zip',
-        'Content-Disposition': `attachment; filename="${safeJobName}_reports.zip"`,
+        'Content-Disposition': `attachment; filename="${asciiFilename}"; filename*=UTF-8''${utf8Filename}`,
       },
     });
   } catch (error) {

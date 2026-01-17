@@ -84,17 +84,19 @@ export async function GET(request: NextRequest, context: RouteContext) {
     const fullContent = reportParts.join('\n\n---\n\n');
     const docBuffer = await convertMarkdownToWord(fullContent, title);
 
-    // Create safe filename
+    // Create safe filename (ASCII for fallback, UTF-8 encoded for modern browsers)
     const safeTitle = title
       .replace(/[/\\?%*:|"<>]/g, '-')
       .replace(/\s+/g, '_')
       .substring(0, 50);
+    const asciiFilename = `hypothesis-${hypothesis.hypothesisNumber}.docx`;
+    const utf8Filename = encodeURIComponent(`${safeTitle}.docx`);
 
     return new NextResponse(docBuffer, {
       headers: {
         'Content-Type':
           'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        'Content-Disposition': `attachment; filename="${safeTitle}.docx"`,
+        'Content-Disposition': `attachment; filename="${asciiFilename}"; filename*=UTF-8''${utf8Filename}`,
       },
     });
   } catch (error) {

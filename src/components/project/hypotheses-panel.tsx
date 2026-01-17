@@ -104,6 +104,21 @@ function getJudgmentBadgeVariant(
   return 'outline';
 }
 
+// Format value for display - handles objects, arrays, and primitives
+function formatDisplayValue(value: unknown): string {
+  if (value == null) return '';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (typeof value === 'object') {
+    try {
+      return JSON.stringify(value, null, 2);
+    } catch {
+      return '[複合データ]';
+    }
+  }
+  return String(value);
+}
+
 export function HypothesesPanel({
   hypotheses,
   resources,
@@ -255,7 +270,7 @@ export function HypothesesPanel({
             onClick={() => handleHypothesisClick(hypothesis)}
           >
             <div className="flex items-start justify-between gap-2">
-              <h4 className="text-sm font-medium line-clamp-2 flex-1">{String(title)}</h4>
+              <h4 className="text-sm font-medium line-clamp-2 flex-1">{formatDisplayValue(title)}</h4>
               <Button
                 size="icon"
                 variant="ghost"
@@ -268,7 +283,7 @@ export function HypothesesPanel({
             <div className="flex flex-wrap items-center gap-1">
               {badges.slice(0, 2).map((badge, i) => (
                 <Badge key={i} variant="outline" className="text-xs">
-                  {String(badge)}
+                  {formatDisplayValue(badge)}
                 </Badge>
               ))}
             </div>
@@ -320,7 +335,7 @@ export function HypothesesPanel({
                 </TableCell>
                 {displayColumns.map((col) => (
                   <TableCell key={col} className="text-xs max-w-[300px]">
-                    <span className="line-clamp-2">{String(data[col] ?? '-')}</span>
+                    <span className="line-clamp-2">{formatDisplayValue(data[col] ?? '-')}</span>
                   </TableCell>
                 ))}
                 <TableCell className="whitespace-nowrap">
@@ -388,6 +403,7 @@ export function HypothesesPanel({
                   variant="outline"
                   size="sm"
                   className="gap-2 mt-4"
+                  data-testid="button-open-csv-import"
                   onClick={(e) => {
                     e.stopPropagation();
                     setImportModalOpen(true);
@@ -427,6 +443,7 @@ export function HypothesesPanel({
                     <Button
                       variant="outline"
                       size="sm"
+                      data-testid="button-open-csv-import"
                       onClick={(e) => {
                         e.stopPropagation();
                         setImportModalOpen(true);
@@ -544,7 +561,7 @@ export function HypothesesPanel({
                       <div key={key}>
                         <h4 className="text-sm font-medium mb-1">{key}</h4>
                         <p className="text-sm text-muted-foreground whitespace-pre-wrap break-words">
-                          {String(value)}
+                          {formatDisplayValue(value)}
                         </p>
                       </div>
                     ));
