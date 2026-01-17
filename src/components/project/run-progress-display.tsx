@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useRef, useCallback } from 'react';
 import {
   Play,
   Pause,
@@ -290,6 +291,55 @@ export function RunProgressDisplay({
 
   const isActive = run.status === 'running' || run.status === 'paused';
   const elapsedSeconds = useElapsedTime(isActive, startTime);
+
+  // Fallback polling to keep the pipeline moving if after() chain breaks
+  // This acts as a client-side recovery mechanism for serverless environments
+  const pollingRef = useRef<NodeJS.Timeout | null>(null);
+  const lastPollRef = useRef<number>(0);
+
+  const pollProcess = useCallback(async () => {
+    // Debounce: don't poll more than once every 10 seconds
+    const now = Date.now();
+    if (now - lastPollRef.current < 10000) return;
+    lastPollRef.current = now;
+
+    try {
+      // Call nudge endpoint (session-authenticated) to keep pipeline moving
+      const response = await fetch(`/api/runs/${run.id}/nudge`, {
+        method: 'POST',
+      });
+      if (!response.ok && response.status !== 401) {
+        console.log(`[RunProgress] Nudge response: ${response.status}`);
+      }
+    } catch (error) {
+      // Silently ignore - this is just a fallback
+      console.log('[RunProgress] Nudge failed:', error);
+    }
+  }, [run.id]);
+
+  useEffect(() => {
+    // Only poll when running (not paused)
+    if (run.status !== 'running') {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+      return;
+    }
+
+    // Poll every 30 seconds as a fallback
+    pollingRef.current = setInterval(pollProcess, 30000);
+
+    // Also poll immediately on mount/status change
+    pollProcess();
+
+    return () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+    };
+  }, [run.status, pollProcess]);
 
   // Don't render if not active
   if (!isActive) return null;
