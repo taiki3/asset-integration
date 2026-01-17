@@ -20,33 +20,33 @@
     --weight-black: 900;
 
     /* AGC Light Mode Colors */
-    --background: 0 0% 100%; /* #F2F2F2 */
-    --foreground: 0 0% 3.9%; /* #032940 */
+    --background: 0 0% 95%; /* #F2F2F2 */
+    --foreground: 202 91% 13%; /* #032940 */
 
     --card: 0 0% 100%; /* white */
-    --card-foreground: 0 0% 3.9%;
+    --card-foreground: 202 91% 13%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 3.9%;
+    --popover: 0 0% 98%;
+    --popover-foreground: 202 91% 13%;
 
-    --primary: 0 0% 9%; /* #F2B705 - AGC Gold */
-    --primary-foreground: 0 0% 98%;
+    --primary: 45 96% 48%; /* #F2B705 - AGC Gold */
+    --primary-foreground: 202 91% 13%;
 
-    --secondary: 0 0% 96.1%;
-    --secondary-foreground: 0 0% 9%;
+    --secondary: 0 0% 90%;
+    --secondary-foreground: 202 91% 13%;
 
-    --muted: 0 0% 96.1%;
-    --muted-foreground: 0 0% 45.1%;
+    --muted: 0 0% 90%;
+    --muted-foreground: 202 50% 35%;
 
-    --accent: 0 0% 96.1%; /* #F29F05 - Orange Gold */
-    --accent-foreground: 0 0% 9%;
+    --accent: 39 96% 48%; /* #F29F05 - Orange Gold */
+    --accent-foreground: 202 91% 13%;
 
-    --destructive: 0 84.2% 60.2%; /* Red */
-    --destructive-foreground: 0 0% 98%;
+    --destructive: 0 72% 51%; /* Red */
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 0 0% 89.8%;
-    --input: 0 0% 89.8%;
-    --ring: 0 0% 3.9%;
+    --border: 0 0% 85%;
+    --input: 0 0% 90%;
+    --ring: 45 96% 48%;
 
     /* AGC Brand Colors */
     --agc-navy: 202 91% 13%; /* #032940 */
@@ -61,7 +61,7 @@
     --status-error: 0 72% 51%;
     --status-info: 202 91% 40%;
 
-    --radius: 0.5rem;
+    --radius: 0.625rem;
 
     /* Motion */
     --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
@@ -69,54 +69,58 @@
     --duration-fast: 0.2s;
     --duration-base: 0.4s;
     --duration-slow: 0.8s;
-    --chart-1: 12 76% 61%;
-    --chart-2: 173 58% 39%;
-    --chart-3: 197 37% 24%;
-    --chart-4: 43 74% 66%;
-    --chart-5: 27 87% 67%;
+
+    /* Chart colors for shadcn */
+    --chart-1: 45 96% 48%;
+    --chart-2: 39 96% 48%;
+    --chart-3: 202 91% 13%;
+    --chart-4: 142 71% 45%;
+    --chart-5: 0 72% 51%;
   }
 
   .dark {
     /* ===== AGC Playbook Theme - Dark Mode ===== */
 
-    --background: 0 0% 3.9%; /* #032940 - AGC Navy */
-    --foreground: 0 0% 98%; /* #F2F2F2 */
+    --background: 202 91% 13%; /* #032940 - AGC Navy */
+    --foreground: 0 0% 95%; /* #F2F2F2 */
 
-    --card: 0 0% 3.9%; /* Slightly lighter navy */
-    --card-foreground: 0 0% 98%;
+    --card: 202 80% 16%; /* Slightly lighter navy */
+    --card-foreground: 0 0% 95%;
 
-    --popover: 0 0% 3.9%;
-    --popover-foreground: 0 0% 98%;
+    --popover: 202 70% 20%;
+    --popover-foreground: 0 0% 95%;
 
-    --primary: 0 0% 98%; /* #F2B705 - AGC Gold */
-    --primary-foreground: 0 0% 9%;
+    --primary: 45 96% 48%; /* #F2B705 - AGC Gold */
+    --primary-foreground: 202 91% 13%;
 
-    --secondary: 0 0% 14.9%;
-    --secondary-foreground: 0 0% 98%;
+    --secondary: 202 70% 20%;
+    --secondary-foreground: 0 0% 90%;
 
-    --muted: 0 0% 14.9%;
-    --muted-foreground: 0 0% 63.9%;
+    --muted: 202 70% 20%;
+    --muted-foreground: 0 0% 70%;
 
-    --accent: 0 0% 14.9%; /* #F29F05 */
-    --accent-foreground: 0 0% 98%;
+    --accent: 39 96% 48%; /* #F29F05 */
+    --accent-foreground: 202 91% 13%;
 
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 98%;
+    --destructive: 0 72% 45%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 0 0% 14.9%;
-    --input: 0 0% 14.9%;
-    --ring: 0 0% 83.1%;
+    --border: 202 60% 25%;
+    --input: 202 70% 20%;
+    --ring: 45 96% 48%;
 
     /* Status Colors (same in dark mode) */
     --status-success: 142 71% 45%;
     --status-warning: 45 96% 48%;
     --status-error: 0 72% 51%;
     --status-info: 202 60% 60%;
-    --chart-1: 220 70% 50%;
-    --chart-2: 160 60% 45%;
-    --chart-3: 30 80% 55%;
-    --chart-4: 280 65% 60%;
-    --chart-5: 340 75% 55%;
+
+    /* Chart colors for shadcn */
+    --chart-1: 45 96% 58%;
+    --chart-2: 39 96% 58%;
+    --chart-3: 0 0% 95%;
+    --chart-4: 142 71% 55%;
+    --chart-5: 0 72% 61%;
   }
 }
 
