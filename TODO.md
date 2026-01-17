@@ -4,19 +4,122 @@
 
 ---
 
+## 実装済み機能 ✅
+
+### 2026-01-17 実装完了
+- [x] **Run Progress Display** - リアルタイム進捗表示（経過時間、フェーズ、並列処理状況）
+- [x] **CSV Import/Export** - 仮説のインポート/エクスポート（カラムマッピング付き）
+- [x] **デバッグプロンプト表示** - 各ステップのプロンプト確認ダイアログ
+- [x] **Card/Table ビュー切り替え** - サイドバーの表示モード切替
+- [x] **TSV/Excel/ZIP ダウンロード** - 出力ドロップダウンメニュー
+- [x] **S3/S4 パーサー** - テキスト出力の構造化抽出
+- [x] **仮説サイドバー強化** - ステータス集計、フィルター、ソート、プログレスバー
+- [x] **仮説詳細ビュー** - タブ切り替え、Markdown表示、スコアテーブル
+- [x] **React Query移行** - ポーリングベースのデータ取得
+- [x] **用語統一** - Replit最新版に合わせてステップ名を更新
+  - G-Method → ASIP
+  - Step X → SX 形式に統一
+  - S3: テーマ魅力度評価、S4: AGC参入検討
+
+---
+
 ## 機能比較マトリクス
 
 | 機能 | プロトタイプ | 現行 | 優先度 |
 |------|-------------|------|--------|
 | **Settings ページ** | ✅ プロンプト管理・バージョン・File Search | ❌ 未実装 | 🔴 高 |
-| **CSV インポート** | ✅ カラムマッピング付き | ❌ 未実装 | 🔴 高 |
-| **Run Progress 詳細** | ✅ フェーズ・並列状況・経過時間 | ⚠️ 簡易版 | 🔴 高 |
-| **個別レポートDL** | ✅ Word/ZIP一括 | ❌ 未実装 | 🟡 中 |
-| **Pause/Resume/Stop** | ✅ 完全実装 | ⚠️ 一部 | 🟡 中 |
+| **Word出力機能** | ✅ 個別/一括Word | ❌ 壊れている | 🔴 高 |
+| **列カスタマイズ** | ✅ columnOrder/visibleColumns | ❌ 未実装 | 🔴 高 |
+| **仮説削除機能** | ✅ 個別/一括削除 | ❌ 未実装 | 🔴 高 |
+| **ループ切り替え** | ✅ siblingRuns管理 | ❌ 未実装 | 🟡 中 |
+| **S3/S4個別レポート** | ✅ 評価・参入検討レポート表示 | ❌ 未実装 | 🟡 中 |
 | **既出仮説フィルター** | ✅ 実装済み | ❌ 未実装 | 🟡 中 |
+| **実行タイミング詳細** | ✅ 詳細統計表示 | ❌ 未実装 | 🟡 中 |
 | **Reprocess モード** | ✅ 実装済み | ❌ 未実装 | 🟢 低 |
 | **Favorites** | ✅ 実装済み | ❌ 未実装 | 🟢 低 |
 | **他プロジェクトからリソースインポート** | ✅ 実装済み | ❌ 未実装 | 🟢 低 |
+
+---
+
+## 🔴 緊急: パフォーマンス改善計画
+
+### 問題点
+- 「何もかもがもっさり」- 特にSupabase関連処理
+- ポーリング頻度が高すぎる（3秒/5秒）
+- DBコネクションプーリングなし
+- N+1クエリパターン
+
+### Phase 1: 即効性の高い改善（0.5-1日）
+
+#### 1.1 ポーリング間隔の最適化
+**ファイル**: `src/components/run/run-detail-view.tsx`
+```typescript
+// 現状: 3秒/5秒
+// 改善: 10秒/15秒
+refetchInterval: status === 'running' ? 10000 : false  // runデータ
+refetchInterval: status === 'running' ? 15000 : false  // 仮説データ
+```
+**効果**: API呼び出し 60-70% 削減
+
+#### 1.2 DBコネクションプーリング
+**ファイル**: `src/lib/db/index.ts`
+```typescript
+const client = postgres(connectionString, {
+  prepare: false,
+  max: 10,           // 最大接続数
+  idle_timeout: 20,  // アイドルタイムアウト
+});
+```
+**効果**: 接続オーバーヘッド 50% 削減
+
+#### 1.3 Supabase Pooler 利用
+- DATABASE_URL を Transaction モードの Pooler エンドポイントに変更
+- `?pgbouncer=true` パラメータ追加
+
+### Phase 2: 中期改善（1-2日）
+
+#### 2.1 Realtime活用
+**ファイル**: `src/components/run/run-detail-view.tsx`
+- `useRunRealtime` フックを統合
+- Realtime接続時はポーリング無効化
+
+#### 2.2 認証キャッシュ
+**ファイル**: `src/lib/auth/index.ts`
+```typescript
+import { cache } from 'react';
+export const getUser = cache(async () => { ... });
+```
+
+#### 2.3 SELECT カラム限定
+**ファイル**: `src/lib/asip/db-adapter.ts`
+- 必要なカラムのみ選択（大きなJSONBカラムを除外）
+
+### Phase 3: 構造的改善（3-5日）
+
+- [ ] JOINクエリ化（N+1パターン解消）
+- [ ] APIレスポンスのスリム化
+- [ ] vercel.json タイムアウト設定追加
+
+---
+
+## 🔴 緊急: Word出力機能修正 + E2E
+
+### 問題
+- Word出力機能が壊れている
+
+### 対応
+- [ ] E2Eテスト追加（Word出力の動作確認）
+- [ ] APIエンドポイント `/api/runs/[runId]/reports/word` の修正
+- [ ] 一括Wordダウンロード機能の実装
+
+### E2Eテスト項目
+```typescript
+// tests/e2e/word-download.spec.ts
+- 完了したRunのWord出力ボタンが有効であること
+- Word出力クリックでdocxファイルがダウンロードされること
+- ダウンロードファイルが破損していないこと
+- ZIP一括ダウンロードが動作すること
+```
 
 ---
 
@@ -29,42 +132,38 @@
 - [ ] File Search添付ファイル設定
 - [ ] プロンプト一覧エクスポート（Markdown）
 
-### Phase 2: Run Progress 再設計 🔴
+### Phase 2: 列カスタマイズ 🔴
+- [ ] `columnOrder` 状態管理（列の表示順序）
+- [ ] `visibleColumns` 状態管理（表示/非表示）
+- [ ] 列設定モーダル（上下移動、チェックボックス）
+- [ ] localStorage永続化
+- [ ] Step5の `step5ColumnOrder` から自動取得
 
-> ⚠️ **注意**: プロトタイプの `RunProgressDisplay` は設計が良くないため、単純移植ではなく再設計を推奨。
+### Phase 3: 仮説削除機能 🔴
+- [ ] APIエンドポイント `DELETE /api/projects/{id}/hypotheses/{uuid}`
+- [ ] 個別削除ボタン（ゴミ箱アイコン）
+- [ ] 一括削除機能
+- [ ] 削除確認ダイアログ
 
-**現状の問題点:**
-- 状態管理が複雑すぎる
-- UIとロジックが密結合
-- 並列処理状況の表示が見づらい
+### Phase 4: ループ切り替え 🟡
+- [ ] `siblingRuns` の取得（同じjobNameのRun群）
+- [ ] ループセレクターUI
+- [ ] 「全ループ」「N回目のみ」フィルタリング
+- [ ] Run切り替え時のデータリセット
 
-**再設計方針:**
-- [ ] 状態を明確に分離（idle/running/paused/completed/error）
-- [ ] フェーズ進捗をステップインジケーターで視覚化
-- [ ] 経過時間はカスタムフックで管理
-- [ ] 並列処理状況をカード形式で表示
-- [ ] Pause/Resume/Stop をコントロールバーに統合
+### Phase 5: S3/S4個別レポート 🟡
+- [ ] S3 テーマ魅力度評価レポート表示（select + 詳細ビュー）
+- [ ] S4 AGC参入検討レポート表示
+- [ ] 判定バッジの自動カラーリング（Go/No-Go）
 
-### Phase 3: CSV Import 🔴
-- [ ] `CsvImportModal` コンポーネント作成
-- [ ] CSV/TSVパーサー実装
-- [ ] カラムマッピングUI
-- [ ] 仮説インポートAPI連携
-
-### Phase 4: History Panel 強化 🟡
-- [ ] 個別レポート一覧表示
-- [ ] Word単体ダウンロード
-- [ ] ZIP一括ダウンロード
-- [ ] デバッグプロンプト表示
-
-### Phase 5: Execution Panel 強化 🟡
+### Phase 6: その他機能 🟢
+- [ ] S2-1 表示モード切り替え（テーブル/全文）
+- [ ] 実行タイミング詳細表示（executionTiming）
 - [ ] 既出仮説除外フィルターUI
-- [ ] リプロセスモード（STEP2-2アップロード）
-
-### Phase 6: その他 🟢
+- [ ] リプロセスモード（S2-2アップロード）
 - [ ] Favorites機能（ダッシュボード）
 - [ ] 他プロジェクトからリソースインポート
-- [ ] プロジェクト削除連携（project-header.tsx）
+- [ ] 中断からの再開（Resume）機能強化
 
 ---
 
@@ -109,150 +208,46 @@ CREATE TABLE user_favorites (
 
 ---
 
-## 文言一覧（移植対象）
+## 参照ファイル
 
-### ヘッダー・ナビゲーション
-- "AGC Strategic Innovation Playbook"
-- "設定"
-- "ログアウト"
-
-### ダッシュボード
-- "AGCの新テーマ創出AI"
-- "最近のプロジェクト"
-- "新規プロジェクトを作成"
-- "プロジェクト名"
-- "プロジェクト説明（任意）"
-- "キャンセル"
-- "作成"
-- "プロジェクトがありません"
-- "最初のプロジェクトを作成して始めましょう"
-
-### プロジェクトワークスペース
-- "ターゲット仕様書" (type: target_specification)
-- "技術資産リスト" (type: technical_assets)
-- "市場ニーズ"
-- "技術シーズ"
-- "新規作成"
-- "他プロジェクトからインポート"
-- "新規実行"
-- "ジョブ名"
-- "自動生成 (YYYYMMDDHHMM)"
-- "仮説数"
-- "ループ数"
-- "モデル選択"
-- "Pro (精度優先)"
-- "Flash (スピード優先)"
-- "既出仮説除外設定"
-- "一括分析を開始"
-- "リプロセスモード"
-- "STEP2-2出力をアップロード"
-- "カスタムプロンプト（任意）"
-
-### 実行進捗
-- "実行中"
-- "一時停止中"
-- "Step 2-1: テーマ創出と選定"
-- "Step 2-2: テーマの詳細検討"
-- "Step 3: テーマ魅力度評価"
-- "Step 4: AGC参入検討"
-- "Step 5: テーマ一覧表作成"
-- "ループ {n}/{total}"
-- "一時停止待機中"
-- フェーズ: "計画中", "探索中", "推論中", "統合中", "検証中", "完了"
-- "Deep Research 起動中", "Deep Research 実行中"
-- "仮説抽出中"
-- "Step 2-2 並列実行中", "Steps 3-5 並列実行中"
-- "一時停止", "再開", "停止"
-- "一時停止（現在のステップ完了後）"
-- "停止（再開不可）"
-
-### 履歴パネル
-- "実行履歴"
-- ステータス: "待機中", "処理中", "一時停止", "完了", "エラー", "失敗", "中断"
-- "ジョブ詳細"
-- "概要", "パラメータ", "出力"
-- "ステータス", "処理時間", "開始時刻", "終了時刻", "未完了"
-- "ダウンロード": "TSV", "Excel", "Step2 Word"
-- "個別レポート", "デバッグ"
-- "閉じる"
-
-### 仮説パネル
-- "仮説一覧"
-- "全選択", "選択解除"
-- "削除", "インポート", "一括ダウンロード"
-- "仮説番号", "仮説タイトル", "市場", "技術", "操作"
-- "個別レポート"
-- "仮説がありません"
-
-### CSVインポート
-- "仮説CSVインポート"
-- "CSVまたはTSVファイルをアップロードしてください"
-- "{n}行を検出しました。列の紐づけを設定してください"
-- "ファイルを選択"
-- "CSV, TSV形式に対応しています"
-- "アプリ側列名", "CSV列名"
-- "(未選択)", "(選択解除)"
-- "列を検索...", "列が見つかりません"
-- "戻る", "キャンセル"
-- "インポート ({n}件)", "インポート中..."
-- "少なくとも1つの列をマッピングしてください"
-- "CSVファイルにデータがありません"
-- "CSVファイルの解析に失敗しました"
-- "ファイルの読み込みに失敗しました"
-
-### 設定ページ
-- "設定"
-- "ASIPパイプラインのプロンプトを管理"
-- "ステップ選択", "編集するステップを選択"
-- "Step 2-1: テーマ創出と選定"
-- "Step 2-1B: 構造化抽出（任意）"
-- "Step 2-2: テーマの詳細検討"
-- "Step 3: テーマ魅力度評価"
-- "Step 4: AGC参入検討"
-- "Step 5: テーマ一覧表作成"
-- "バージョン履歴"
-- "デフォルト（組み込み）"
-- "このバージョンを適用"
-- "現在の適用状況"
-- "プロンプトを編集して保存"
-- "保存して適用"
-- "File Search 添付ファイル設定"
-- "選択したファイルはAIがFile Searchで参照可能"
-- "入力ファイル", "前ステップの出力"
-- "プロンプト一覧"
-- "エクスポート完了"
-- "プロンプト一覧をMarkdownファイルでダウンロードしました"
-
-### エラー・通知メッセージ
-- "アクセスが拒否されました"
-- "メールアドレスが確認できません"
-- "このアプリはagc.comドメインのメールアドレスでのみ利用可能です"
-- "サーバー再起動により中断"
-- "自動再開を試みます"
-- "自動リトライ上限に達しました"
-- "手動で再開してください"
-- "ユーザーにより停止されました"
-- "強制リセットにより中断されました"
-- "再開するには「途中から再開」をクリックしてください"
-- "パイプラインをステップ{n}から再開しました"
-
----
-
-## 参照ファイル（プロトタイプ）
-
-展開先: `/tmp/proto-analysis/Asset-Integration/`
+### プロトタイプ（Replit）
+展開先: `/tmp/replit-ref/Asset-Integration/`
 
 | カテゴリ | ファイル |
 |----------|----------|
-| ページ | `client/src/pages/Dashboard.tsx` |
-| ページ | `client/src/pages/ProjectWorkspace.tsx` |
-| ページ | `client/src/pages/Settings.tsx` |
-| コンポーネント | `client/src/components/ExecutionPanel.tsx` |
-| コンポーネント | `client/src/components/HistoryPanel.tsx` |
-| コンポーネント | `client/src/components/HypothesesPanel.tsx` |
-| コンポーネント | `client/src/components/RunProgressDisplay.tsx` |
+| コンポーネント | `client/src/components/HypothesesPanel.tsx` (1,029行) |
+| コンポーネント | `client/src/components/HistoryPanel.tsx` (1,426行) |
+| コンポーネント | `client/src/components/RunProgressDisplay.tsx` (308行) |
 | コンポーネント | `client/src/components/CsvImportModal.tsx` |
-| スキーマ | `shared/schema.ts` |
-| API | `server/routes.ts` |
-| パイプライン | `server/gmethod-pipeline.ts` |
-| プロンプト | `server/prompts.ts` |
+
+### 現行実装
+| カテゴリ | ファイル |
+|----------|----------|
+| メインビュー | `src/components/run/run-detail-view.tsx` |
+| サイドバー | `src/components/run/hypothesis-sidebar.tsx` |
+| 詳細ビュー | `src/components/run/hypothesis-detail.tsx` |
+| カード | `src/components/run/hypothesis-card.tsx` |
+| プログレス | `src/components/run/run-progress-display.tsx` |
+| CSVインポート | `src/components/run/csv-import-modal.tsx` |
+| デバッグ | `src/components/run/debug-prompts-dialog.tsx` |
+| パーサー | `src/lib/parsers/` |
+
+---
+
+## 優先度サマリー
+
+### 今すぐやるべき（🔴 高）
+1. パフォーマンス改善 Phase 1（ポーリング間隔、コネクションプール）
+2. Word出力機能修正 + E2Eテスト
+3. Settings ページ
+4. 列カスタマイズ
+5. 仮説削除機能
+
+### 次にやるべき（🟡 中）
+6. ループ切り替え
+7. S3/S4個別レポート
+8. パフォーマンス改善 Phase 2
+
+### 余裕があれば（🟢 低）
+9. その他機能
+10. パフォーマンス改善 Phase 3

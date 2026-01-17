@@ -334,7 +334,7 @@ export function ExecutionPanel({
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Play className="h-5 w-5" />
-          G-Methodを実行
+          ASIPを実行
         </CardTitle>
         <CardDescription>
           リソースを選択して仮説生成パイプラインを実行
@@ -561,7 +561,7 @@ export function ExecutionPanel({
             ) : (
               <>
                 <Play className="h-4 w-4 mr-2" />
-                G-Methodを実行
+                ASIPを実行
               </>
             )}
           </Button>

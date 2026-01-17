@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo, useCallback, useRef } from 'react';
-import { Upload, AlertCircle, Loader2 } from 'lucide-react';
+import { Upload, Check, Search, AlertCircle, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
@@ -13,19 +13,18 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-
-// App columns for hypothesis import
-const HYPOTHESIS_COLUMNS = [
-  { key: 'hypothesisNumber', label: '仮説番号' },
-  { key: 'displayTitle', label: '仮説タイトル' },
-  { key: 'step2_1Summary', label: '概要 (S2-1)' },
-];
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
 
 interface CsvImportModalProps {
   open: boolean;
@@ -34,13 +33,11 @@ interface CsvImportModalProps {
     rows: Record<string, string>[],
     columnMapping: Record<string, string>
   ) => Promise<void>;
+  existingColumns: string[];
 }
 
 type Step = 'upload' | 'mapping';
 
-/**
- * Parse CSV/TSV text into headers and rows
- */
 function parseCSV(text: string): {
   headers: string[];
   rows: Record<string, string>[];
@@ -48,7 +45,6 @@ function parseCSV(text: string): {
   const lines = text.split(/\r?\n/).filter((line) => line.trim());
   if (lines.length === 0) return { headers: [], rows: [] };
 
-  // Auto-detect delimiter (tab for TSV, comma for CSV)
   const delimiter = lines[0].includes('\t') ? '\t' : ',';
 
   const parseRow = (line: string): string[] => {
@@ -89,11 +85,18 @@ function parseCSV(text: string): {
   return { headers, rows };
 }
 
-export function CsvImportModal({ open, onClose, onImport }: CsvImportModalProps) {
+export function CsvImportModal({
+  open,
+  onClose,
+  onImport,
+  existingColumns,
+}: CsvImportModalProps) {
   const [step, setStep] = useState<Step>('upload');
   const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
   const [csvRows, setCsvRows] = useState<Record<string, string>[]>([]);
-  const [columnMapping, setColumnMapping] = useState<Record<string, string>>({});
+  const [columnMapping, setColumnMapping] = useState<Record<string, string>>(
+    {}
+  );
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -120,12 +123,22 @@ export function CsvImportModal({ open, onClose, onImport }: CsvImportModalProps)
 
           // Auto-match columns
           const initialMapping: Record<string, string> = {};
-          HYPOTHESIS_COLUMNS.forEach(({ key }) => {
+          existingColumns.forEach((appCol) => {
             const exactMatch = headers.find(
-              (csvCol) => csvCol.toLowerCase() === key.toLowerCase()
+              (csvCol) => csvCol.toLowerCase() === appCol.toLowerCase()
             );
             if (exactMatch) {
-              initialMapping[key] = exactMatch;
+              initialMapping[appCol] = exactMatch;
+            }
+          });
+          // Also auto-match new columns from CSV
+          headers.forEach((csvCol) => {
+            if (
+              !existingColumns.some(
+                (ac) => ac.toLowerCase() === csvCol.toLowerCase()
+              )
+            ) {
+              initialMapping[csvCol] = csvCol;
             }
           });
           setColumnMapping(initialMapping);
@@ -139,20 +152,23 @@ export function CsvImportModal({ open, onClose, onImport }: CsvImportModalProps)
       };
       reader.readAsText(file);
     },
-    []
+    [existingColumns]
   );
 
-  const handleMappingChange = useCallback((appCol: string, csvCol: string) => {
-    setColumnMapping((prev) => {
-      const newMapping = { ...prev };
-      if (csvCol && csvCol !== '__none__') {
-        newMapping[appCol] = csvCol;
-      } else {
-        delete newMapping[appCol];
-      }
-      return newMapping;
-    });
-  }, []);
+  const handleMappingChange = useCallback(
+    (appCol: string, csvCol: string) => {
+      setColumnMapping((prev) => {
+        const newMapping = { ...prev };
+        if (csvCol) {
+          newMapping[appCol] = csvCol;
+        } else {
+          delete newMapping[appCol];
+        }
+        return newMapping;
+      });
+    },
+    []
+  );
 
   const handleImport = useCallback(async () => {
     if (Object.keys(columnMapping).length === 0) {
@@ -166,7 +182,9 @@ export function CsvImportModal({ open, onClose, onImport }: CsvImportModalProps)
       await onImport(csvRows, columnMapping);
       handleClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'インポートに失敗しました');
+      setError(
+        err instanceof Error ? err.message : 'インポートに失敗しました'
+      );
     } finally {
       setImporting(false);
     }
@@ -185,28 +203,19 @@ export function CsvImportModal({ open, onClose, onImport }: CsvImportModalProps)
   }, [onClose]);
 
   const mappedCount = Object.keys(columnMapping).length;
-
-  // Get columns to display in mapping step
-  const displayColumns = useMemo(() => {
-    // Add any new columns from CSV that aren't in our predefined list
-    const existingKeys = HYPOTHESIS_COLUMNS.map((c) => c.key.toLowerCase());
-    const result = [...HYPOTHESIS_COLUMNS];
-
+  const allAppColumns = useMemo(() => {
+    const colSet = new Set(existingColumns);
     csvHeaders.forEach((h) => {
-      if (!existingKeys.includes(h.toLowerCase())) {
-        result.push({ key: h, label: h });
+      if (!Array.from(colSet).some((c) => c.toLowerCase() === h.toLowerCase())) {
+        colSet.add(h);
       }
     });
-
-    return result;
-  }, [csvHeaders]);
+    return Array.from(colSet);
+  }, [existingColumns, csvHeaders]);
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
-      <DialogContent
-        className="max-w-2xl max-h-[80vh] flex flex-col"
-        data-testid="csv-import-modal"
-      >
+      <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>仮説CSVインポート</DialogTitle>
           <DialogDescription>
@@ -253,7 +262,7 @@ export function CsvImportModal({ open, onClose, onImport }: CsvImportModalProps)
               <div className="text-sm text-muted-foreground">
                 <span className="font-medium text-foreground">{mappedCount}</span>
                 {' / '}
-                {HYPOTHESIS_COLUMNS.length} 列をマッピング済み
+                {csvHeaders.length} 列をマッピング済み
               </div>
             </div>
 
@@ -269,40 +278,76 @@ export function CsvImportModal({ open, onClose, onImport }: CsvImportModalProps)
 
             <ScrollArea className="flex-1 pr-4">
               <div className="space-y-1">
-                {displayColumns.map(({ key, label }) => (
+                {allAppColumns.map((appCol) => (
                   <div
-                    key={key}
+                    key={appCol}
                     className="flex items-center gap-4 py-2 border-b border-border last:border-b-0"
                   >
                     <div className="flex-1 min-w-0">
                       <span
                         className="text-sm font-medium truncate block"
-                        title={label}
+                        title={appCol}
                       >
-                        {label}
+                        {appCol}
                       </span>
                     </div>
                     <div className="flex-shrink-0 text-muted-foreground">←</div>
                     <div className="flex-1 min-w-0">
-                      <Select
-                        value={columnMapping[key] || '__none__'}
-                        onValueChange={(value) => handleMappingChange(key, value)}
-                      >
-                        <SelectTrigger
-                          className="w-full"
-                          data-testid={`csv-col-select-${key}`}
-                        >
-                          <SelectValue placeholder="(未選択)" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="__none__">(未選択)</SelectItem>
-                          {csvHeaders.map((csvCol) => (
-                            <SelectItem key={csvCol} value={csvCol}>
-                              {csvCol}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            role="combobox"
+                            className="w-full justify-between"
+                            data-testid={`csv-col-select-${appCol}`}
+                          >
+                            <span className="truncate">
+                              {columnMapping[appCol] || '(未選択)'}
+                            </span>
+                            <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-64 p-0" align="start">
+                          <Command>
+                            <CommandInput placeholder="列を検索..." />
+                            <CommandList>
+                              <CommandEmpty>列が見つかりません</CommandEmpty>
+                              <CommandGroup>
+                                <CommandItem
+                                  value=""
+                                  onSelect={() => handleMappingChange(appCol, '')}
+                                >
+                                  <span className="text-muted-foreground">
+                                    (選択解除)
+                                  </span>
+                                </CommandItem>
+                                {csvHeaders.map((csvCol) => (
+                                  <CommandItem
+                                    key={csvCol}
+                                    value={csvCol}
+                                    onSelect={() =>
+                                      handleMappingChange(appCol, csvCol)
+                                    }
+                                  >
+                                    {columnMapping[appCol] === csvCol && (
+                                      <Check className="mr-2 h-4 w-4" />
+                                    )}
+                                    <span
+                                      className={
+                                        columnMapping[appCol] === csvCol
+                                          ? ''
+                                          : 'ml-6'
+                                      }
+                                    >
+                                      {csvCol}
+                                    </span>
+                                  </CommandItem>
+                                ))}
+                              </CommandGroup>
+                            </CommandList>
+                          </Command>
+                        </PopoverContent>
+                      </Popover>
                     </div>
                   </div>
                 ))}

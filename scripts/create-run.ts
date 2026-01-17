@@ -139,6 +139,15 @@ async function main() {
   console.log(`  targetSpecId: ${targetSpecId}`);
   console.log(`  technicalAssetsId: ${technicalAssetsId}`);
 
+  // Parse hypothesis count and loop count from args
+  const hypothesisCountIndex = args.indexOf('--hypothesis-count');
+  const hypothesisCount = hypothesisCountIndex !== -1 ? parseInt(args[hypothesisCountIndex + 1], 10) : 3;
+  const loopCountIndex = args.indexOf('--loop-count');
+  const loopCount = loopCountIndex !== -1 ? parseInt(args[loopCountIndex + 1], 10) : 1;
+
+  console.log(`  hypothesisCount: ${hypothesisCount}`);
+  console.log(`  loopCount: ${loopCount}`);
+
   // Create run
   const [run] = await fetchFromSupabase<Run[]>(supabaseUrl, serviceRoleKey, 'runs', {
     method: 'POST',
@@ -147,8 +156,8 @@ async function main() {
       job_name: jobName,
       target_spec_id: targetSpecId,
       technical_assets_id: technicalAssetsId,
-      hypothesis_count: 3,
-      loop_count: 1,
+      hypothesis_count: hypothesisCount,
+      loop_count: loopCount,
       model_choice: 'pro',
       status: 'pending',
       current_step: 0,
