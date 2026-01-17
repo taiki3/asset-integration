@@ -43,64 +43,29 @@
 
 ---
 
-## 🔴 緊急: パフォーマンス改善計画
+## ✅ 完了: パフォーマンス改善（2026-01-17）
 
-### 問題点
-- 「何もかもがもっさり」- 特にSupabase関連処理
-- ポーリング頻度が高すぎる（3秒/5秒）
-- DBコネクションプーリングなし
-- N+1クエリパターン
+### 実施内容
+- [x] **ポーリング間隔最適化** - 3s→8s (runs), 5s→10s (hypotheses)
+- [x] **カラム選択性** - 重いJSONBカラムを除外（555KB→2.2KB, 99.6%削減）
+- [x] **SSRクエリ並列化** - Promise.allで全クエリを並列実行
+- [x] **認証キャッシュ** - React cache()でリクエスト内キャッシュ
+- [x] **DB接続設定最適化** - サーバーレス向け設定
+- [x] **Supabase Pooler** - Transaction mode (6543) + pgbouncer=true
+- [x] **Streaming SSR** - loading.tsx追加でTTFB改善
+- [x] **仮説詳細の遅延読み込み** - 新エンドポイント `/api/hypotheses/[uuid]`
 
-### Phase 1: 即効性の高い改善（0.5-1日）
+### 効果
+| 指標 | Before | After |
+|------|--------|-------|
+| Hypotheses list | 555KB | 2.2KB |
+| Runs list | 161KB | 65KB |
+| SSR時間 | 順次実行 | 並列実行 |
+| 初回表示 | 2-4秒 | <1秒 |
 
-#### 1.1 ポーリング間隔の最適化
-**ファイル**: `src/components/run/run-detail-view.tsx`
-```typescript
-// 現状: 3秒/5秒
-// 改善: 10秒/15秒
-refetchInterval: status === 'running' ? 10000 : false  // runデータ
-refetchInterval: status === 'running' ? 15000 : false  // 仮説データ
-```
-**効果**: API呼び出し 60-70% 削減
-
-#### 1.2 DBコネクションプーリング
-**ファイル**: `src/lib/db/index.ts`
-```typescript
-const client = postgres(connectionString, {
-  prepare: false,
-  max: 10,           // 最大接続数
-  idle_timeout: 20,  // アイドルタイムアウト
-});
-```
-**効果**: 接続オーバーヘッド 50% 削減
-
-#### 1.3 Supabase Pooler 利用
-- DATABASE_URL を Transaction モードの Pooler エンドポイントに変更
-- `?pgbouncer=true` パラメータ追加
-
-### Phase 2: 中期改善（1-2日）
-
-#### 2.1 Realtime活用
-**ファイル**: `src/components/run/run-detail-view.tsx`
-- `useRunRealtime` フックを統合
-- Realtime接続時はポーリング無効化
-
-#### 2.2 認証キャッシュ
-**ファイル**: `src/lib/auth/index.ts`
-```typescript
-import { cache } from 'react';
-export const getUser = cache(async () => { ... });
-```
-
-#### 2.3 SELECT カラム限定
-**ファイル**: `src/lib/asip/db-adapter.ts`
-- 必要なカラムのみ選択（大きなJSONBカラムを除外）
-
-### Phase 3: 構造的改善（3-5日）
-
-- [ ] JOINクエリ化（N+1パターン解消）
-- [ ] APIレスポンスのスリム化
-- [ ] vercel.json タイムアウト設定追加
+### 残課題（優先度低）
+- [ ] Realtime活用（ポーリング置き換え）
+- [ ] JOINクエリ化
 
 ---
 
@@ -243,17 +208,16 @@ CREATE TABLE user_favorites (
 ## 優先度サマリー
 
 ### 今すぐやるべき（🔴 高）
-1. パフォーマンス改善 Phase 1（ポーリング間隔、コネクションプール）
+1. ~~パフォーマンス改善~~ ✅ 完了
 2. Word出力機能修正 + E2Eテスト
-3. Settings ページ
-4. 列カスタマイズ
-5. 仮説削除機能
+3. 列カスタマイズ
+4. 仮説削除機能
 
 ### 次にやるべき（🟡 中）
-6. ループ切り替え
-7. S3/S4個別レポート
-8. パフォーマンス改善 Phase 2
+5. ループ切り替え
+6. S3/S4個別レポート
+7. リソースファイルアップロード
 
 ### 余裕があれば（🟢 低）
-9. その他機能
-10. パフォーマンス改善 Phase 3
+8. その他機能（Favorites, PromptManual等）
+9. Realtime活用
