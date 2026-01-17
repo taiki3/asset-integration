@@ -69,65 +69,77 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     console.log(`[Process] Starting step execution for run ${runId}`);
 
-    const result = await executeNextStep(deps, runId);
+    // Execute steps in a loop to reduce after() dependency
+    // Time budget: 50 seconds (Vercel timeout is 60s for Pro)
+    const startTime = Date.now();
+    const TIME_BUDGET_MS = 50000;
+    const MAX_ITERATIONS = 20; // Safety limit
 
-    console.log(`[Process] Step result for run ${runId}:`, result);
+    let result = await executeNextStep(deps, runId);
+    let iterations = 1;
 
-    // If there are more steps, schedule the next one
+    console.log(`[Process] Step ${iterations} result for run ${runId}: phase=${result.phase}, hasMore=${result.hasMore}`);
+
+    // Continue executing steps while:
+    // - There are more steps
+    // - We have time budget remaining
+    // - We haven't hit the safety limit
+    // - The phase is a "quick" phase (polling, status updates)
+    const quickPhases = ['step2_1_polling', 'step2_2_polling', 'evaluation', 'step2_1_5'];
+
+    while (
+      result.hasMore &&
+      iterations < MAX_ITERATIONS &&
+      (Date.now() - startTime) < TIME_BUDGET_MS &&
+      quickPhases.includes(result.phase)
+    ) {
+      iterations++;
+      console.log(`[Process] Continuing to step ${iterations} for run ${runId} (elapsed: ${Date.now() - startTime}ms)`);
+
+      result = await executeNextStep(deps, runId);
+      console.log(`[Process] Step ${iterations} result: phase=${result.phase}, hasMore=${result.hasMore}`);
+    }
+
+    console.log(`[Process] Finished after ${iterations} iterations, elapsed: ${Date.now() - startTime}ms`);
+
+    // If there are more steps and we stopped due to time/phase, schedule via after()
     if (result.hasMore) {
       const baseUrl = getBaseUrl();
+      const reason = (Date.now() - startTime) >= TIME_BUDGET_MS ? 'time' :
+                     iterations >= MAX_ITERATIONS ? 'iterations' : 'slow_phase';
+
+      console.log(`[Process] Scheduling next step via after() (reason: ${reason})`);
 
       after(async () => {
-        const maxRetries = 3;
-        let lastError: unknown;
+        try {
+          console.log(`[Process] after() executing for run ${runId}`);
 
-        for (let attempt = 1; attempt <= maxRetries; attempt++) {
-          try {
-            console.log(`[Process] Scheduling next step for run ${runId} (attempt ${attempt}/${maxRetries})`);
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 30000);
 
-            // Use AbortController for timeout
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 30000);
+          const response = await fetch(`${baseUrl}/api/runs/${runId}/process`, {
+            method: 'POST',
+            headers: getInternalApiHeaders(expectedSecret),
+            redirect: 'manual',
+            signal: controller.signal,
+          });
 
-            const response = await fetch(`${baseUrl}/api/runs/${runId}/process`, {
-              method: 'POST',
-              headers: getInternalApiHeaders(expectedSecret),
-              redirect: 'manual',
-              signal: controller.signal,
-            });
+          clearTimeout(timeoutId);
 
-            clearTimeout(timeoutId);
-
-            // Check for redirect (Vercel Protection)
-            if (response.status >= 300 && response.status < 400) {
-              console.error(`[Process] Blocked by Vercel Protection - redirected to: ${response.headers.get('location')}`);
-              // Don't retry for protection issues
-              return;
-            }
-
-            if (!response.ok) {
-              const body = await response.text();
-              console.error(`[Process] API error: ${response.status} - ${body}`);
-              lastError = new Error(`API error: ${response.status}`);
-              // Retry on server errors
-              if (response.status >= 500 && attempt < maxRetries) {
-                await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
-                continue;
-              }
-            } else {
-              console.log(`[Process] Next step scheduled successfully`);
-              return; // Success, exit retry loop
-            }
-          } catch (error) {
-            lastError = error;
-            console.error(`[Process] Attempt ${attempt} failed for run ${runId}:`, error);
-            if (attempt < maxRetries) {
-              await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
-            }
+          if (response.status >= 300 && response.status < 400) {
+            console.error(`[Process] Blocked by Vercel Protection`);
+            return;
           }
-        }
 
-        console.error(`[Process] All ${maxRetries} attempts failed for run ${runId}:`, lastError);
+          if (!response.ok) {
+            const body = await response.text();
+            console.error(`[Process] after() API error: ${response.status} - ${body}`);
+          } else {
+            console.log(`[Process] after() succeeded for run ${runId}`);
+          }
+        } catch (error) {
+          console.error(`[Process] after() failed for run ${runId}:`, error);
+        }
       });
     }
 
@@ -136,6 +148,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
       phase: result.phase,
       hasMore: result.hasMore,
       error: result.error,
+      iterations,
+      elapsedMs: Date.now() - startTime,
     });
   } catch (error) {
     console.error(`[Process] Error processing run ${runId}:`, error);
